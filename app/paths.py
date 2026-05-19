@@ -15,6 +15,7 @@ def app_dir() -> Path:
 
 APP_DIR = app_dir()
 DATA_DIR = APP_DIR / "data"
+GCODE_CACHE_DIR = DATA_DIR / "gcode_cache"
 
 
 def ensure_data_dir() -> None:

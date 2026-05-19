@@ -4,10 +4,12 @@ from __future__ import annotations
 
 import io
 import queue
+import shutil
 import sys
 import threading
 import time
 import tkinter as tk
+from pathlib import Path
 from tkinter import filedialog, ttk
 from typing import TYPE_CHECKING, Any
 
@@ -1422,9 +1424,22 @@ class PrinterDevicePanel(ttk.Frame):
         def work() -> None:
             try:
                 download_gcode_from_printer(host, password, remote, local)
+                try:
+                    from app.paths import GCODE_CACHE_DIR
+
+                    GCODE_CACHE_DIR.mkdir(parents=True, exist_ok=True)
+                    cache_copy = GCODE_CACHE_DIR / Path(local).name
+                    shutil.copy2(local, cache_copy)
+                except Exception:
+                    pass
                 self.app.after(
                     0,
-                    lambda: notify(self, f"Gespeichert:\n{local}", "ok"),
+                    lambda: notify(
+                        self,
+                        f"Gespeichert:\n{local}\n\n"
+                        "Kopie für Verbrauchsschätzung: data/gcode_cache/",
+                        "ok",
+                    ),
                 )
                 self.app.after(0, lambda: self._status_var.set(f"Heruntergeladen: {name}"))
             except Exception as exc:

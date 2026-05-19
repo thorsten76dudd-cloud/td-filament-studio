@@ -54,6 +54,7 @@ Reader & Tags
   Ohne Tag auf dem Leser möglich; zum Lesen/Schreiben Tag flach auflegen.
 • Smartcard starten / Neu starten (UAC) — wenn der Dienst aus oder hängt
 • Tag lesen / Tag schreiben — mit Prüfung nach dem Schreiben (Dialog „fertig“)
+• Tag-Schutz (Einstellungen): Warnung, wenn der Chip schon Filament-Daten hat
 • Tag leeren… — Creality-Daten löschen; danach oft Blöcke C3B98E… in Rohdaten
   (verschlüsseltes Leer — normal). Tag 2–3 s abheben, wieder auflegen.
 • Chip duplizieren… — Quell-Chip lesen, Ziel-Chip 1:1 kopieren; Ziel-UID wird
@@ -107,6 +108,7 @@ Tab: Material-Datenbank
 • Vom Drucker — per SSH vom K2 laden (Root aktivieren, gleiches WLAN)
 • Zum Drucker — geänderte DB auf den K2 kopieren (danach Drucker neu starten)
 • Merge Cloud — Cloud-Profile in lokale DB einfügen
+• Slicer-Profile import… — Orca/Creality JSON (Notizen: {"id","vendor","type","name"})
 • Drucker SSH — IP und Passwort im Tab
 • Drucker-Dashboard — Status, DB vergleichen, material_options.json, Neustart
 
@@ -201,7 +203,8 @@ Tab: Drucker → Filament
 • Live CFS 1A–1D mit Farbe und verknüpfter Spule aus „Meine Spulen“
 • Spule — Slot einer Inventar-Spule zuweisen (automatisch per RFID-ID wenn möglich)
 • RFID — Material vom Slot in den RFID-Tab übernehmen
-• Nach Druckende — Verbrauch abfragen; pro genutzter Farbe aus G-Code (filamentWeight → Slot per Farbe)
+• Nach Druckende — Verbrauch abfragen; Gramm aus Slicer-Kommentar (G-Code-Datei in data/gcode_cache/ oder Downloads)
+• Unrealistische Drucker-Werte (<4 g) werden ignoriert — dann Slicer-Kopfzeile verwendet
 
 
 Tab: Einstellungen
@@ -214,6 +217,7 @@ Tab: Einstellungen
 • Ersteinrichtung… — Checkliste beim ersten Start erneut anzeigen
 • Spulen & CFS — Rest-Warnschwelle; Spule fest an 1A–1D verknüpfen für korrekten Abzug
 • Nach Druck Filament abfragen — automatischer Abzugs-Dialog (Tab Einstellungen)
+• Tag-Schutz — vor Überschreiben warnen (Tab Einstellungen)
 • Mehrfarbig — mehrere Zeilen im Abzugs-Dialog (eine pro Farbe mit Verbrauch > 0 g)
 • Updates beim Start prüfen
 • Fehlerprotokoll — data/app.log bei Abstürzen

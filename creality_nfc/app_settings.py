@@ -26,6 +26,7 @@ class AppSettings:
     low_filament_threshold_g: int = 200
     prompt_deduct_after_print: bool = True
     default_post_print_deduct_g: int = 0
+    protect_tag_overwrite: bool = True
     # Vor Druck automatisch CFS einfädeln (oft problematisch wenn schon geladen).
     cfs_auto_feed_before_print: bool = False
     # Hintergrund-Wächter: TD Filament Studio starten, wenn Creality Print startet.

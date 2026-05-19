@@ -81,6 +81,12 @@ class SettingsPanel(ttk.Frame):
             text="Nach Druckende: Verbrauch von CFS-Spule abfragen",
             variable=self.prompt_deduct,
         ).pack(anchor="w", padx=8)
+        self.protect_tag = tk.BooleanVar(value=getattr(settings, "protect_tag_overwrite", True))
+        ttk.Checkbutton(
+            filament,
+            text="Vor Tag-Schreiben: warnen wenn Chip schon Daten hat",
+            variable=self.protect_tag,
+        ).pack(anchor="w", padx=8, pady=(2, 0))
         self.default_deduct_g = tk.IntVar(value=settings.default_post_print_deduct_g)
         d_row = ttk.Frame(filament)
         d_row.pack(fill="x", padx=8, pady=(2, 4))
@@ -152,5 +158,6 @@ class SettingsPanel(ttk.Frame):
         s.low_filament_threshold_g = int(self.low_filament_g.get())
         s.prompt_deduct_after_print = self.prompt_deduct.get()
         s.default_post_print_deduct_g = int(self.default_deduct_g.get())
+        s.protect_tag_overwrite = self.protect_tag.get()
         s.launch_with_creality_print = self.launch_with_creality.get()
         self._on_save(s)

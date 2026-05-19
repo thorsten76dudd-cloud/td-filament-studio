@@ -48,6 +48,7 @@ class GcodeSlotUsage:
 
 
 _MAX_PLAUSIBLE_GRAMS = 500.0
+_MIN_PLAUSIBLE_GRAMS = 4.0
 
 
 def _split_fields(raw: str, sep: str) -> list[str]:
@@ -67,7 +68,7 @@ def plausible_filament_grams(val: float | None) -> float | None:
     """Gramm aus filamentWeight; materialUsed > 500 ist oft Länge in mm, nicht g."""
     if val is None or val <= 0.01:
         return None
-    if val > _MAX_PLAUSIBLE_GRAMS:
+    if val < _MIN_PLAUSIBLE_GRAMS or val > _MAX_PLAUSIBLE_GRAMS:
         return None
     return val
 
@@ -613,7 +614,32 @@ _HEADER_FILAMENT_RE = (
     re.compile(r"filament used:\s*([\d.]+)\s*g", re.I),
     re.compile(r"total filament\s*:\s*([\d.]+)\s*g", re.I),
     re.compile(r"; filament_weight\s*[=:]\s*([\d.]+)", re.I),
+    re.compile(r"; total filament weight \[g\]\s*:\s*([\d.]+)", re.I),
+    re.compile(r"; filament used \[mm\]\s*=\s*([\d.]+)", re.I),
+    re.compile(r"; total filament used \[mm\]\s*=\s*([\d.]+)", re.I),
+    re.compile(r"; used filament\s*=\s*([\d.]+)\s*g", re.I),
+    re.compile(r"; total used filament\s*\[g\]\s*=\s*([\d.]+)", re.I),
+    re.compile(r"; filament cost\s*\[g\]\s*:\s*([\d.]+)", re.I),
 )
+
+
+def parse_filament_grams_from_text(raw: str) -> float | None:
+    """Slicer-Kommentare (Prusa/Orca/Creality) — bevorzugt Gramm-Zeilen."""
+    best: float | None = None
+    for pat in _HEADER_FILAMENT_RE:
+        for m in pat.finditer(raw):
+            try:
+                v = float(m.group(1))
+            except ValueError:
+                continue
+            if "[mm]" in pat.pattern.lower():
+                v = v * 0.33
+            g = plausible_filament_grams(v)
+            if g is None:
+                continue
+            if best is None or g > best:
+                best = g
+    return best
 
 
 def parse_filament_grams_from_file(path: Path, *, max_bytes: int = 120_000) -> float | None:
@@ -623,15 +649,77 @@ def parse_filament_grams_from_file(path: Path, *, max_bytes: int = 120_000) -> f
             raw = f.read(max_bytes).decode("utf-8", errors="ignore")
     except OSError:
         return None
-    for pat in _HEADER_FILAMENT_RE:
-        m = pat.search(raw)
-        if m:
-            try:
-                v = float(m.group(1))
-                if v > 0:
-                    return v
-            except ValueError:
-                continue
+    return parse_filament_grams_from_text(raw)
+
+
+def resolve_local_gcode_path(
+    gcode_name: str,
+    *,
+    extra_dirs: list[Path] | None = None,
+) -> Path | None:
+    """Lokale G-Code-Datei für Verbrauchsschätzung (Cache, Downloads)."""
+    bare = Path(str(gcode_name or "").replace("\\", "/").split("/")[-1])
+    if not bare.name:
+        return None
+    dirs: list[Path] = []
+    if extra_dirs:
+        dirs.extend(extra_dirs)
+    try:
+        from app.paths import DATA_DIR
+
+        dirs.append(DATA_DIR / "gcode_cache")
+    except ImportError:
+        pass
+    home = Path.home()
+    dirs.extend([home / "Downloads", home / "Desktop"])
+    seen: set[Path] = set()
+    for d in dirs:
+        if not d or d in seen:
+            continue
+        seen.add(d)
+        if not d.is_dir():
+            continue
+        for candidate in (d / bare.name, d / bare):
+            if candidate.is_file():
+                return candidate
+    return None
+
+
+def total_job_filament_grams(
+    state: dict[str, Any],
+    gcode_name: str,
+    *,
+    file_entry: dict[str, Any] | None = None,
+    local_path: Path | None = None,
+) -> tuple[int, str] | None:
+    """
+    Beste Schätzung Gesamtverbrauch (g) — Drucker-Metadaten, sonst Slicer-Kommentar.
+    Ignoriert unrealistische Werte (<5 g) aus retGcodeFileInfo2.
+    """
+    if local_path is None:
+        local_path = resolve_local_gcode_path(gcode_name)
+    if local_path and local_path.is_file():
+        g = parse_filament_grams_from_file(local_path)
+        if g is not None:
+            return int(round(g)), "G-Code-Datei (Slicer-Kommentar)"
+
+    info = file_entry
+    if info is None and gcode_name:
+        info = find_gcode_file_info(state, gcode_name)
+    if info:
+        specs = active_filament_specs(parse_filament_specs(info))
+        weights = [
+            plausible_filament_grams(s.weight_g)
+            for s in specs
+            if s.weight_g is not None
+        ]
+        weights = [w for w in weights if w is not None]
+        if weights:
+            total = sum(weights)
+            if total >= _MIN_PLAUSIBLE_GRAMS:
+                label = "G-Code Metadaten (Summe)" if len(weights) > 1 else "G-Code Metadaten"
+                return int(round(total)), label
+
     return None
 
 
@@ -648,11 +736,6 @@ def estimate_grams_for_slot(
     Geschätzter Verbrauch in Gramm für einen CFS-Slot.
     Rückgabe: (gramm, Quelle) z. B. (42, "G-Code Metadaten").
     """
-    if local_path and local_path.is_file():
-        g = parse_filament_grams_from_file(local_path)
-        if g is not None:
-            return int(round(g)), "G-Code-Datei (Slicer-Kommentar)"
-
     info = gcode_info_from_entry(file_entry) if file_entry else None
     if info is None and gcode_name:
         info = find_gcode_file_info(state, gcode_name)
@@ -695,10 +778,20 @@ def estimate_grams_for_slot(
                     return None
             return int(round(active[0].weight_g)), "G-Code (eine Farbe)"
 
-    total = sum(s.weight_g for s in active if s.weight_g and s.weight_g > 0.01)
-    if total > 0.01:
+    total = sum(
+        g
+        for s in active
+        if (g := plausible_filament_grams(s.weight_g)) is not None
+    )
+    if total >= _MIN_PLAUSIBLE_GRAMS:
         return int(round(total)), "G-Code (Summe)"
-    return None
+
+    return total_job_filament_grams(
+        state,
+        gcode_name,
+        file_entry=file_entry,
+        local_path=local_path,
+    )
 
 
 def build_slot_usage_plan(
@@ -737,6 +830,47 @@ def build_slot_usage_plan(
                 source=_usage_source_label(gcode_path, spec),
             )
         )
+
+    if not out:
+        job = total_job_filament_grams(state, gcode_path, file_entry=file_entry)
+        if job:
+            grams_total, src = job
+            targets = mappings or []
+            if not targets and loaded_slot_index is not None:
+                targets = [
+                    (
+                        loaded_slot_index,
+                        GcodeFilamentSpec(
+                            loaded_slot_index,
+                            None,
+                            material_hint_from_gcode_path(gcode_path),
+                            float(grams_total),
+                        ),
+                    )
+                ]
+            if len(targets) == 1:
+                idx, spec = targets[0]
+                out.append(
+                    GcodeSlotUsage(
+                        slot_index=idx,
+                        slot_label=SLOT_LABELS[idx],
+                        spec=spec,
+                        grams=grams_total,
+                        source=src,
+                    )
+                )
+            elif len(targets) > 1:
+                share = max(_MIN_PLAUSIBLE_GRAMS, grams_total / len(targets))
+                for idx, spec in targets:
+                    out.append(
+                        GcodeSlotUsage(
+                            slot_index=idx,
+                            slot_label=SLOT_LABELS[idx],
+                            spec=spec,
+                            grams=int(round(share)),
+                            source=f"{src} (Anteil {len(targets)} Farben)",
+                        )
+                    )
     return out
 
 

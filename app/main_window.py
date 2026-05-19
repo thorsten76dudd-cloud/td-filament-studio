@@ -70,6 +70,11 @@ from creality_nfc.gcode_filament import (
     estimate_grams_for_slot,
     material_hint_from_gcode_path,
     primary_gcode_slot_mapping,
+    resolve_local_gcode_path,
+)
+from creality_nfc.slicer_import import (
+    collect_slicer_profiles_from_paths,
+    merge_slicer_profiles_into_db,
 )
 from creality_nfc.printer_gcode import parse_gcode_files
 from creality_nfc.spool_usage import deduct_grams, is_low_filament, weight_class_to_grams
@@ -194,9 +199,10 @@ class TDFilamentStudioApp(AppTk):
         migrate_legacy_settings()
 
         self._build_menu()
+        # Statusleiste zuerst (unten), dann Kopf + Inhalt — sonst überlappt der Body die Leiste.
+        self._build_statusbar()
         self._build_header()
         self._build_body()
-        self._build_statusbar()
         self._build_message_area()
 
         self._load_materials()
@@ -217,8 +223,18 @@ class TDFilamentStudioApp(AppTk):
 
         m_file = tk.Menu(menubar, tearoff=0)
         menubar.add_cascade(label="Datei", menu=m_file)
+        m_import = tk.Menu(m_file, tearoff=0)
+        m_file.add_cascade(label="Import", menu=m_import)
+        m_import.add_command(label="Von Creality Cloud…", command=self.sync_database)
+        m_import.add_command(label="Vom Drucker (SSH)…", command=self.sync_from_printer)
+        m_import.add_command(label="Slicer-Profile (Orca JSON)…", command=self.import_slicer_profiles)
+        m_import.add_command(label="Datenbank-Datei öffnen…", command=self.pick_database)
+        m_import.add_command(label="Cloud in lokale DB mergen…", command=self.merge_cloud)
+        m_import.add_command(label="CFS-RFID ZIP…", command=self.import_cfs_zip)
+        m_file.add_separator()
         m_file.add_command(label="DB öffnen…", command=self.pick_database)
         m_file.add_command(label="DB speichern unter…", command=self.save_database_as)
+        m_file.add_command(label="Zum Drucker senden (SSH)…", command=self.upload_to_printer)
         m_file.add_command(label="material_options.json exportieren…", command=self.export_options)
         m_file.add_separator()
         m_file.add_command(label="Daten sichern (ZIP)…", command=self.backup_data)
@@ -292,8 +308,8 @@ class TDFilamentStudioApp(AppTk):
         self.db_badge.pack(anchor="e")
 
     def _build_body(self) -> None:
-        body = ttk.Frame(self, padding=(12, 8, 12, 6))
-        body.pack(fill="both", expand=True)
+        body = ttk.Frame(self, padding=(12, 8, 12, 10))
+        body.pack(fill="both", expand=True, side="top")
 
         self.notebook = ttk.Notebook(body)
         self.notebook.pack(fill="both", expand=True)
@@ -753,10 +769,13 @@ class TDFilamentStudioApp(AppTk):
     def _build_tab_database(self) -> None:
         top = ttk.Frame(self.tab_db)
         top.pack(fill="both", expand=True)
+        top.columnconfigure(0, weight=1)
+        top.rowconfigure(1, weight=1)
 
-        sec = section(top, "Material-Datenbank — Import & Drucker")
+        sec = section(top, "Import — Material-Datenbank")
+        sec.grid(row=0, column=0, sticky="ew", padx=4, pady=(4, 2))
         self.db_label = ttk.Label(sec, text="Lade…", style="Muted.TLabel", wraplength=800)
-        self.db_label.pack(anchor="w", pady=(0, 12))
+        self.db_label.pack(anchor="w", pady=(0, 6))
 
         grid = ttk.Frame(sec)
         grid.pack(fill="x")
@@ -782,6 +801,11 @@ class TDFilamentStudioApp(AppTk):
                 "Cloud-Daten mit der lokalen Datenbank zusammenführen.",
             ),
             ("Datei öffnen…", self.pick_database, "Bestehende JSON-Datenbank von der Festplatte laden."),
+            (
+                "Slicer-Profile import…",
+                self.import_slicer_profiles,
+                "Orca/Creality JSON — Notizen: {\"id\",\"vendor\",\"type\",\"name\"}.",
+            ),
             ("DB speichern…", self.save_database_as, "Datenbank als JSON-Datei exportieren."),
             (
                 "CFS-RFID ZIP…",
@@ -789,17 +813,17 @@ class TDFilamentStudioApp(AppTk):
                 "Backup-ZIP mit Datenbank und Einstellungen importieren.",
             ),
         ]
+        for c in range(4):
+            grid.columnconfigure(c, weight=1)
         for i, (text, cmd, help_txt) in enumerate(actions):
-            r, c = divmod(i, 2)
+            r, c = divmod(i, 4)
             tip(
                 ttk.Button(grid, text=text, command=cmd, style="Secondary.TButton"),
                 help_txt,
-            ).grid(row=r, column=c, sticky="ew", padx=6, pady=6)
-        grid.columnconfigure(0, weight=1)
-        grid.columnconfigure(1, weight=1)
+            ).grid(row=r, column=c, sticky="ew", padx=3, pady=3)
 
         list_sec = section(top, "Alle Material-Profile")
-        list_sec.pack(fill="both", expand=True, padx=4, pady=(4, 8))
+        list_sec.grid(row=1, column=0, sticky="nsew", padx=4, pady=4)
         self._profile_list_title = ttk.Label(
             list_sec,
             text="0 Profile — Suche filtert die Liste",
@@ -823,7 +847,7 @@ class TDFilamentStudioApp(AppTk):
             tree_wrap,
             columns=("id", "brand", "name", "type"),
             show="headings",
-            height=14,
+            height=10,
             yscrollcommand=tree_scroll.set,
         )
         tree_scroll.config(command=self._profile_tree.yview)
@@ -862,53 +886,30 @@ class TDFilamentStudioApp(AppTk):
             "Filament-Profil-Tab mit Auswahl öffnen.",
         ).pack(side="left")
 
+        foot = ttk.Frame(top)
+        foot.grid(row=2, column=0, sticky="ew", padx=4, pady=(0, 6))
+        foot_row = ttk.Frame(foot)
+        foot_row.pack(fill="x")
         ttk.Label(
-            top,
-            text="Doppelklick auf ein Profil = für RFID-Tag übernehmen. "
-            "Bearbeiten: Tab „Filament-Profil“.",
+            foot_row,
+            text="Doppelklick = RFID-Tag · Bearbeiten: Tab „Filament-Profil“",
             style="Muted.TLabel",
-            wraplength=800,
-        ).pack(anchor="w", padx=4, pady=(0, 4))
-
-        ssh_sec = section(top, "Drucker SSH")
-        ssh_row = ttk.Frame(ssh_sec)
-        ssh_row.pack(fill="x", pady=(0, 6))
-        ssh_row.columnconfigure(0, weight=2)
-        ssh_row.columnconfigure(1, weight=2)
-        ssh_row.columnconfigure(2, weight=0)
-
-        ip_col = ttk.Frame(ssh_row)
-        ip_col.grid(row=0, column=0, sticky="ew", padx=(0, 10))
-        ttk.Label(ip_col, text="Drucker-IP", style="Muted.TLabel").pack(anchor="w")
-        ttk.Entry(ip_col, textvariable=self.ssh_host_var).pack(fill="x", pady=(2, 0))
-
-        pass_col = ttk.Frame(ssh_row)
-        pass_col.grid(row=0, column=1, sticky="ew", padx=(0, 10))
-        ttk.Label(pass_col, text="SSH-Passwort (root)", style="Muted.TLabel").pack(anchor="w")
-        ttk.Entry(pass_col, textvariable=self.ssh_pass_var, show="•").pack(fill="x", pady=(2, 0))
-
+        ).pack(side="left")
         tip(
             ttk.Button(
-                ssh_row,
-                text="Drucker verwalten…",
-                command=self.open_printer_manager,
+                foot_row,
+                text="Drucker & SSH →",
+                command=lambda: self.notebook.select(self.tab_printer),
                 style="Secondary.TButton",
             ),
-            "Gespeicherte Drucker (IP, Modell, Passwort) anlegen und übernehmen.",
-        ).grid(row=0, column=2, sticky="se", padx=(4, 0))
-
-        ttk.Label(
-            ssh_sec,
-            text="Root am K2 aktivieren. Standard oft: creality_2024",
-            style="Muted.TLabel",
-        ).pack(anchor="w")
-
-        self._printer_dashboard = PrinterDashboardPanel(top, self)
-        self._printer_dashboard.pack(fill="both", expand=False, padx=4, pady=8)
+            "IP, SSH, DB-Vergleich und Upload im Tab „Drucker“.",
+        ).pack(side="right")
 
     def _build_tab_printer(self) -> None:
         self._device_panel = PrinterDevicePanel(self.tab_printer, self)
         self._device_panel.pack(fill="both", expand=True)
+        self._printer_dashboard = PrinterDashboardPanel(self.tab_printer, self)
+        self._printer_dashboard.pack(fill="x", padx=4, pady=(0, 8))
 
     def _build_tab_spools(self) -> None:
         self._spool_panel = SpoolManagerPanel(self)
@@ -918,12 +919,14 @@ class TDFilamentStudioApp(AppTk):
         self._statusbar_frame = tk.Frame(
             self,
             bg=BG_SUBTLE,
+            height=52,
             highlightbackground=BORDER,
             highlightthickness=1,
         )
         self._statusbar_frame.pack(fill="x", side="bottom")
+        self._statusbar_frame.pack_propagate(False)
 
-        bar = tk.Frame(self._statusbar_frame, bg=BG_SUBTLE, padx=16, pady=8)
+        bar = tk.Frame(self._statusbar_frame, bg=BG_SUBTLE, padx=16, pady=10)
         bar.pack(fill="x")
 
         left = tk.Frame(bar, bg=BG_SUBTLE)
@@ -1710,6 +1713,54 @@ class TDFilamentStudioApp(AppTk):
         except Exception as exc:
             self.notify(str(exc), "error")
 
+    def import_slicer_profiles(self) -> None:
+        """OrcaSlicer/Creality-Print Filament-JSONs in die Material-DB."""
+        if not self._ensure_db():
+            return
+        paths: list[Path] = []
+        picked = filedialog.askopenfilenames(
+            title="Slicer-Filament-Profile (JSON)",
+            filetypes=[("JSON", "*.json"), ("Alle Dateien", "*.*")],
+        )
+        if picked:
+            paths = [Path(p) for p in picked]
+        else:
+            folder = filedialog.askdirectory(
+                title="Ordner mit Filament-JSONs (Orca user/filament …)",
+            )
+            if folder:
+                paths = list(Path(folder).rglob("*.json"))
+        if not paths:
+            return
+        profiles = collect_slicer_profiles_from_paths(paths)
+        if not profiles:
+            messagebox.showwarning(
+                APP_NAME,
+                "Keine Filament-Profile erkannt.\n\n"
+                "In OrcaSlicer unter Filament → Notizen z. B.:\n"
+                '{"id":"06099","vendor":"ELEGOO","type":"PETG","name":"Fast PETG"}',
+                parent=self,
+            )
+            return
+        template = None
+        if self.db_data:
+            lst = self.db_data.get("result", {}).get("list", [])
+            if lst:
+                template = lst[0]
+        data, added, updated = merge_slicer_profiles_into_db(
+            self.db_data or {"result": {"list": [], "count": 0}},
+            profiles,
+            template_item=template,
+        )
+        self._apply_database(data, "slicer")
+        messagebox.showinfo(
+            APP_NAME,
+            f"{len(profiles)} Slicer-Profile verarbeitet.\n\n"
+            f"Neu: {added}\nAktualisiert: {updated}\n\n"
+            "Optional: „Zum Drucker (SSH)“ — Drucker neu starten.",
+            parent=self,
+        )
+
     def save_database_as(self) -> None:
         if not self.db_data:
             self.notify("Keine DB geladen.")
@@ -2132,6 +2183,7 @@ class TDFilamentStudioApp(AppTk):
         if not cfs_slots and state:
             cfs_slots = parse_cfs_slots(state)
         file_entry = self._gcode_entry_for_name(state, filename)
+        local_gcode = resolve_local_gcode_path(filename) if filename else None
         loaded_slot = find_loaded_slot_index(state) if state else None
         last_print_slot: int | None = None
         if hasattr(self, "_printer_device_panel"):
@@ -2218,6 +2270,7 @@ class TDFilamentStudioApp(AppTk):
                         slot_hint,
                         cfs_slots or None,
                         file_entry=file_entry,
+                        local_path=local_gcode,
                     )
                     if est:
                         default, source_hint = est
@@ -3258,6 +3311,34 @@ class TDFilamentStudioApp(AppTk):
             if not self.reader.is_ready:
                 self.connect_reader(show_errors=not silent)
             session = self._session()
+            if self.settings.protect_tag_overwrite:
+                try:
+                    raw_existing = session.read_payload()
+                    if not payload_is_empty(raw_existing) and not silent:
+                        info = parse_tag_payload(raw_existing)
+                        wlabel = next(
+                            (
+                                k
+                                for k, v in WEIGHT_CODES.items()
+                                if v == info.get("weight_code")
+                            ),
+                            info.get("weight_code") or "?",
+                        )
+                        if not messagebox.askyesno(
+                            APP_NAME,
+                            "Der Tag enthält bereits Filament-Daten:\n\n"
+                            f"Material-ID: {info.get('material_id', '?')}\n"
+                            f"Farbe: {info.get('color', '?')}\n"
+                            f"Gewicht: {wlabel}\n"
+                            f"Serie: {info.get('serial', '?')}\n\n"
+                            "Wirklich überschreiben?",
+                            default="no",
+                            parent=self,
+                        ):
+                            self._set_status("Schreiben abgebrochen", "warn")
+                            return
+                except NfcReaderError:
+                    pass
             session.write_payload(
                 build_tag_payload(
                     profile.filament_id,
