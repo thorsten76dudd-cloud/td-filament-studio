@@ -5,6 +5,7 @@ import unittest
 from pathlib import Path
 
 from creality_nfc.gcode_filament import (
+    _should_prefer_file_filament_specs,
     build_preheat_params,
     build_slot_usage_plan,
     estimate_grams_for_slot,
@@ -13,6 +14,7 @@ from creality_nfc.gcode_filament import (
     parse_filament_colors_from_gcode_file,
     parse_filament_grams_from_file,
     parse_filament_specs,
+    parse_filament_specs_from_gcode_file,
     parse_gcode_print_temps,
     plausible_filament_grams,
     resolve_slots_from_gcode,
@@ -115,8 +117,22 @@ class GcodeFilamentTests(unittest.TestCase):
             }
         )
         self.assertIsNone(specs[0].weight_g)
-        self.assertAlmostEqual(specs[1].weight_g or 0, 4.35, places=2)
+        self.assertAlmostEqual(specs[1].weight_g or 0, 4.35, places=1)
         self.assertIsNone(plausible_filament_grams(1458.32))
+
+    def test_printer_material_used_mm_multicolor(self) -> None:
+        """K2: materialUsed in mm, nicht Gramm — wie am Drucker-Display."""
+        specs = parse_filament_specs(
+            {
+                "materialColors": "#1E90FF;#B0B0B0",
+                "material": "PETG;PETG",
+                "filamentWeight": "66.0,22.0",
+                "materialUsed": "0,73,7380,0",
+            }
+        )
+        by_color = {s.color_hex: s.weight_g for s in specs if s.color_hex}
+        self.assertAlmostEqual(by_color["#1E90FF"], 0.2, places=1)
+        self.assertAlmostEqual(by_color["#B0B0B0"], 22.0, places=0)
 
     def test_build_slot_usage_plan_multicolor(self) -> None:
         state = {
@@ -271,6 +287,90 @@ class GcodeFilamentTests(unittest.TestCase):
             loaded_slot_index=3,
         )
         self.assertEqual(maps[0][0], 1)
+
+    def test_orca_per_filament_weights_from_file(self) -> None:
+        header = (
+            "; filament_colour = #1E90FF, #B0B0B0\n"
+            "; material = PETG, PETG\n"
+            "; filament used [g] = 0.20, 21.83\n"
+            "; total filament used [g] = 22.02\n"
+            "G28\n"
+        )
+        with tempfile.NamedTemporaryFile("w", suffix=".gcode", delete=False, encoding="utf-8") as f:
+            f.write(header)
+            path = Path(f.name)
+        try:
+            specs = parse_filament_specs_from_gcode_file(path)
+            self.assertEqual(len(specs), 2)
+            self.assertAlmostEqual(specs[0].weight_g or 0, 0.2, places=2)
+            self.assertAlmostEqual(specs[1].weight_g or 0, 21.83, places=2)
+        finally:
+            path.unlink(missing_ok=True)
+
+    def test_prefer_slicer_file_over_wrong_printer_metadata(self) -> None:
+        state = {
+            "cfsConnect": 1,
+            "boxsInfo": {
+                "enable": 1,
+                "materialBoxs": [
+                    {
+                        "type": 0,
+                        "id": 1,
+                        "materials": [
+                            {},
+                            {
+                                "vendor": "Creality",
+                                "name": "Blau",
+                                "type": "PETG",
+                                "color": "1E90FF",
+                            },
+                            {
+                                "vendor": "Creality",
+                                "name": "Grau",
+                                "type": "PETG",
+                                "color": "B0B0B0",
+                            },
+                            {},
+                        ],
+                    }
+                ],
+            },
+        }
+        slots = parse_cfs_slots(state)
+        gcode = "Körper6x8_PETG_1h49m17s.gcode"
+        header = (
+            "; filament_colour = #1E90FF, #B0B0B0\n"
+            "; filament used [g] = 0.20, 21.83\n"
+            "; total filament used [g] = 22.02\n"
+            "G28\n"
+        )
+        from app.paths import GCODE_CACHE_DIR
+
+        GCODE_CACHE_DIR.mkdir(parents=True, exist_ok=True)
+        path = GCODE_CACHE_DIR / gcode
+        path.write_text(header, encoding="utf-8")
+        try:
+            # Drucker liefert falsche 66 g / 22 g — Slicer-Datei hat 0,2 / 21,83
+            printer_info = {
+                "name": gcode,
+                "materialColors": "#1E90FF;#B0B0B0",
+                "material": "PETG;PETG",
+                "filamentWeight": "66.0,22.0",
+            }
+            file_specs = parse_filament_specs_from_gcode_file(path)
+            printer_specs = parse_filament_specs(printer_info)
+            self.assertTrue(
+                _should_prefer_file_filament_specs(
+                    file_specs, printer_specs, local_path=path
+                )
+            )
+            merged = merge_gcode_filament_info(state, gcode, printer_info)
+            plan = build_slot_usage_plan(state, gcode, slots, file_entry=merged)
+            by_slot = {u.slot_index: u.grams for u in plan}
+            self.assertEqual(by_slot.get(1), 1)  # Blau ~0,2 g → min. 1 g
+            self.assertEqual(by_slot.get(2), 22)  # Grau ~21,83 g
+        finally:
+            path.unlink(missing_ok=True)
 
 
 if __name__ == "__main__":

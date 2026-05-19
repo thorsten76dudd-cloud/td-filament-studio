@@ -390,10 +390,24 @@ def apply_text_area_style(widget: tk.Text, *, bg: str = CARD) -> None:
         selectbackground=SURFACE_DARK,
         selectforeground=TEXT,
         relief="flat",
-        highlightthickness=0,
+        highlightthickness=1,
+        highlightbackground=BORDER,
+        highlightcolor=BORDER,
         borderwidth=0,
     )
     try:
-        widget.configure(disabledforeground=TEXT, disabledbackground=bg)
+        widget.configure(disabledforeground=MUTED, disabledbackground=bg)
     except tk.TclError:
         pass
+    vbar = getattr(widget, "vbar", None)
+    if vbar is not None:
+        try:
+            vbar.configure(
+                bg=BG_SUBTLE,
+                troughcolor=bg,
+                activebackground=SURFACE_DARK,
+                highlightthickness=0,
+                borderwidth=0,
+            )
+        except tk.TclError:
+            pass

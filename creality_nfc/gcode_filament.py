@@ -2,7 +2,9 @@
 
 from __future__ import annotations
 
+import math
 import re
+import time
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Any
@@ -57,6 +59,13 @@ def _split_fields(raw: str, sep: str) -> list[str]:
     return [p.strip() for p in str(raw).split(sep)]
 
 
+def _split_numeric_fields(raw: str) -> list[str]:
+    """Komma oder Semikolon (Drucker/Orca mischen beides)."""
+    if not raw:
+        return []
+    return [p.strip() for p in re.split(r"[,;]", str(raw)) if p.strip()]
+
+
 def _parse_float(val: str) -> float | None:
     try:
         return float(val.replace(",", ".").strip())
@@ -73,25 +82,108 @@ def plausible_filament_grams(val: float | None) -> float | None:
     return val
 
 
+def mm_filament_to_grams(
+    length_mm: float,
+    *,
+    diameter_mm: float = 1.75,
+    density_g_cm3: float = 1.24,
+) -> float:
+    """Filamentlänge (mm) → Gramm (PETG/PLA ~1,24 g/cm³, 1,75 mm)."""
+    if length_mm <= 0:
+        return 0.0
+    r_cm = (diameter_mm / 10.0) / 2.0
+    length_cm = length_mm / 10.0
+    volume_cm3 = math.pi * r_cm * r_cm * length_cm
+    return volume_cm3 * density_g_cm3
+
+
+def _grams_from_printer_slot(
+    fw_raw: str | None,
+    used_raw: str | None,
+) -> float | None:
+    """
+    K2 retGcodeFileInfo2: filamentWeight oft Slicer-Schätzung;
+    materialUsed oft Ist-Verbrauch in mm (z. B. 7380 → ~22 g).
+    """
+    fw = _parse_float(fw_raw) if fw_raw not in (None, "") else None
+    used = _parse_float(used_raw) if used_raw not in (None, "") else None
+    fw_g = slot_filament_grams(fw) if fw is not None else None
+    used_g = _material_used_to_grams(used) if used is not None and used > 0 else None
+    if used_g is not None and fw_g is not None:
+        if fw_g > used_g * 2.5 and used_g >= 0.1:
+            return used_g
+        if used_g > fw_g * 2.5 and fw_g >= 0.1:
+            return fw_g
+    return used_g if used_g is not None else fw_g
+
+
+def slot_filament_grams(val: float | None) -> float | None:
+    """Pro CFS-Slot / Farbe — auch kleine Orca-Werte (z. B. 0,2 g Blau)."""
+    if val is None or val <= 0.01:
+        return None
+    if val > _MAX_PLAUSIBLE_GRAMS:
+        return None
+    if val >= _MIN_PLAUSIBLE_GRAMS:
+        return val
+    if val >= 0.15:
+        return val
+    return None
+
+
+def _material_used_to_grams(v: float) -> float | None:
+    """K2 materialUsed: praktisch immer extrudierte Länge in mm."""
+    if v <= 0:
+        return None
+    if v >= 15:
+        return slot_filament_grams(mm_filament_to_grams(v))
+    return slot_filament_grams(v)
+
+
+def _nonzero_usage_grams(values: list[str]) -> list[float]:
+    """Alle materialUsed-Werte > 0 in Reihenfolge (mm → g)."""
+    out: list[float] = []
+    for raw in values:
+        v = _parse_float(raw)
+        if v is None:
+            continue
+        g = _material_used_to_grams(v)
+        if g is not None:
+            out.append(g)
+    return out
+
+
 def parse_filament_specs(info: dict[str, Any]) -> list[GcodeFilamentSpec]:
     """Aus retGcodeFileInfo2-Eintrag (materialColors, material, filamentWeight)."""
     colors = _split_fields(str(info.get("materialColors") or ""), ";")
     materials = _split_fields(str(info.get("material") or ""), ";")
-    weights = _split_fields(str(info.get("filamentWeight") or ""), ",")
-    used = _split_fields(str(info.get("materialUsed") or ""), ",")
+    weights = _split_numeric_fields(str(info.get("filamentWeight") or ""))
+    used = _split_numeric_fields(str(info.get("materialUsed") or ""))
+
+    color_hexes = [creality_color_to_hex(c) for c in colors if c]
+    color_hexes = [h for h in color_hexes if h]
+    used_by_order = _nonzero_usage_grams(used)
+    fw_by_order: list[float] = []
+    for raw in weights:
+        g = _grams_from_printer_slot(raw or None, None)
+        if g is not None:
+            fw_by_order.append(g)
 
     n = max(len(colors), len(materials), len(weights), len(used), 4)
     specs: list[GcodeFilamentSpec] = []
+    color_slot = 0
     for i in range(n):
         color_raw = colors[i] if i < len(colors) else ""
         mat = materials[i] if i < len(materials) else ""
-        w: float | None = None
-        if i < len(weights):
-            w = plausible_filament_grams(_parse_float(weights[i]))
-        if w is None and i < len(used):
-            w = plausible_filament_grams(_parse_float(used[i]))
         color_hex = creality_color_to_hex(color_raw) if color_raw else None
         mtype = mat.strip() if mat and mat.strip() else None
+        w: float | None = None
+        if color_hex and color_slot < len(used_by_order) and len(used_by_order) == len(color_hexes):
+            w = used_by_order[color_slot]
+            color_slot += 1
+        else:
+            fw_t = weights[i] if i < len(weights) else ""
+            used_t = used[i] if i < len(used) else ""
+            w = _grams_from_printer_slot(fw_t or None, used_t or None)
         specs.append(
             GcodeFilamentSpec(
                 extruder_index=i,
@@ -105,7 +197,11 @@ def parse_filament_specs(info: dict[str, Any]) -> list[GcodeFilamentSpec]:
 
 def active_filament_specs(specs: list[GcodeFilamentSpec]) -> list[GcodeFilamentSpec]:
     """Extruder, die im Job wirklich genutzt werden."""
-    by_weight = [s for s in specs if s.weight_g is not None and s.weight_g > 0.01]
+    by_weight = [
+        s
+        for s in specs
+        if slot_filament_grams(s.weight_g) is not None
+    ]
     if by_weight:
         return by_weight
     by_color = [s for s in specs if s.color_hex]
@@ -340,6 +436,172 @@ def parse_filament_colors_from_gcode_file(
     return colors, materials
 
 
+_RE_FILAMENT_LIST_LINE = re.compile(
+    r"filament_colou?rs?\s*[=:]\s*(.+)$",
+    re.I,
+)
+_RE_FILAMENT_USED_G_LIST = re.compile(
+    r"(?:^|;\s*)(?:total\s+)?filament used \[g\]\s*[=:]\s*([\d.,\s]+)\s*$",
+    re.I,
+)
+_RE_FILAMENT_USED_G_ORCA = re.compile(
+    r"filament_used_g\s*[=:]\s*([\d.,\s]+)",
+    re.I,
+)
+_RE_MATERIAL_LIST = re.compile(r";?\s*material\s*[=:]\s*([A-Za-z0-9 _+,-]+)\s*$", re.I)
+
+
+def _parse_color_token_list(raw: str) -> list[str]:
+    out: list[str] = []
+    for part in re.split(r"[,;]", raw):
+        hx = creality_color_to_hex(part.strip().strip("\"'"))
+        if hx:
+            out.append(hx)
+    return out
+
+
+def _parse_float_list(raw: str) -> list[float]:
+    out: list[float] = []
+    for part in re.split(r"[,;]", raw):
+        v = _parse_float(part)
+        if v is not None:
+            out.append(v)
+    return out
+
+
+def parse_filament_specs_from_gcode_file(
+    gcode_path: str | Path, *, max_bytes: int = 200_000
+) -> list[GcodeFilamentSpec]:
+    """
+    Orca/Bambu/Creality: Farben + Gramm pro Filament aus dem Dateikopf.
+    Beispiel: `; filament used [g] = 0.20, 21.83` mit passenden filament_colour-Zeilen.
+    """
+    path = Path(gcode_path) if not isinstance(gcode_path, Path) else gcode_path
+    if not path.is_file():
+        resolved = resolve_local_gcode_path(str(gcode_path))
+        if resolved is None:
+            return []
+        path = resolved
+    try:
+        raw = path.read_bytes()[:max_bytes].decode("utf-8", errors="ignore")
+    except OSError:
+        return []
+
+    colors: list[str] = []
+    materials: list[str] = []
+    weights: list[float] = []
+    total_g: float | None = None
+
+    for line in raw.splitlines()[:600]:
+        stripped = line.strip()
+        if not stripped.startswith(";"):
+            if stripped.startswith("G"):
+                break
+            continue
+        body = stripped.lstrip(";").strip()
+
+        m_col = _RE_FILAMENT_LIST_LINE.search(body)
+        if m_col:
+            parsed = _parse_color_token_list(m_col.group(1))
+            if len(parsed) > len(colors):
+                colors = parsed
+            continue
+
+        for pat in _HEADER_COLOR_RE[:2]:
+            m = pat.search(body)
+            if m:
+                hx = None
+                for g in m.groups():
+                    if g and creality_color_to_hex(g):
+                        hx = creality_color_to_hex(g)
+                        break
+                if hx:
+                    colors.append(hx)
+                break
+
+        m_mat = _RE_MATERIAL_LIST.match(body)
+        if m_mat:
+            for part in re.split(r"[,;]", m_mat.group(1)):
+                mt = part.strip()
+                if mt:
+                    materials.append(mt)
+            continue
+
+        if re.search(r"total\s+filament", body, re.I):
+            m_tot = _RE_FILAMENT_USED_G_LIST.search(body)
+            if m_tot:
+                vals = _parse_float_list(m_tot.group(1))
+                if len(vals) == 1:
+                    total_g = plausible_filament_grams(vals[0]) or vals[0]
+            continue
+
+        m_used = _RE_FILAMENT_USED_G_LIST.search(body) or _RE_FILAMENT_USED_G_ORCA.search(body)
+        if m_used:
+            vals = _parse_float_list(m_used.group(1))
+            plausible = [slot_filament_grams(v) for v in vals]
+            plausible = [p for p in plausible if p is not None]
+            if len(plausible) >= 2:
+                weights = plausible
+            elif len(plausible) == 1 and not weights:
+                weights = plausible
+
+    if not weights and total_g is not None:
+        return []
+
+    n = max(len(colors), len(materials), len(weights), 1)
+    specs: list[GcodeFilamentSpec] = []
+    for i in range(n):
+        w = weights[i] if i < len(weights) else None
+        if w is not None:
+            w = slot_filament_grams(w)
+        specs.append(
+            GcodeFilamentSpec(
+                extruder_index=i,
+                color_hex=colors[i] if i < len(colors) else None,
+                material_type=materials[i] if i < len(materials) else None,
+                weight_g=w,
+            )
+        )
+    return [s for s in specs if s.weight_g or s.color_hex]
+
+
+def _specs_to_info_fields(specs: list[GcodeFilamentSpec]) -> dict[str, str]:
+    colors = ";".join(s.color_hex or "" for s in specs)
+    materials = ";".join(s.material_type or "" for s in specs)
+    weights = ",".join(
+        f"{s.weight_g:.2f}".rstrip("0").rstrip(".") if s.weight_g is not None else "0"
+        for s in specs
+    )
+    return {
+        "materialColors": colors,
+        "material": materials,
+        "filamentWeight": weights,
+    }
+
+
+def _should_prefer_file_filament_specs(
+    file_specs: list[GcodeFilamentSpec],
+    printer_specs: list[GcodeFilamentSpec],
+    *,
+    local_path: Path | None,
+) -> bool:
+    file_active = active_filament_specs(file_specs)
+    if not file_active or not any(s.weight_g for s in file_active):
+        return False
+    file_total = sum(s.weight_g or 0 for s in file_active)
+    printer_active = active_filament_specs(printer_specs)
+    printer_total = sum(s.weight_g or 0 for s in printer_active)
+    header_total = (
+        parse_filament_grams_from_file(local_path) if local_path and local_path.is_file() else None
+    )
+    ref = header_total or file_total
+    if ref and printer_total > ref * 1.35 + 2:
+        return True
+    if len(file_active) >= 2 and abs(printer_total - file_total) > max(3.0, file_total * 0.25):
+        return True
+    return False
+
+
 def _raw_temp_to_celsius(raw: Any) -> int | None:
     """K2 retGcodeFileInfo2: 25500 → 255 °C, 7000 → 70 °C; auch °C direkt."""
     if raw is None or raw == "":
@@ -499,6 +761,18 @@ def merge_gcode_filament_info(
             merged["materialColors"] = (
                 file_colors[0] if len(file_colors) == 1 else ";".join(file_colors)
             )
+
+    local_path = resolve_local_gcode_path(gcode_path)
+    if local_path and local_path.is_file():
+        file_specs = parse_filament_specs_from_gcode_file(local_path)
+        if file_specs:
+            printer_specs = parse_filament_specs(merged) if merged else []
+            if _should_prefer_file_filament_specs(
+                file_specs, printer_specs, local_path=local_path
+            ):
+                merged.update(_specs_to_info_fields(file_specs))
+            elif not merged.get("filamentWeight") and any(s.weight_g for s in file_specs):
+                merged.update(_specs_to_info_fields(file_specs))
     return merged
 
 
@@ -650,6 +924,56 @@ def parse_filament_grams_from_file(path: Path, *, max_bytes: int = 120_000) -> f
     except OSError:
         return None
     return parse_filament_grams_from_text(raw)
+
+
+def cache_gcode_from_printer(
+    host: str,
+    password: str,
+    file_entry: dict[str, Any],
+) -> Path | None:
+    """G-Code per SSH in data/gcode_cache/ — für Slicer-Kommentare ohne manuellen Klick."""
+    if not host or not password or not file_entry:
+        return None
+    try:
+        from creality_nfc.printer_gcode import entry_remote_path
+        from creality_nfc.printer_ssh import download_gcode_from_printer
+
+        remote = entry_remote_path(file_entry)
+        name = str(file_entry.get("name") or Path(remote).name).strip()
+        if not name.lower().endswith(".gcode"):
+            return None
+        try:
+            from app.paths import GCODE_CACHE_DIR
+        except ImportError:
+            return None
+        GCODE_CACHE_DIR.mkdir(parents=True, exist_ok=True)
+        dest = GCODE_CACHE_DIR / name
+        download_gcode_from_printer(host, password, remote, dest)
+        if dest.is_file() and dest.stat().st_size >= 64:
+            return dest
+    except Exception:
+        return None
+    return None
+
+
+def refresh_state_for_filament_usage(
+    conn: Any | None,
+    *,
+    wait_sec: float = 0.9,
+) -> dict[str, Any]:
+    """Aktuelle retGcodeFileInfo2 vom Drucker holen (vor Verbrauchs-Dialog)."""
+    if conn is None or not getattr(conn, "connected", False):
+        return {}
+    try:
+        conn.request_get(
+            reqGcodeFileInfo2=1,
+            reqGcodeFile=1,
+            reqGcodeFileInfo=1,
+        )
+        time.sleep(max(0.2, wait_sec))
+        return conn.snapshot() or {}
+    except Exception:
+        return {}
 
 
 def resolve_local_gcode_path(
@@ -818,15 +1142,18 @@ def build_slot_usage_plan(
         if slot_idx in seen:
             continue
         seen.add(slot_idx)
-        g = plausible_filament_grams(spec.weight_g)
+        g = slot_filament_grams(spec.weight_g)
         if g is None:
             continue
+        grams = int(round(g))
+        if grams < 1 and g >= 0.15:
+            grams = 1
         out.append(
             GcodeSlotUsage(
                 slot_index=slot_idx,
                 slot_label=SLOT_LABELS[slot_idx],
                 spec=spec,
-                grams=int(round(g)),
+                grams=grams,
                 source=_usage_source_label(gcode_path, spec),
             )
         )
@@ -875,7 +1202,13 @@ def build_slot_usage_plan(
 
 
 def _usage_source_label(gcode_path: str, spec: GcodeFilamentSpec) -> str:
-    parts = ["G-Code filamentWeight"]
+    local = resolve_local_gcode_path(gcode_path)
+    if local and local.is_file() and active_filament_specs(
+        parse_filament_specs_from_gcode_file(local)
+    ):
+        parts = ["G-Code-Datei (Slicer)"]
+    else:
+        parts = ["Drucker (materialUsed / Gewicht)"]
     hint = material_hint_from_gcode_path(gcode_path)
     if hint and (spec.material_type or "").upper() != hint:
         parts.append(f"Material aus Dateiname: {hint}")

@@ -13,7 +13,7 @@ Während du testest, kurz notieren (OK / Fehler):
 - [ ] App-Start → Tab **Drucker** → Kamera startet ohne Trennen/Verbinden
 - [x] Tab **Monitor** → „Aktueller Druck“ zeigt Datei/Fortschritt ohne Tab-Wechsel
 - [ ] RFID: Tag lesen, schreiben, leeren (Spule → RFID-Tab)
-- [ ] Post-Print: **Verbrauch abziehen…** oder Auto-Abzug nach Druck
+- [x] Post-Print: **Verbrauch abziehen…** — Gramm pro Farbe plausibel (G-Code in `data/gcode_cache/`)
 - [ ] **Datei → Import** / Material-DB (Cloud, SSH, Slicer JSON)
 - [ ] **Meine Spulen** speichern, CFS-Slot
 - [ ] Statusleiste unten voll sichtbar (alle Tabs)

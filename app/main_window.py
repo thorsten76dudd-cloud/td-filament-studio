@@ -67,9 +67,11 @@ from creality_nfc.cfs_spool_link import bind_slot, find_spool_for_deduct, find_s
 from creality_nfc.cfs_feed import find_loaded_slot_index
 from creality_nfc.gcode_filament import (
     build_slot_usage_plan,
+    cache_gcode_from_printer,
     estimate_grams_for_slot,
     material_hint_from_gcode_path,
     primary_gcode_slot_mapping,
+    refresh_state_for_filament_usage,
     resolve_local_gcode_path,
 )
 from creality_nfc.slicer_import import (
@@ -1032,13 +1034,9 @@ class TDFilamentStudioApp(AppTk):
             log_card,
             height=4,
             font=F_SMALL,
-            bg=CARD,
-            fg=TEXT,
-            relief="flat",
             wrap="word",
-            highlightthickness=0,
-            borderwidth=0,
         )
+        apply_text_area_style(self.msg_log)
         self.msg_log.pack(fill="x", padx=10, pady=(4, 8))
         self.msg_log.config(state="disabled")
         self._confirm_yes_cb = None
@@ -2174,9 +2172,55 @@ class TDFilamentStudioApp(AppTk):
                 return
             if fname and fname == self._post_print_deduct_file:
                 return
+
+        def _prepare_then_ask() -> None:
+            state = dict(printer_state or {})
+            try:
+                conn = None
+                if hasattr(self, "_printer_device_panel"):
+                    conn = getattr(self._printer_device_panel, "_conn", None)
+                fresh = refresh_state_for_filament_usage(conn)
+                for key in (
+                    "retGcodeFileInfo2",
+                    "retGcodeFileInfo",
+                    "retGcodeFileInfo3",
+                    "printFileName",
+                    "print_file_name",
+                    "boxsInfo",
+                    "cfsConnect",
+                ):
+                    if key in fresh:
+                        state[key] = fresh[key]
+                entry = self._gcode_entry_for_name(state, fname)
+                host = (self.ssh_host_var.get() or "").strip() if hasattr(self, "ssh_host_var") else ""
+                if entry and host:
+                    from creality_nfc.printer_ssh import default_password
+
+                    printer_name = (
+                        self.printer_var.get().strip() if hasattr(self, "printer_var") else "K2 Pro"
+                    )
+                    password = self.ssh_pass_var.get() or default_password(printer_name)
+                    if password:
+                        cache_gcode_from_printer(host, password, entry)
+            except Exception:
+                pass
+            self.after(0, lambda: self._finish_post_print_deduct(active_slot, fname, state, manual))
+
+        import threading
+
+        threading.Thread(target=_prepare_then_ask, daemon=True).start()
+
+    def _finish_post_print_deduct(
+        self,
+        active_slot: int | None,
+        filename: str,
+        state: dict,
+        manual: bool,
+    ) -> None:
+        """Dialog nach Druck — state enthält frische retGcodeFileInfo2 vom Drucker."""
         from creality_nfc.cfs_adopt import parse_cfs_slots
 
-        state = printer_state or {}
+        fname = (filename or "").strip()
         cfs_slots: list[CfsSlotInfo] = []
         if hasattr(self, "_printer_device_panel"):
             cfs_slots = list(getattr(self._printer_device_panel, "_cfs_slots", []))

@@ -21,6 +21,7 @@ from creality_nfc.printer_ssh import (
     upload_options_to_printer,
 )
 from ui.dialog_theme import theme_dialog
+from ui.theme import BG_SUBTLE, apply_text_area_style
 from ui.tooltip import tip
 from ui.messaging import confirm, notify
 
@@ -79,9 +80,10 @@ class PrinterDashboardPanel(ttk.LabelFrame):
         ).pack(side="left", padx=(12, 0))
 
         self.compare_text = scrolledtext.ScrolledText(
-            self, height=6, font=("Consolas", 9), wrap="word"
+            self, height=3, font=("Consolas", 9), wrap="word"
         )
-        self.compare_text.pack(fill="both", expand=True, padx=8, pady=(0, 8))
+        apply_text_area_style(self.compare_text, bg=BG_SUBTLE)
+        self.compare_text.pack(fill="x", padx=8, pady=(0, 8))
         self._log("Bereit. Live-Steuerung: Tab „Drucker“.")
 
     def _log(self, text: str) -> None:

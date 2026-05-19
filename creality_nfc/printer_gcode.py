@@ -177,15 +177,20 @@ def _parse_info2_item(item: dict[str, Any], files: list[dict[str, Any]]) -> None
     _append_file(files, str(name), str(path), size, thumbnail=str(thumb), mtime=mtime)
     for existing in files:
         if existing.get("path") == str(path).strip() or existing.get("name") == str(name).strip():
-            for meta_key in (
-                "materialColors",
-                "material",
-                "filamentWeight",
-                "materialUsed",
-                "materialIds",
-            ):
-                if meta_key in item:
-                    existing[meta_key] = item[meta_key]
+            for meta_key, val in item.items():
+                if val in (None, ""):
+                    continue
+                kl = str(meta_key).lower()
+                if meta_key in (
+                    "materialColors",
+                    "material",
+                    "filamentWeight",
+                    "materialUsed",
+                    "materialIds",
+                    "matchId",
+                    "filamentId",
+                ) or "filament" in kl or kl in ("materialused", "materialweight"):
+                    existing[meta_key] = val
             break
 
 
