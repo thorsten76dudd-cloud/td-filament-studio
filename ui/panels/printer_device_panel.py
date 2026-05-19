@@ -125,6 +125,8 @@ class PrinterDevicePanel(ttk.Frame):
         self._last_cam_jpeg: bytes | None = None
         self._cam_resize_bound = False
         self._cam_active_host = ""
+        self._cam_started_at = 0.0
+        self._cam_start_scheduled = False
         self._cam_prefetch_pending = False
         self._cfs_fetch_pending = False
         self._reconnect_pending = False
@@ -151,8 +153,9 @@ class PrinterDevicePanel(ttk.Frame):
             self._schedule_poll()
         if self._last_cam_jpeg:
             self.after(50, self._paint_cam_frame)
-        if self._host_quiet() and self._conn and self._conn.connected:
-            self.after(0, self._ensure_live_camera)
+        elif self._conn and self._conn.connected:
+            # Nach App-Start lief die Kamera oft im Hintergrund ohne Bild — hier neu anstoßen.
+            self.after(150, lambda: self._ensure_live_camera(force=True))
         host = self._host_quiet()
         if not host:
             return
@@ -344,6 +347,8 @@ class PrinterDevicePanel(ttk.Frame):
             self._schedule_connect_refresh(0)
             if not self._live_poll_id:
                 self._schedule_live_poll()
+            if not self._last_cam_jpeg:
+                self._schedule_camera_start()
             threading.Thread(target=self._run_wait_telemetry, daemon=True).start()
             return
         self.disconnect()
@@ -370,7 +375,7 @@ class PrinterDevicePanel(ttk.Frame):
         threading.Thread(target=self._run_wait_telemetry, daemon=True).start()
         self._schedule_live_poll()
         self.after(1200, self._pull_live_snapshot_async)
-        self._ensure_live_camera()
+        self._schedule_camera_start()
         self.after(500, self._refresh_gcode_list)
         self.after(600, self._fetch_cfs_snapshot_async)
         self.after(800, self._refresh_cfs)
@@ -471,6 +476,8 @@ class PrinterDevicePanel(ttk.Frame):
                     self._gcode_polls = 0
                     self._gcode_ssh_tried = False
                     self.after(300, self._refresh_gcode_list)
+                    if not self._last_cam_jpeg:
+                        self.after(400, self._schedule_camera_start)
             elif self._conn.last_error:
                 self.conn_var.set(f"Verbinde erneut… ({self._conn.last_error[:72]})")
             snap = self._drain_live_snap()
@@ -985,8 +992,12 @@ class PrinterDevicePanel(ttk.Frame):
 
             host = getattr(self, "_cam_preview_host", self._preview_host)
             host.update_idletasks()
-            w = max(200, host.winfo_width())
-            h = max(150, host.winfo_height())
+            w, h = host.winfo_width(), host.winfo_height()
+            if w < 20 or h < 20:
+                self.after(250, self._paint_cam_frame)
+                return
+            w = max(200, w)
+            h = max(150, h)
             img = Image.open(io.BytesIO(data))
             img.thumbnail((w, h), Image.Resampling.LANCZOS)
             self._cam_photo = ImageTk.PhotoImage(img, master=host)
@@ -1050,18 +1061,40 @@ class PrinterDevicePanel(ttk.Frame):
 
         threading.Thread(target=work, name="k2-cam-prefetch", daemon=True).start()
 
-    def _ensure_live_camera(self) -> None:
+    def _schedule_camera_start(self, attempt: int = 0) -> None:
+        """Kamera erst starten, wenn WS-Daten vom Drucker da sind (sonst hängt „verbinde …“)."""
+        host = self._conn.host if self._conn else self._host_quiet()
+        if not host:
+            self._cam_start_scheduled = False
+            return
+        if not self._conn or not self._conn.connected:
+            if attempt < 24:
+                self.after(500, lambda: self._schedule_camera_start(attempt + 1))
+            else:
+                self._cam_start_scheduled = False
+            return
+        if not self._conn.has_received() and attempt < 18:
+            self.after(400, lambda: self._schedule_camera_start(attempt + 1))
+            return
+        self._cam_start_scheduled = False
+        self._ensure_live_camera(force=not bool(self._last_cam_jpeg))
+
+    def _ensure_live_camera(self, *, force: bool = False) -> None:
         host = self._conn.host if self._conn else self._host()
         if not host:
             self._cam_status_var.set("Kamera: Drucker-IP eintragen (RFID-Tab / Einstellungen)")
             return
         host = normalize_host(host)
-        if self._cam_worker and self._cam_active_host == host:
+        if self._cam_worker and self._cam_active_host == host and not force:
             if self._last_cam_jpeg:
                 self._paint_cam_frame()
-            return
+                return
+            age = time.monotonic() - self._cam_started_at if self._cam_started_at else 999.0
+            if age < 6.0:
+                return
+            force = True
         same_host = self._cam_active_host == host
-        self._stop_live_camera(keep_frame=same_host)
+        self._stop_live_camera(keep_frame=same_host and not force)
         self._cam_active_host = host
         cam_host = getattr(self, "_cam_preview_host", self._preview_host)
         if not getattr(self, "_cam_resize_bound", False):
@@ -1082,12 +1115,13 @@ class PrinterDevicePanel(ttk.Frame):
             preferred_snapshot_url=self._preferred_cam_url(host),
             on_snapshot_url=lambda url, h=host: self._remember_cam_url(h, url),
         )
+        self._cam_started_at = time.monotonic()
         self._cam_worker.start()
         delay = 3500 if sys.platform == "win32" else 6000
         self._cam_fallback_after = self.after(delay, self._try_edge_camera_fallback)
 
     def _start_live_camera(self) -> None:
-        self._ensure_live_camera()
+        self._ensure_live_camera(force=True)
 
     def _update_cfs_ui(self, state: dict) -> None:
         from creality_nfc.cfs_adopt import parse_cfs_meta
