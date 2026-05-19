@@ -1,6 +1,6 @@
 # Vor GitHub-Upload — Checkliste
 
-**Stand:** v1.5.25-stable (`d74e8c9`) · Remote noch **nicht** konfiguriert.
+**Stand:** v1.5.26-stable (`798e70f`) · Remote noch **nicht** konfiguriert.
 
 Diese Datei sammelt offene Punkte, bis das Repo öffentlich (oder privat) auf GitHub liegt.
 
@@ -11,7 +11,7 @@ Diese Datei sammelt offene Punkte, bis das Repo öffentlich (oder privat) auf Gi
 Während du testest, kurz notieren (OK / Fehler):
 
 - [ ] App-Start → Tab **Drucker** → Kamera startet ohne Trennen/Verbinden
-- [ ] Tab **Monitor** → „Aktueller Druck“ zeigt Datei/Fortschritt ohne Tab-Wechsel
+- [x] Tab **Monitor** → „Aktueller Druck“ zeigt Datei/Fortschritt ohne Tab-Wechsel
 - [ ] RFID: Tag lesen, schreiben, leeren (Spule → RFID-Tab)
 - [ ] Post-Print: **Verbrauch abziehen…** oder Auto-Abzug nach Druck
 - [ ] **Datei → Import** / Material-DB (Cloud, SSH, Slicer JSON)
@@ -79,7 +79,8 @@ Optional Release auf GitHub:
 | `v1.5.23-stable` | RFID, Spulen, Post-Print, Hilfe |
 | `v1.5.24-stable` | Import-UI, Slicer, G-Code-Gramm, Layout |
 | `v1.5.25-stable` | Kamera-Start nach App-Start |
+| `v1.5.26-stable` | Monitor: Aktueller Druck ohne Tab-Wechsel |
 
-**Letzter Commit:** `d74e8c9` — Release v1.5.25
+**Letzter Commit:** `798e70f` — Release v1.5.26
 
 Wenn nach deinen Tests noch Fixes nötig sind: zuerst committen/taggen (`v1.5.26-stable`), **dann** erst `git push`.
