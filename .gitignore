@@ -1,0 +1,36 @@
+# Python
+__pycache__/
+*.py[cod]
+*.egg-info/
+.venv/
+venv/
+.env
+
+# Build / Installer
+build/
+dist/
+installer_output/
+*.spec.bak
+
+# IDE
+.idea/
+.vscode/
+*.swp
+
+# Persönliche Daten (nicht ins Repo!)
+data/printers.json
+data/app_settings.json
+data/spools.json
+data/printer_settings.json
+dist/data/printers.json
+dist/data/app_settings.json
+dist/data/spools.json
+dist/data/printer_settings.json
+
+# Tools / lokal
+tools/go2rtc*.yaml
+tools/go2rtc.exe
+
+# OS
+Thumbs.db
+Desktop.ini

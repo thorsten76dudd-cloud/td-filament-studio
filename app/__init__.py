@@ -1,0 +1,1 @@
+"""SpoolTag application package."""

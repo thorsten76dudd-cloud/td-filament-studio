@@ -1,0 +1,21 @@
+{
+  "version": 1,
+  "folders": [
+    {
+      "id": "root",
+      "name": "Bibliothek",
+      "parent_id": null
+    },
+    {
+      "id": "a7dcf1a347c3",
+      "name": "Test",
+      "parent_id": "root"
+    },
+    {
+      "id": "e4afc53a9296",
+      "name": "Sub",
+      "parent_id": "a7dcf1a347c3"
+    }
+  ],
+  "entries": []
+}
