@@ -223,7 +223,7 @@ def build_creality_dashboard(panel: PrinterDevicePanel, outer: ttk.Frame) -> Non
     nb = ttk.Notebook(outer, style=_NB)
     nb.pack(fill="both", expand=True)
     panel._main_nb = nb
-    nb.bind("<<NotebookTabChanged>>", lambda _e: panel.on_tab_shown())
+    nb.bind("<<NotebookTabChanged>>", lambda _e: panel.on_printer_subtab_shown())
 
     # —— Monitor: große Kamera + Druckstatus ——
     tab_mon = ttk.Frame(nb, padding=6, style="Printer.TFrame")

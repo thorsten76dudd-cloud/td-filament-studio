@@ -168,8 +168,17 @@ class PrinterDevicePanel(ttk.Frame):
             else:
                 self._soft_live_refresh()
                 self._burst_refresh()
+                self.after(80, self._refresh_print_strip)
+                self.after(900, self._refresh_print_strip)
         elif not self._reconnect_pending:
             self._force_reconnect()
+
+    def on_printer_subtab_shown(self) -> None:
+        """Unter-Tabs Monitor/Steuerung/… — Druckzeile auch auf Monitor aktualisieren."""
+        self._refresh_print_strip()
+        if self._conn and self._conn.connected:
+            self._conn.request_get(reqPrintObjects=1, ReqPrinterPara=1)
+            self.after(600, self._refresh_print_strip)
 
     def _try_auto_connect(self) -> None:
         if self._host_quiet() and not self._conn:
@@ -212,6 +221,7 @@ class PrinterDevicePanel(ttk.Frame):
                 if s:
                     self._apply_live_status(s)
                     self._apply_state(s)
+                    self._refresh_print_strip()
                 from creality_nfc.printer_state import payload_has_live_telemetry
 
                 if payload_has_live_telemetry(s or {}):
@@ -376,6 +386,8 @@ class PrinterDevicePanel(ttk.Frame):
         self._schedule_live_poll()
         self.after(1200, self._pull_live_snapshot_async)
         self._schedule_camera_start()
+        self.after(400, self._refresh_print_strip)
+        self.after(1500, self._refresh_print_strip)
         self.after(500, self._refresh_gcode_list)
         self.after(600, self._fetch_cfs_snapshot_async)
         self.after(800, self._refresh_cfs)
@@ -478,6 +490,7 @@ class PrinterDevicePanel(ttk.Frame):
                     self.after(300, self._refresh_gcode_list)
                     if not self._last_cam_jpeg:
                         self.after(400, self._schedule_camera_start)
+                    self.after(300, self._refresh_print_strip)
             elif self._conn.last_error:
                 self.conn_var.set(f"Verbinde erneut… ({self._conn.last_error[:72]})")
             snap = self._drain_live_snap()
@@ -549,12 +562,30 @@ class PrinterDevicePanel(ttk.Frame):
                 break
         return latest
 
+    def _refresh_print_strip(self) -> None:
+        """„Aktueller Druck“ — unabhängig vom Tab Steuerung/Monitor."""
+        snap = self._last_snap
+        if not snap and self._conn:
+            snap = self._conn.snapshot()
+        if not snap:
+            return
+        try:
+            self._apply_print_status(snap)
+        except tk.TclError:
+            pass
+
     def _apply_live_status(self, s: dict) -> None:
         """Temperatur, Fortschritt, CFS, Druck-Buttons — bei jedem Poll / WS-Push."""
         self._last_snap = s
         try:
             self._apply_telemetry(s)
+        except tk.TclError:
+            pass
+        try:
             self._apply_print_status(s)
+        except tk.TclError:
+            pass
+        try:
             self._update_cfs_ui(s)
         except tk.TclError:
             pass
