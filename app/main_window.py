@@ -1083,8 +1083,15 @@ class TDFilamentStudioApp(AppTk):
             ),
             "PC/SC-Dienst starten, damit der NFC-Reader erkannt wird.",
         )
-        self.btn_settings.pack(side="right", padx=(6, 0))
+        self._pack_statusbar_actions()
         self._apply_nfc_ui()
+
+    def _pack_statusbar_actions(self) -> None:
+        """Protokoll und Einstellungen immer sichtbar (rechts unten)."""
+        if not self.btn_log.winfo_ismapped():
+            self.btn_log.pack(side="right", padx=(6, 0))
+        if not self.btn_settings.winfo_ismapped():
+            self.btn_settings.pack(side="right", padx=(6, 0))
 
     def _build_message_area(self) -> None:
         """Protokoll (optional) — nicht dauerhaft sichtbar (war der schwarze Streifen unten)."""
@@ -1238,8 +1245,13 @@ class TDFilamentStudioApp(AppTk):
             self.btn_scard.config(text="Smartcard starten")
             self._pack_scard_buttons()
         self.btn_scard_help.pack_forget()
+        self.btn_scard.pack_forget()
         if state in ("service_stuck", "service_down"):
+            self._pack_scard_buttons()
             self.btn_scard_help.pack(side="right", padx=(0, 8), before=self.btn_scard)
+        else:
+            self.btn_scard_help.pack(side="right", padx=(0, 8), before=self.btn_settings)
+        self._pack_statusbar_actions()
         return state
 
     def _pack_scard_buttons(self) -> None:

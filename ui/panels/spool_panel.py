@@ -13,6 +13,7 @@ from creality_nfc.spool_inventory import Spool, SpoolInventory
 from creality_nfc.spool_usage import deduct_grams, is_low_filament, weight_class_to_grams
 from creality_nfc.tag_io import WEIGHT_CODES
 from ui.color_swatch import apply_preview_label, make_swatch_photo, normalize_hex
+from ui.components import scrollable_tab
 from ui.dialog_theme import prepare_toplevel
 from ui.theme import BG_SUBTLE, CARD, ERR, F_BODY, F_SECTION, TEXT, WARN
 from ui.dialog_theme import theme_dialog
@@ -45,6 +46,10 @@ class SpoolEditPanel(ttk.LabelFrame):
         self.notes_var = tk.StringVar()
         self.cfs_slot_var = tk.StringVar(value="")
 
+        body = ttk.Frame(self)
+        body.pack(fill="both", expand=True)
+        _canvas, form = scrollable_tab(body)
+
         fields = (
             ("Bezeichnung", self.label_var),
             ("Bemerkung", self.notes_var),
@@ -56,11 +61,11 @@ class SpoolEditPanel(ttk.LabelFrame):
             ("Drucker am Tag", self.printer_var),
         )
         for text, var in fields:
-            ttk.Label(self, text=text, style="Muted.TLabel").pack(anchor="w", **pad)
-            ttk.Entry(self, textvariable=var).pack(fill="x", **pad)
+            ttk.Label(form, text=text, style="Muted.TLabel").pack(anchor="w", **pad)
+            ttk.Entry(form, textvariable=var).pack(fill="x", **pad)
 
-        ttk.Label(self, text="Farbe", style="Muted.TLabel").pack(anchor="w", **pad)
-        color_row = ttk.Frame(self)
+        ttk.Label(form, text="Farbe", style="Muted.TLabel").pack(anchor="w", **pad)
+        color_row = ttk.Frame(form)
         color_row.pack(fill="x", padx=8, pady=(0, 3))
         self._color_preview = tk.Label(
             color_row,
@@ -76,32 +81,32 @@ class SpoolEditPanel(ttk.LabelFrame):
         self.color_var.trace_add("write", lambda *_: self._update_color_preview())
         self._update_color_preview()
 
-        ttk.Label(self, text="Gewichtsklasse", style="Muted.TLabel").pack(anchor="w", **pad)
+        ttk.Label(form, text="Gewichtsklasse", style="Muted.TLabel").pack(anchor="w", **pad)
         ttk.Combobox(
-            self,
+            form,
             textvariable=self.weight_var,
             values=list(WEIGHT_CODES.keys()),
             state="readonly",
         ).pack(fill="x", **pad)
 
-        ttk.Label(self, text="CFS-Slot (am Drucker)", style="Muted.TLabel").pack(anchor="w", **pad)
+        ttk.Label(form, text="CFS-Slot (am Drucker)", style="Muted.TLabel").pack(anchor="w", **pad)
         ttk.Combobox(
-            self,
+            form,
             textvariable=self.cfs_slot_var,
             values=["", *SLOT_LABELS],
             state="readonly",
         ).pack(fill="x", **pad)
 
-        ttk.Label(self, text="RFID-Chips (UIDs)", style="Muted.TLabel").pack(anchor="w", **pad)
+        ttk.Label(form, text="RFID-Chips (UIDs)", style="Muted.TLabel").pack(anchor="w", **pad)
         self._tag_uids_label = ttk.Label(
-            self,
+            form,
             text="—",
             style="Muted.TLabel",
             wraplength=300,
             justify="left",
         )
         self._tag_uids_label.pack(anchor="w", padx=8, pady=(0, 3))
-        tag_btns = ttk.Frame(self)
+        tag_btns = ttk.Frame(form)
         tag_btns.pack(fill="x", padx=8, pady=(0, 3))
         self._tag_pick_var = tk.StringVar()
         self._tag_pick_combo = ttk.Combobox(
@@ -132,14 +137,16 @@ class SpoolEditPanel(ttk.LabelFrame):
             "Alle Chip-UIDs von dieser Spule entfernen.",
         ).pack(side="left", padx=(6, 0))
 
-        rest_row = ttk.Frame(self)
+        rest_row = ttk.Frame(form)
         rest_row.pack(fill="x", padx=8, pady=(0, 3))
         tip(
             ttk.Button(rest_row, text="Volle Spule", command=self._set_full_weight, style="Secondary.TButton"),
             "Restgewicht = Gewichtsklasse der Spule (z. B. 1000 g).",
         ).pack(side="right")
 
-        btns = ttk.Frame(self)
+        footer = ttk.Frame(self)
+        footer.pack(side="bottom", fill="x")
+        btns = ttk.Frame(footer)
         btns.pack(fill="x", pady=10, padx=8)
         tip(
             ttk.Button(btns, text="Neu / Leeren", command=self.load_new, style="Secondary.TButton"),

@@ -64,19 +64,24 @@ class FilamentEditorPanel(ttk.Frame):
 
         hdr = ttk.Frame(self)
         hdr.pack(fill="x", padx=4, pady=(4, 0))
-        self._title = ttk.Label(hdr, text="Filament bearbeiten", font=("Segoe UI", 11, "bold"))
+        title_txt = "Profil (nur Lesen)" if self._readonly else "Filament bearbeiten"
+        self._title = ttk.Label(hdr, text=title_txt, font=("Segoe UI", 11, "bold"))
         self._title.pack(side="left")
-        self._btn_reset = tip(
-            ttk.Button(hdr, text="Zurücksetzen", command=self._clear_form, style="Secondary.TButton"),
-            "Alle Felder leeren (neues Profil vorbereiten).",
-        )
-        self._btn_save = tip(
-            ttk.Button(hdr, text="In Datenbank speichern", command=self._save, style="Accent.TButton"),
-            "Nur lokal (k2_pro.json). Der Drucker wird nicht überschrieben.",
-        )
         if not self._readonly:
-            self._btn_reset.pack(side="right", padx=4)
-            self._btn_save.pack(side="right", padx=(0, 4))
+            tip(
+                ttk.Button(hdr, text="Zurücksetzen", command=self._clear_form, style="Secondary.TButton"),
+                "Alle Felder leeren (neues Profil vorbereiten).",
+            ).pack(side="right", padx=4)
+            tip(
+                ttk.Button(hdr, text="In Datenbank speichern", command=self._save, style="Accent.TButton"),
+                "Nur lokal (k2_pro.json). Der Drucker wird nicht überschrieben.",
+            ).pack(side="right", padx=(0, 4))
+        else:
+            ttk.Label(
+                hdr,
+                text="Nur Ansicht — Änderungen in Creality Print / am Drucker",
+                style="Muted.TLabel",
+            ).pack(side="right", padx=(8, 4))
 
         pad = {"padx": 8, "pady": 2}
         self.fid_var = tk.StringVar()
@@ -124,7 +129,8 @@ class FilamentEditorPanel(ttk.Frame):
             text="Vor Cloud/Drucker-Update schützen (eigene Einstellungen behalten)",
             variable=self.lock_var,
         )
-        self._lock_cb.pack(anchor="w", **pad)
+        if not self._readonly:
+            self._lock_cb.pack(anchor="w", **pad)
 
         tab_print = ttk.Frame(nb)
         nb.add(tab_print, text="  Druckparameter  ")
@@ -156,17 +162,14 @@ class FilamentEditorPanel(ttk.Frame):
     def _apply_readonly_widgets(self) -> None:
         if not self._readonly:
             return
-        st = "readonly"
         for w in self._base_entries:
             if isinstance(w, ttk.Entry):
-                w.configure(state=st)
+                w.configure(state="disabled")
         for w in self._print_entries:
             if isinstance(w, ttk.Entry):
-                w.configure(state=st)
+                w.configure(state="disabled")
         if self._type_combo is not None:
             self._type_combo.configure(state="disabled")
-        if self._lock_cb is not None:
-            self._lock_cb.state(["disabled"])
         self.param_text.configure(state="disabled")
 
     def set_db_data(self, db_data: dict) -> None:
@@ -222,6 +225,7 @@ class FilamentEditorPanel(ttk.Frame):
         self.param_text.insert("1.0", json.dumps(kv, indent=2, ensure_ascii=False))
         if self._readonly:
             self.param_text.configure(state="disabled")
+            self._apply_readonly_widgets()
 
     def _clear_form(self) -> None:
         self.load_new(None)

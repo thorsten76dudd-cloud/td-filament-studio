@@ -364,10 +364,10 @@ Immer das exakte Material in der Liste wählen (Name · ID), sonst falsche Tempe
             """Tab: Filament-Profil
 --------------------
 Anzeige der Druckparameter aus der Material-Datenbank (per „Vom Drucker“ geladen) — nicht auf dem RFID-Tag.
-Parameter änderst du in Creality Print / am Drucker; in TD Studio ist der Bereich nur lesend.
+Parameter änderst du in Creality Print / am Drucker; in TD Studio ist der Bereich nur lesend (kein Speichern).
 
 • Auswahl: Tab „RFID-Tag“ → Marke und Material (mit ID in der Liste)
-• Tabs: Basis, Druckparameter, JSON (kvParam) — nur Ansicht
+• Tabs: Basis, Druckparameter, JSON (kvParam) — nur Ansicht, Felder sind gesperrt
 
 Wichtig: Mehrere Profile können dieselbe 5-stellige ID haben (z. B. drei× „06001“).
 Immer das exakte Material in der Liste wählen (Name · ID), sonst falsche Temperaturen.""",
@@ -386,12 +386,46 @@ Menü „Datei“
 • DB öffnen / speichern unter…""",
             """Tab: Material-Datenbank
 -----------------------
-• Nur „Vom Drucker“ — per SSH die material_database.json vom K2 laden (nur Lesen; Root aktivieren, gleiches WLAN).
-  Cloud-, Datei- und Slicer-Import sowie Cloud-Merge sind ausgeschaltet.
+• Nur „Vom Drucker (SSH)“ — material_database.json vom K2 laden (Root-SSH, gleiches WLAN).
+  Kein Cloud-, Datei- oder Slicer-Import, kein Merge, kein „DB speichern“.
 • Drucker SSH — IP und Passwort im Tab
-• Drucker-Dashboard — Status, DB vergleichen, material_options.json, Neustart
+• Drucker-Dashboard — Status, DB vergleichen, material_options.json
 
 Menü „Datei“
-• Material-DB: kein „DB öffnen“ / „speichern unter“ — lokale Datei folgt dem SSH-Ladevorgang.""",
+• Kein „DB öffnen“ / „DB speichern unter“ für die Material-DB.""",
+        )
+        .replace(
+            """Tab: Meine Spulen
+-----------------
+Lokales Inventar (data/spools.json): Liste links, Bearbeitung rechts.
+• Doppelklick oder „→ RFID-Tab“ — Spule für Tag-Schreiben übernehmen (wichtig:
+  Filament-ID in der Spule hilft; danach „Tag schreiben“)
+• CFS-Slot (1A–1D) — nur für Druck/Abzug, nicht Pflicht zum Tag-Beschreiben am PC
+• RFID-Chips: Haupt-UID + weitere Chips; „Chip entfernen“ / „Alle trennen“
+• Restgewicht, Verbrauch abziehen, Verlauf — Gramm werden protokolliert
+• Duplizieren — Kopie einer Spule (neuer Tag möglich)
+• Warnung — Rest unter Schwelle (Einstellungen) wird hervorgehoben""",
+            """Tab: Meine Spulen
+-----------------
+Lokales Inventar (data/spools.json): Liste links, Bearbeitung rechts (scrollbar).
+• „Neu / Leeren“ und „Speichern“ unten rechts im Panel — nur für Spulen, nicht für die Drucker-Material-DB
+• Doppelklick oder „→ RFID-Tab“ — Spule für Tag-Schreiben übernehmen
+• CFS-Slot (1A–1D), RFID-Chips, Restgewicht, Verbrauch abziehen, Verlauf""",
+        )
+        .replace(
+            """Statusleiste (unten)
+--------------------
+• Kurzmeldungen (Bereit, Verbunden, Fehler …)
+• Protokoll — Meldungsverlauf ein- und ausblenden (optional)
+• Einstellungen, Anleitung (Smartcard), Smartcard starten""",
+            """Statusleiste (unten)
+--------------------
+• Kurzmeldungen (Bereit, Verbunden, Fehler …)
+• Rechts: Protokoll, Einstellungen, Anleitung (Smartcard)
+• Smartcard starten / Neu starten (UAC) — nur wenn der Dienst nicht läuft""",
+        )
+        .replace(
+            "• DB-Merge — bei Konflikt lokal oder Cloud behalten (geschützte Profile ausgenommen)",
+            "• Material-DB nur vom Drucker (kein Cloud-Merge in dieser Version)",
         )
     )
