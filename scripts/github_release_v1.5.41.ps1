@@ -49,18 +49,26 @@ $OldTags = @(
     "v1.5.39-stable"
 )
 
+function Test-GhRelease {
+    param([string]$ReleaseTag)
+    $old = $ErrorActionPreference
+    $ErrorActionPreference = "SilentlyContinue"
+    gh release view $ReleaseTag --repo $Repo 2>$null | Out-Null
+    $ok = ($LASTEXITCODE -eq 0)
+    $ErrorActionPreference = $old
+    return $ok
+}
+
 Write-Host "=== Delete old releases ==="
 foreach ($t in $OldTags) {
-    gh release view $t --repo $Repo 2>$null | Out-Null
-    if ($LASTEXITCODE -eq 0) {
+    if (Test-GhRelease $t) {
         Write-Host ("Deleting " + $t + " ...")
         gh release delete $t --repo $Repo --yes --cleanup-tag
     }
 }
 
 Write-Host ("=== Release " + $Tag + " ===")
-gh release view $Tag --repo $Repo 2>$null | Out-Null
-if ($LASTEXITCODE -eq 0) {
+if (Test-GhRelease $Tag) {
     gh release upload $Tag $Setup --repo $Repo --clobber
 } else {
     gh release create $Tag $Setup --repo $Repo --title "TD Filament Studio 1.5.41" --notes-file $NotesFile --latest
