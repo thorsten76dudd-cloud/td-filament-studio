@@ -2,10 +2,10 @@
 # Creates latest stable release and removes the previous stable release tag.
 
 param(
-    [string]$Version = "1.5.42",
-    [string]$Tag = "v1.5.42-stable",
+    [string]$Version = "1.5.43",
+    [string]$Tag = "v1.5.43-stable",
     [string]$Repo = "thorsten76dudd-cloud/td-filament-studio",
-    [string]$RemoveTag = "v1.5.41-stable"
+    [string]$RemoveTag = "v1.5.42-stable"
 )
 
 $ErrorActionPreference = "Stop"

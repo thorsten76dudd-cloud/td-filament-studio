@@ -454,32 +454,103 @@ def fetch_printer_info(
     return info
 
 
+def _ssh_disconnect_error(exc: BaseException) -> bool:
+    text = str(exc).lower()
+    return any(
+        token in text
+        for token in (
+            "eof",
+            "reset",
+            "closed",
+            "broken pipe",
+            "timed out",
+            "timeout",
+            "connection lost",
+            "forcibly closed",
+        )
+    )
+
+
+def _ssh_try_reboot(client) -> bool:
+    """Blockierender Neustart — Verbindungsabbruch gilt als Erfolg."""
+    commands = (
+        "sync; shutdown -r now",
+        "sync; busybox reboot -f",
+        "sync; /sbin/reboot -f",
+        "sync; reboot -f",
+        "reboot",
+    )
+    for cmd in commands:
+        try:
+            _stdin, stdout, stderr = client.exec_command(cmd, timeout=5.0)
+            stdout.channel.settimeout(5.0)
+            try:
+                code = stdout.channel.recv_exit_status()
+                if code == 0:
+                    return True
+            except Exception as exc:
+                if _ssh_disconnect_error(exc):
+                    return True
+            err = stderr.read().decode("utf-8", errors="replace").strip()
+            if err and "not found" not in err.lower():
+                continue
+        except Exception as exc:
+            if _ssh_disconnect_error(exc):
+                return True
+    return False
+
+
+def reboot_printer_ws(host: str) -> str | None:
+    """K2-Neustart per WebSocket (Port 9999). Gibt den verwendeten Parameter zurueck."""
+    from creality_nfc.printer_ws import PrinterWsError, send_set_once
+
+    host = normalize_host(host)
+    candidates: tuple[dict[str, Any], ...] = (
+        {"restart": 1},
+        {"reStart": 1},
+        {"deviceRestart": 1},
+        {"machineRestart": 1},
+        {"reboot": 1},
+        {"sysCommand": "reboot"},
+    )
+    last_err = ""
+    for params in candidates:
+        try:
+            send_set_once(host, timeout=6.0, **params)
+            key = next(iter(params))
+            return f"WLAN:{key}"
+        except Exception as exc:
+            last_err = str(exc)
+            continue
+    if last_err:
+        raise RuntimeError(last_err)
+    return None
+
+
 def reboot_printer(
     host: str,
     password: str,
     username: str = "root",
     port: int = 22,
-) -> None:
-    """K2-Neustart per SSH. Verbindungsabbruch nach dem Befehl gilt als Erfolg."""
+) -> str:
+    """
+    K2 neu starten (SSH, sonst WebSocket).
+    Rueckgabe: Kurztext fuer UI (z. B. 'SSH' oder 'WLAN:restart').
+    """
     host = normalize_host(host)
-    commands = (
-        "sync; (nohup reboot >/dev/null 2>&1 &) || (nohup /sbin/reboot >/dev/null 2>&1 &)",
-        "sync; systemctl reboot",
-        "reboot",
-    )
-    last_err = ""
+    ssh_err = ""
     with ssh_client(host, password, username, port) as client:
-        for cmd in commands:
-            try:
-                code, _out, err = _run_command(client, cmd, timeout=8.0)
-                if code == 0:
-                    return
-                last_err = err or f"exit {code}"
-            except (TimeoutError, OSError):
-                # SSH bricht ab, sobald der Drucker neu startet — das ist OK.
-                return
+        if _ssh_try_reboot(client):
+            return "SSH"
+        ssh_err = "SSH-Neustart ohne Reaktion"
+    try:
+        via_ws = reboot_printer_ws(host)
+        if via_ws:
+            return via_ws
+    except Exception as exc:
+        ssh_err = f"{ssh_err}; WLAN: {exc}" if ssh_err else str(exc)
     raise RuntimeError(
-        "Neustart-Befehl am Drucker fehlgeschlagen. "
-        "Bitte am Display manuell neu starten."
-        + (f" ({last_err})" if last_err else "")
+        "Neustart am Drucker nicht moeglich. "
+        "Bitte am Display neu starten oder Strom kurz trennen."
+        + (f" ({ssh_err})" if ssh_err else "")
     )

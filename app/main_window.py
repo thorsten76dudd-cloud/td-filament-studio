@@ -1736,8 +1736,10 @@ class TDFilamentStudioApp(AppTk):
             steps.append("material_options.json (Display-Menü) aktualisiert")
         if with_reboot:
             try:
-                reboot_printer(host, password)
-                steps.append("Drucker neu gestartet")
+                via = reboot_printer(host, password)
+                steps.append(
+                    f"Neustart-Befehl gesendet ({via}) — Drucker ca. 2 Min. offline"
+                )
             except Exception as exc:
                 steps.append(f"Neustart fehlgeschlagen: {exc}")
         return steps
@@ -1760,9 +1762,14 @@ class TDFilamentStudioApp(AppTk):
         reboot_requested: bool = False,
     ) -> None:
         body = f"Drucker {host}:\n\n" + "\n".join(f"• {s}" for s in steps)
-        rebooted = any("neu gestartet" in s for s in steps)
-        if rebooted:
-            body += "\n\nDer Drucker startet neu (~2 Min. offline), dann Profile neu laden."
+        rebooted = any(
+            "Neustart-Befehl gesendet" in s or "neu gestartet" in s for s in steps
+        )
+        reboot_failed = any("Neustart fehlgeschlagen" in s for s in steps)
+        if rebooted and not reboot_failed:
+            body += "\n\nDer Drucker sollte jetzt neu starten (~2 Min. offline)."
+        elif reboot_requested and reboot_failed:
+            body += "\n\nNeustart per App nicht gelungen — bitte am Display neu starten."
         elif reboot_requested:
             body += (
                 "\n\nNeustart war eingeschaltet, wurde aber nicht ausgeführt. "

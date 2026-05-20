@@ -121,7 +121,7 @@ class SettingsPanel(ttk.Frame):
         ).pack(anchor="w", padx=8)
         ttk.Checkbutton(
             db_sync,
-            text="Danach Drucker neu starten (empfohlen wenn Profile am Display fehlen)",
+            text="Danach Drucker neu starten (SSH + WLAN; sonst am Display)",
             variable=self.auto_reboot_db,
         ).pack(anchor="w", padx=8, pady=(0, 4))
         for var in (self.auto_push_db, self.auto_push_options, self.auto_reboot_db):
