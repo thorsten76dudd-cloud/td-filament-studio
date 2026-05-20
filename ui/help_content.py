@@ -96,7 +96,8 @@ Bearbeitung der Druckparameter in der Material-Datenbank (nicht auf dem RFID-Tag
 • Auswahl: Tab „RFID-Tag“ → Marke und Material (mit ID in der Liste)
 • Tabs: Basis (ID, Marke, Name, Typ, Min/Max °C), Druckparameter, JSON (kvParam)
 • „Vor Cloud/Drucker-Update schützen“ — eigene Temperaturen bleiben bei Cloud-Merge erhalten
-• In Datenbank speichern — Änderungen in k2_pro.json (lokal), danach ggf. „Zum Drucker“
+• In Datenbank speichern — lokal (k2_pro.json); mit Einstellung „automatisch zum Drucker“ auch SSH-Upload
+• Speichern & an Drucker — ein Klick: lokal + material_database.json auf den K2
 
 Wichtig: Mehrere Profile können dieselbe 5-stellige ID haben (z. B. drei× „06001“).
 Immer das exakte Material in der Liste wählen (Name · ID), sonst falsche Temperaturen.

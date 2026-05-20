@@ -26,11 +26,19 @@ class AppSettings:
     low_filament_threshold_g: int = 200
     prompt_deduct_after_print: bool = True
     default_post_print_deduct_g: int = 0
+    # G-Code-Dateien, für die der Verbrauchs-Dialog schon erledigt/abgebrochen wurde.
+    post_print_deduct_handled: list[str] = field(default_factory=list)
     protect_tag_overwrite: bool = True
     # Vor Druck automatisch CFS einfädeln (oft problematisch wenn schon geladen).
     cfs_auto_feed_before_print: bool = False
     # Hintergrund-Wächter: TD Filament Studio starten, wenn Creality Print startet.
     launch_with_creality_print: bool = False
+    # Nach „In Datenbank speichern“: material_database.json per SSH auf den K2.
+    auto_push_db_to_printer: bool = False
+    # Mit DB-Upload auch material_options.json (Display-Menü) aktualisieren.
+    auto_push_options_with_db: bool = True
+    # Nach Upload Drucker neu starten (Profile am Touchscreen neu laden).
+    auto_reboot_after_db_push: bool = False
     # Bekannte funktionierende Kamera-Snapshot-URL pro Drucker-IP (schnellerer Start).
     camera_snapshot_by_host: dict[str, str] = field(default_factory=dict)
 
@@ -66,6 +74,20 @@ class AppSettings:
     def bump_serial(self) -> None:
         if self.auto_increment_serial:
             self.next_serial = (self.next_serial % 999999) + 1
+
+    _MAX_POST_PRINT_HANDLED = 40
+
+    def is_post_print_deduct_handled(self, filename: str) -> bool:
+        fn = (filename or "").strip()
+        return bool(fn) and fn in self.post_print_deduct_handled
+
+    def remember_post_print_deduct(self, filename: str) -> None:
+        fn = (filename or "").strip()
+        if not fn:
+            return
+        kept = [x for x in self.post_print_deduct_handled if x != fn]
+        kept.insert(0, fn)
+        self.post_print_deduct_handled = kept[: self._MAX_POST_PRINT_HANDLED]
 
 
 def _default_settings_path() -> Path:
