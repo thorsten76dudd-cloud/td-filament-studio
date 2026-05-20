@@ -57,8 +57,8 @@ Reader & Tags
 • Tag-Schutz (Einstellungen): Warnung, wenn der Chip schon Filament-Daten hat
 • Tag leeren… — Creality-Daten löschen; danach oft Blöcke C3B98E… in Rohdaten
   (verschlüsseltes Leer — normal). Tag 2–3 s abheben, wieder auflegen.
-• Chip duplizieren… — Quell-Chip lesen, Ziel-Chip 1:1 kopieren; Ziel-UID wird
-  ggf. an dieselbe Spule in „Meine Spulen“ gehängt (zweiter Sticker)
+• Chip duplizieren… — Vorlagen-Chip lesen, auf zweiten Tag kopieren (z. B. links+rechts
+  an der Spule); jede UID wird derselben Spule in „Meine Spulen“ zugeordnet
 • Gleiche Spule nochmal — letztes Material erneut (Seriennummer +1)
 • Tag export… — letzten Lesevorgang als JSON
 • Presets / Farbe… / Foto… — Farbe für den Tag

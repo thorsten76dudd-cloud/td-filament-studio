@@ -3,7 +3,7 @@ import time
 import urllib.request
 from pathlib import Path
 
-host = "192.168.178.136"
+host = "192.168.1.100"  # Drucker-IP anpassen (nur lokales Testskript)
 cfg = Path(__file__).with_name("go2rtc_test.yaml")
 cfg.write_text(
     f"""api:

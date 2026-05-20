@@ -106,6 +106,11 @@ from ui.components import labeled_row, scrollable_tab, section
 from ui.rounded_widgets import rounded_button
 from ui.messaging import confirm
 from ui.post_print_deduct_dialog import DeductRow, ask_post_print_deductions
+from ui.chip_duplicate_help import (
+    CHIP_DUP_INTRO,
+    CHIP_DUP_STEP_HINTS,
+    CHIP_DUP_TOOLTIP,
+)
 from ui.rfid_placement_help import RFID_PLACEMENT_SHORT
 from ui.panels.filament_editor_panel import FilamentEditorPanel
 from ui.panels.help_panel import HelpPanel
@@ -194,6 +199,7 @@ class TDFilamentStudioApp(AppTk):
         self._chip_dup_payload: bytes | None = None
         self._chip_dup_source_uid = ""
         self._chip_dup_source_spool_id = ""
+        self._chip_dup_poll_after: str | None = None
         self._last_write_template: dict | None = None
         self._post_print_prompted = False
         self._post_print_deduct_file = ""
@@ -482,8 +488,26 @@ class TDFilamentStudioApp(AppTk):
         ).pack(side="left", padx=(0, 4))
         tip(
             ttk.Button(btn_row, text="Chip duplizieren…", command=self.duplicate_chip_start, style="Secondary.TButton"),
-            "Quell-Chip lesen, Ziel-Chip beschreiben — 1:1-Kopie (Assistent mit Meldungen).",
+            CHIP_DUP_TOOLTIP,
         ).pack(side="left", padx=(0, 8))
+        self._chip_dup_hint_frame = tk.Frame(action_bar, bg=ACCENT_SOFT)
+        self._chip_dup_hint_label = tk.Label(
+            self._chip_dup_hint_frame,
+            text="",
+            bg=ACCENT_SOFT,
+            fg=ACCENT_LIGHT,
+            font=(FONT, 11),
+            justify="left",
+            anchor="nw",
+            wraplength=860,
+        )
+        self._chip_dup_hint_label.pack(fill="x", padx=12, pady=8)
+        self._chip_dup_hint_frame.bind(
+            "<Configure>",
+            lambda e, lbl=self._chip_dup_hint_label: lbl.configure(
+                wraplength=max(280, e.width - 28)
+            ),
+        )
         tip(
             ttk.Button(btn_row, text="Tag export…", command=self.export_tag_data, style="Secondary.TButton"),
             "Zuletzt gelesene Tag-Daten als JSON speichern.",
@@ -493,15 +517,15 @@ class TDFilamentStudioApp(AppTk):
             "Aktuelle Tag-Daten als Spule unter „Meine Spulen“ speichern.",
         ).pack(side="left")
 
-        placement_box = tk.Frame(
+        self._placement_box = tk.Frame(
             action_bar,
             bg=BG_SUBTLE,
             highlightbackground=BORDER,
             highlightthickness=1,
         )
-        placement_box.pack(fill="x", pady=(12, 2))
+        self._placement_box.pack(fill="x", pady=(12, 2))
         self._placement_hint_label = tk.Label(
-            placement_box,
+            self._placement_box,
             text=RFID_PLACEMENT_SHORT,
             bg=BG_SUBTLE,
             fg=TEXT,
@@ -511,7 +535,7 @@ class TDFilamentStudioApp(AppTk):
             wraplength=880,
         )
         self._placement_hint_label.pack(fill="x", padx=12, pady=10)
-        placement_box.bind(
+        self._placement_box.bind(
             "<Configure>",
             lambda e, lbl=self._placement_hint_label: lbl.configure(
                 wraplength=max(280, e.width - 28)
@@ -2516,8 +2540,11 @@ class TDFilamentStudioApp(AppTk):
             if apply_form:
                 self.apply_spool(matched)
         elif uid_n:
-            self.spool_match_label.config(text="Unbekannter Tag", fg=WARN)
-            self.tag_extra_label.config(text="In „Meine Spulen“ UID speichern")
+            self.spool_match_label.config(text="Nicht in „Meine Spulen“", fg=WARN)
+            self.tag_extra_label.config(
+                text="Chip hat Daten — Spule unten wählen und „Spule speichern“, "
+                "oder vor dem Duplizieren die Vorlagen-Spule anlegen",
+            )
         else:
             self.spool_match_label.config(
                 text="— Tag auflegen oder „Tag lesen“ —",
@@ -2931,7 +2958,12 @@ class TDFilamentStudioApp(AppTk):
         import time
 
         if self._chip_dup_step:
-            self.after(80, self._chip_dup_on_tag)
+            if self._chip_dup_poll_after:
+                try:
+                    self.after_cancel(self._chip_dup_poll_after)
+                except Exception:
+                    pass
+            self._chip_dup_poll_after = self.after(120, self._chip_dup_on_tag)
             return
         if time.monotonic() < self._suppress_auto_read_until:
             return
@@ -2959,24 +2991,29 @@ class TDFilamentStudioApp(AppTk):
         finally:
             self._tag_busy = False
 
+    def _chip_dup_show_step_hint(self, step: str) -> None:
+        if not hasattr(self, "_chip_dup_hint_frame"):
+            return
+        hint = CHIP_DUP_STEP_HINTS.get(step, "")
+        if hint:
+            self._chip_dup_hint_label.configure(text=hint)
+            self._chip_dup_hint_frame.pack(fill="x", pady=(8, 0), before=self._placement_box)
+        else:
+            self._chip_dup_hint_frame.pack_forget()
+
     def duplicate_chip_start(self) -> None:
         """Assistent: Quell-Chip lesen → Ziel-Chip 1:1 beschreiben."""
         if self._chip_dup_step:
             if messagebox.askyesno(
                 APP_NAME,
-                "Chip duplizieren läuft noch.\n\nAbbrechen?",
+                "Der Kopiervorgang läuft noch.\n\nJetzt abbrechen?",
                 default="no",
             ):
                 self._chip_dup_cancel()
             return
         if not messagebox.askyesno(
             APP_NAME,
-            "Chip duplizieren\n\n"
-            "1. Quell-Chip (Vorlage) auf den Leser legen — wird vollständig gelesen\n"
-            "2. Quell-Chip entfernen\n"
-            "3. Ziel-Chip (Kopie) auflegen — wird beschrieben\n\n"
-            "Es wird der komplette Tag-Inhalt kopiert (unabhängig vom Formular).\n\n"
-            "Jetzt starten?",
+            CHIP_DUP_INTRO + "\n\nJetzt starten?",
             default="yes",
         ):
             return
@@ -2985,11 +3022,15 @@ class TDFilamentStudioApp(AppTk):
         self._chip_dup_payload = None
         self._chip_dup_source_uid = ""
         self._chip_dup_source_spool_id = ""
-        self._set_status("Chip duplizieren: Quell-Chip auflegen …", "info")
+        self._chip_dup_show_step_hint("source")
+        self._set_status("Duplizieren Schritt 1/2: Vorlagen-Chip auflegen …", "info")
         messagebox.showinfo(
             APP_NAME,
-            "Bitte den Quell-Chip (Vorlage) auf den Leser legen.\n\n"
-            "Der Chip wird automatisch gelesen, sobald er erkannt wird.",
+            "Schritt 1 von 2\n\n"
+            "Legen Sie den bereits beschriebenen Vorlagen-Chip "
+            "flach auf den NFC-Reader.\n\n"
+            "Die App liest ihn automatisch (nichts klicken). "
+            "Danach erscheint „Quell-Chip gelesen“ — dann den Chip wegnehmen.",
         )
 
     def _chip_dup_link_target_uid(self, target_uid: str) -> str:
@@ -3017,6 +3058,12 @@ class TDFilamentStudioApp(AppTk):
         return f"Spule „{sp.label}“: Ziel-Chip war bereits verknüpft."
 
     def _chip_dup_cancel(self, *, notify: bool = True) -> None:
+        if self._chip_dup_poll_after:
+            try:
+                self.after_cancel(self._chip_dup_poll_after)
+            except Exception:
+                pass
+            self._chip_dup_poll_after = None
         self._chip_dup_step = ""
         self._chip_dup_payload = None
         self._chip_dup_source_uid = ""
@@ -3025,17 +3072,46 @@ class TDFilamentStudioApp(AppTk):
             self.reader.disconnect()
         except Exception:
             pass
+        self._chip_dup_show_step_hint("")
         if notify:
             self._set_status("Chip duplizieren abgebrochen", "info")
-            messagebox.showinfo(APP_NAME, "Chip duplizieren wurde abgebrochen.")
+            messagebox.showinfo(APP_NAME, "Kopieren abgebrochen. Sie können jederzeit neu starten.")
 
     def _chip_dup_on_tag(self) -> None:
-        if not self._chip_dup_step or self._tag_busy:
+        self._chip_dup_poll_after = None
+        if not self._chip_dup_step:
+            return
+        if self._tag_busy:
+            self._chip_dup_poll_after = self.after(250, self._chip_dup_on_tag)
             return
         if self._chip_dup_step == "source":
             self._chip_dup_read_source()
         elif self._chip_dup_step == "target":
             self._chip_dup_write_target()
+
+    def _chip_dup_read_payload_reliable(self, session: TagSession, *, attempts: int = 3) -> tuple[str, bytes]:
+        """Mehrfach lesen bis zwei Lesungen übereinstimmen (ACR122U-Stabilität)."""
+        import time
+
+        last_blob: bytes | None = None
+        last_raw = ""
+        for attempt in range(attempts):
+            raw = session.read_payload()
+            if payload_is_empty(raw):
+                raise NfcReaderError(
+                    "Chip-Inhalt leer oder nicht lesbar.\n\n"
+                    "Zuerst mit „Tag schreiben“ beschreiben oder anderen Quell-Chip wählen."
+                )
+            blob = payload_bytes_from_read(raw)
+            if last_blob is not None and blob == last_blob:
+                return raw, blob
+            last_blob = blob
+            last_raw = raw
+            if attempt < attempts - 1:
+                time.sleep(0.12)
+        if last_blob is None:
+            raise NfcReaderError("Tag konnte nicht zuverlässig gelesen werden.")
+        return last_raw, last_blob
 
     def _chip_dup_read_source(self) -> None:
         import time
@@ -3049,25 +3125,41 @@ class TDFilamentStudioApp(AppTk):
         try:
             session = self._session()
             uid = session.uid.hex().upper()
-            raw = session.read_payload()
-            self._chip_dup_payload = payload_bytes_from_read(raw)
+            raw, blob = self._chip_dup_read_payload_reliable(session)
+            self._chip_dup_payload = blob
             self._chip_dup_source_uid = uid
             src_spool = self.inventory.find_by_uid(uid)
             self._chip_dup_source_spool_id = src_spool.id if src_spool else ""
             self.uid_label.config(text=uid)
-            self._refresh_tag_diagnostic(session)
+            matched = src_spool
+            self._show_tag_identity(uid, matched=matched, apply_form=bool(matched))
+            try:
+                info = parse_tag_payload(raw)
+                if matched:
+                    self._apply_fields_from_tag(info, matched=matched)
+            except ValueError:
+                pass
             try:
                 self.reader.disconnect()
             except Exception:
                 pass
             self._chip_dup_step = "target"
-            empty = payload_is_empty(raw)
-            detail = (
-                f"Quell-Chip gelesen.\n\nUID: {uid}\n"
-                f"Inhalt: {'leer' if empty else 'Filament-Daten'}\n\n"
-                "Bitte den Quell-Chip vom Leser nehmen und den Ziel-Chip (Kopie) auflegen."
+            self._chip_dup_show_step_hint("target")
+            spool_hint = (
+                f"Verknüpft mit Spule: „{src_spool.label or src_spool.material_name}“"
+                if src_spool
+                else "Nicht in „Meine Spulen“ — bitte Spule anlegen, sonst wirkt der neue Chip „fremd“"
             )
-            self._tag_finished("Quell-Chip gelesen", detail, "ok")
+            detail = (
+                f"Vorlage erfolgreich gelesen.\n\n"
+                f"Chip-Nummer (UID): {uid}\n"
+                f"{spool_hint}\n\n"
+                "Jetzt:\n"
+                "1. Vorlagen-Chip vom Reader nehmen\n"
+                "2. Neuen/leeren Chip auflegen (andere UID)\n"
+                "3. Auf „Ja“ klicken, wenn gefragt wird"
+            )
+            self._tag_finished("Schritt 1 fertig — Vorlage gelesen", detail, "ok")
         except Exception as exc:
             self._report_tag_error(exc)
             self._chip_dup_cancel(notify=False)
@@ -3096,14 +3188,19 @@ class TDFilamentStudioApp(AppTk):
                     pass
                 messagebox.showwarning(
                     APP_NAME,
-                    "Das ist noch der Quell-Chip (gleiche UID).\n\n"
-                    "Bitte den Quell-Chip entfernen und den Ziel-Chip auflegen.",
+                    "Das ist noch derselbe Chip (gleiche UID).\n\n"
+                    "Bitte den Vorlagen-Chip wirklich wegnehmen und einen anderen "
+                    "Chip auflegen (z. B. die andere Seite der Spule).",
                 )
                 return
             if not messagebox.askyesno(
                 APP_NAME,
-                f"Ziel-Chip erkannt\n\nUID: {uid}\nQuelle war: {self._chip_dup_source_uid}\n\n"
-                "Jetzt den Inhalt auf diesen Chip schreiben?",
+                f"Neuer Chip erkannt — jetzt kopieren?\n\n"
+                f"Neuer Chip (UID):     {uid}\n"
+                f"Vorlage hatte (UID):  {self._chip_dup_source_uid}\n\n"
+                "Die Filament-Daten der Vorlage werden auf diesen Chip geschrieben.\n"
+                "Die UID bleibt beim neuen Chip (ist normal).\n\n"
+                "Jetzt kopieren?",
                 default="yes",
             ):
                 try:
@@ -3112,51 +3209,92 @@ class TDFilamentStudioApp(AppTk):
                     pass
                 self._set_status("Schreiben abgebrochen — Ziel-Chip erneut auflegen", "warn")
                 return
-            session.write_payload(self._chip_dup_payload)
-            read_back = session.read_payload()
-            verify_ok = payload_bytes_from_read(read_back) == self._chip_dup_payload
+            verify_ok = False
+            read_back = ""
+            for write_try in range(2):
+                session.write_payload(self._chip_dup_payload)
+                time.sleep(0.1)
+                read_back = session.read_payload()
+                verify_ok = payload_bytes_from_read(read_back) == self._chip_dup_payload
+                if verify_ok:
+                    break
+                time.sleep(0.15)
             self.uid_label.config(text=uid)
-            self._refresh_tag_diagnostic(session, apply_form=False)
+            link_msg = self._chip_dup_link_target_uid(uid)
+            matched = self.inventory.find_by_uid(uid)
+            if matched is None and self._chip_dup_source_spool_id:
+                matched = self.inventory.get(self._chip_dup_source_spool_id)
+            tag_empty = payload_is_empty(read_back)
+            self._show_tag_identity(
+                uid,
+                matched=matched,
+                apply_form=False,
+                tag_empty=tag_empty,
+            )
+            if not tag_empty and matched is not None:
+                try:
+                    info = parse_tag_payload(read_back)
+                    self._apply_fields_from_tag(info, matched=matched)
+                except ValueError:
+                    pass
+            try:
+                diag = session.describe_reading()
+                diag = f"{diag}\n\n{self._spool_match_line(matched)}"
+                self._set_tag_diagnostic_text(diag)
+            except Exception:
+                pass
             try:
                 self.reader.disconnect()
             except Exception:
                 pass
-            link_msg = self._chip_dup_link_target_uid(uid)
-            self._show_tag_identity(uid, apply_form=True)
-            self._chip_dup_step = ""
+            self._suppress_auto_read_until = time.monotonic() + 5.0
+            spool_title = (matched.label or matched.material_name or "Spule") if matched else ""
             body = (
-                f"Der Ziel-Chip wurde beschrieben.\n\n"
-                f"Quelle: {self._chip_dup_source_uid}\n"
-                f"Ziel:   {uid}\n\n"
+                "Kopie erfolgreich auf den neuen Chip geschrieben.\n\n"
+                f"Vorlage (UID): {self._chip_dup_source_uid}\n"
+                f"Neuer Chip:    {uid}\n"
             )
+            if spool_title:
+                body += f"Spule in der App: „{spool_title}“\n"
+            body += "\n"
             if verify_ok:
-                body += "Prüfung: Inhalt stimmt überein.\n"
-            else:
-                body += "Hinweis: Rücklesen weicht ab — ggf. erneut duplizieren.\n"
-            if link_msg:
-                body += f"\n{link_msg}"
+                body += "Prüfung: Inhalt stimmt mit der Vorlage überein.\n"
             else:
                 body += (
-                    "\nHinweis: Keine Spule zur Quelle gefunden — unter „Meine Spulen“ "
-                    "die neue UID speichern."
+                    "Prüfung: Rücklesen war uneindeutig — Chip kurz wegnehmen, "
+                    "wieder auflegen, mit „Tag lesen“ testen oder nochmal duplizieren.\n"
+                )
+            if link_msg:
+                body += f"\n{link_msg}"
+            elif matched is None:
+                body += (
+                    "\nBitte unter „Meine Spulen“ die Spule öffnen und diese UID speichern — "
+                    "sonst steht oben „Nicht in Meine Spulen“ (der Chip funktioniert am Drucker trotzdem)."
                 )
             self._chip_dup_payload = None
             keep_spool = self._chip_dup_source_spool_id
             self._chip_dup_source_uid = ""
             self._chip_dup_source_spool_id = keep_spool
-            self._tag_finished("Chip kopiert", body, "ok" if verify_ok else "warn")
+            self._tag_finished("Schritt 2 fertig — Chip kopiert", body, "ok" if verify_ok else "warn")
             if messagebox.askyesno(
                 APP_NAME,
-                "Noch einen weiteren Chip mit denselben Daten beschreiben?",
+                "Noch einen Chip kopieren?\n\n"
+                "(z. B. zweiter Sticker auf der anderen Seite derselben Spule)",
                 default="no",
             ):
                 self._chip_dup_step = "target"
+                self._chip_dup_show_step_hint("target")
+                self._suppress_auto_read_until = time.monotonic() + 60.0
+                self._set_status("Duplizieren: nächsten Chip auflegen …", "info")
                 messagebox.showinfo(
                     APP_NAME,
-                    "Legen Sie den nächsten Ziel-Chip auf den Leser.",
+                    "Nächsten Chip auf den Reader legen — wieder „Jetzt kopieren?“ bestätigen.",
                 )
             else:
+                self._chip_dup_step = ""
                 self._chip_dup_source_spool_id = ""
+                self._chip_dup_show_step_hint("")
+                self._suppress_auto_read_until = time.monotonic() + 3.0
         except Exception as exc:
             self._report_tag_error(exc)
             if messagebox.askyesno(APP_NAME, "Fehler — Vorgang abbrechen?", default="yes"):
