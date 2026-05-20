@@ -20,6 +20,8 @@ from ui.components import scrollable_tab
 
 from ui.dialog_theme import prepare_toplevel
 
+from creality_nfc.config import MATERIAL_DB_PRINTER_ONLY
+
 
 
 
@@ -94,7 +96,9 @@ class SetupWizardDialog(tk.Toplevel):
 
         if not has_database:
 
-            ttk.Button(btns, text="Cloud laden", command=on_load_db, style="Secondary.TButton").pack(
+            load_label = "Vom Drucker laden" if MATERIAL_DB_PRINTER_ONLY else "Cloud laden"
+
+            ttk.Button(btns, text=load_label, command=on_load_db, style="Secondary.TButton").pack(
 
                 side="left", padx=(0, 8)
 
@@ -184,7 +188,15 @@ class SetupWizardDialog(tk.Toplevel):
 
                 has_database,
 
-                "Tab Material-Datenbank → „Creality Cloud“ oder „Vom Drucker“.",
+                (
+
+                    "Tab Material-Datenbank → „Vom Drucker (SSH)“ (Drucker-IP, Root-SSH)."
+
+                    if MATERIAL_DB_PRINTER_ONLY
+
+                    else "Tab Material-Datenbank → „Creality Cloud“ oder „Vom Drucker“."
+
+                ),
 
             ),
 

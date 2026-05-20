@@ -8,6 +8,7 @@ import tkinter as tk
 from tkinter import scrolledtext, ttk
 from typing import Callable
 
+from creality_nfc.config import MATERIAL_DB_PRINTER_ONLY
 from creality_nfc.db_lock import is_item_locked, set_item_locked
 from creality_nfc.db_store import add_or_update_item, find_item, new_filament_item
 from creality_nfc.materials import FilamentProfile
@@ -45,27 +46,37 @@ class FilamentEditorPanel(ttk.Frame):
         parent: tk.Misc,
         db_data: dict,
         on_saved: Callable[[dict], None],
+        *,
+        readonly: bool = False,
     ) -> None:
         super().__init__(parent)
         theme_dialog(self)
         self.db_data = db_data
         self._on_saved = on_saved
+        self._readonly = bool(readonly or MATERIAL_DB_PRINTER_ONLY)
         self._existing_item: dict | None = None
         self._template_item: dict | None = None
         self._print_vars: dict[str, tk.StringVar] = {}
+        self._base_entries: list[tk.Widget] = []
+        self._type_combo: ttk.Combobox | None = None
+        self._lock_cb: ttk.Checkbutton | None = None
+        self._print_entries: list[tk.Widget] = []
 
         hdr = ttk.Frame(self)
         hdr.pack(fill="x", padx=4, pady=(4, 0))
         self._title = ttk.Label(hdr, text="Filament bearbeiten", font=("Segoe UI", 11, "bold"))
         self._title.pack(side="left")
-        tip(
+        self._btn_reset = tip(
             ttk.Button(hdr, text="Zurücksetzen", command=self._clear_form, style="Secondary.TButton"),
             "Alle Felder leeren (neues Profil vorbereiten).",
-        ).pack(side="right", padx=4)
-        tip(
+        )
+        self._btn_save = tip(
             ttk.Button(hdr, text="In Datenbank speichern", command=self._save, style="Accent.TButton"),
             "Nur lokal (k2_pro.json). Der Drucker wird nicht überschrieben.",
-        ).pack(side="right", padx=(0, 4))
+        )
+        if not self._readonly:
+            self._btn_reset.pack(side="right", padx=4)
+            self._btn_save.pack(side="right", padx=(0, 4))
 
         pad = {"padx": 8, "pady": 2}
         self.fid_var = tk.StringVar()
@@ -82,26 +93,38 @@ class FilamentEditorPanel(ttk.Frame):
         tab_base = ttk.Frame(nb)
         nb.add(tab_base, text="  Basis  ")
         ttk.Label(tab_base, text="ID (5 Ziffern)").pack(anchor="w", **pad)
-        ttk.Entry(tab_base, textvariable=self.fid_var).pack(fill="x", **pad)
+        e_fid = ttk.Entry(tab_base, textvariable=self.fid_var)
+        e_fid.pack(fill="x", **pad)
+        self._base_entries.append(e_fid)
         ttk.Label(tab_base, text="Marke").pack(anchor="w", **pad)
-        ttk.Entry(tab_base, textvariable=self.brand_var).pack(fill="x", **pad)
+        e_brand = ttk.Entry(tab_base, textvariable=self.brand_var)
+        e_brand.pack(fill="x", **pad)
+        self._base_entries.append(e_brand)
         ttk.Label(tab_base, text="Name").pack(anchor="w", **pad)
-        ttk.Entry(tab_base, textvariable=self.name_var).pack(fill="x", **pad)
+        e_name = ttk.Entry(tab_base, textvariable=self.name_var)
+        e_name.pack(fill="x", **pad)
+        self._base_entries.append(e_name)
         ttk.Label(tab_base, text="Typ").pack(anchor="w", **pad)
-        ttk.Combobox(
+        self._type_combo = ttk.Combobox(
             tab_base, textvariable=self.type_var, values=FILAMENT_TYPES, state="readonly"
-        ).pack(fill="x", **pad)
+        )
+        self._type_combo.pack(fill="x", **pad)
         row = ttk.Frame(tab_base)
         row.pack(fill="x", **pad)
         ttk.Label(row, text="Min °C").pack(side="left")
-        ttk.Entry(row, textvariable=self.min_var, width=8).pack(side="left", padx=6)
+        e_min = ttk.Entry(row, textvariable=self.min_var, width=8)
+        e_min.pack(side="left", padx=6)
+        self._base_entries.append(e_min)
         ttk.Label(row, text="Max °C").pack(side="left")
-        ttk.Entry(row, textvariable=self.max_var, width=8).pack(side="left", padx=6)
-        ttk.Checkbutton(
+        e_max = ttk.Entry(row, textvariable=self.max_var, width=8)
+        e_max.pack(side="left", padx=6)
+        self._base_entries.append(e_max)
+        self._lock_cb = ttk.Checkbutton(
             tab_base,
             text="Vor Cloud/Drucker-Update schützen (eigene Einstellungen behalten)",
             variable=self.lock_var,
-        ).pack(anchor="w", **pad)
+        )
+        self._lock_cb.pack(anchor="w", **pad)
 
         tab_print = ttk.Frame(nb)
         nb.add(tab_print, text="  Druckparameter  ")
@@ -113,7 +136,9 @@ class FilamentEditorPanel(ttk.Frame):
             ttk.Label(rowp, text=label, width=22).pack(side="left")
             var = tk.StringVar()
             self._print_vars[key] = var
-            ttk.Entry(rowp, textvariable=var).pack(side="left", fill="x", expand=True)
+            pe = ttk.Entry(rowp, textvariable=var)
+            pe.pack(side="left", fill="x", expand=True)
+            self._print_entries.append(pe)
 
         tab_json = ttk.Frame(nb)
         nb.add(tab_json, text="  JSON (kvParam)  ")
@@ -126,18 +151,42 @@ class FilamentEditorPanel(ttk.Frame):
         self.param_text.pack(fill="both", expand=True, padx=8, pady=4)
 
         self._clear_form()
+        self._apply_readonly_widgets()
+
+    def _apply_readonly_widgets(self) -> None:
+        if not self._readonly:
+            return
+        st = "readonly"
+        for w in self._base_entries:
+            if isinstance(w, ttk.Entry):
+                w.configure(state=st)
+        for w in self._print_entries:
+            if isinstance(w, ttk.Entry):
+                w.configure(state=st)
+        if self._type_combo is not None:
+            self._type_combo.configure(state="disabled")
+        if self._lock_cb is not None:
+            self._lock_cb.state(["disabled"])
+        self.param_text.configure(state="disabled")
 
     def set_db_data(self, db_data: dict) -> None:
         self.db_data = db_data
 
     def load_new(self, template_item: dict | None = None) -> None:
+        if self._readonly:
+            self._title.config(text="Profil (nur Lesen)")
+            self._template_item = template_item
+            self._existing_item = None
+            self._apply_item(template_item)
+            return
         self._title.config(text="Neues Filament")
         self._template_item = template_item
         self._existing_item = None
         self._apply_item(template_item)
 
     def load_edit(self, profile: FilamentProfile) -> None:
-        self._title.config(text=f"Bearbeiten: {profile.brand} — {profile.name}")
+        prefix = "Ansehen:" if self._readonly else "Bearbeiten:"
+        self._title.config(text=f"{prefix} {profile.brand} — {profile.name}")
         self._template_item = None
         self._existing_item = find_item(
             self.db_data,
@@ -168,8 +217,11 @@ class FilamentEditorPanel(ttk.Frame):
         self.lock_var.set(is_item_locked(item) if item else False)
         for key, var in self._print_vars.items():
             var.set(str(kv.get(key, "")))
+        self.param_text.configure(state="normal")
         self.param_text.delete("1.0", "end")
         self.param_text.insert("1.0", json.dumps(kv, indent=2, ensure_ascii=False))
+        if self._readonly:
+            self.param_text.configure(state="disabled")
 
     def _clear_form(self) -> None:
         self.load_new(None)
@@ -190,12 +242,17 @@ class FilamentEditorPanel(ttk.Frame):
         return kv
 
     def _save(self) -> None:
+        if self._readonly:
+            notify(self, "Speichern ist deaktiviert — Daten nur vom Drucker (Ansicht).", "warn")
+            return
         updated = self._commit_save()
         if updated is not None:
             self._on_saved(updated)
             notify(self, f"„{self.brand_var.get()} — {self.name_var.get()}“ gespeichert.", "ok")
 
     def _commit_save(self) -> dict | None:
+        if self._readonly:
+            return None
         fid = self.fid_var.get().strip()
         if len(fid) != 5 or not fid.isdigit():
             notify(self, "ID muss genau 5 Ziffern haben.", "warn")

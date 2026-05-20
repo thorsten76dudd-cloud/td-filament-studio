@@ -28,6 +28,7 @@ from creality_nfc.config import (
     APP_VERSION,
     GITHUB_RELEASES_REPO,
     GITHUB_URL,
+    MATERIAL_DB_PRINTER_ONLY,
 )
 from creality_nfc.db_merge import merge_databases, merge_stats
 from creality_nfc.db_store import (
@@ -240,15 +241,18 @@ class TDFilamentStudioApp(AppTk):
         menubar.add_cascade(label="Datei", menu=m_file)
         m_import = tk.Menu(m_file, tearoff=0)
         m_file.add_cascade(label="Import", menu=m_import)
-        m_import.add_command(label="Von Creality Cloud…", command=self.sync_database)
+        if not MATERIAL_DB_PRINTER_ONLY:
+            m_import.add_command(label="Von Creality Cloud…", command=self.sync_database)
         m_import.add_command(label="Vom Drucker (SSH)…", command=self.sync_from_printer)
-        m_import.add_command(label="Slicer-Profile (Orca JSON)…", command=self.import_slicer_profiles)
-        m_import.add_command(label="Datenbank-Datei öffnen…", command=self.pick_database)
-        m_import.add_command(label="Cloud in lokale DB mergen…", command=self.merge_cloud)
+        if not MATERIAL_DB_PRINTER_ONLY:
+            m_import.add_command(label="Slicer-Profile (Orca JSON)…", command=self.import_slicer_profiles)
+            m_import.add_command(label="Datenbank-Datei öffnen…", command=self.pick_database)
+            m_import.add_command(label="Cloud in lokale DB mergen…", command=self.merge_cloud)
         m_import.add_command(label="CFS-RFID ZIP…", command=self.import_cfs_zip)
         m_file.add_separator()
-        m_file.add_command(label="DB öffnen…", command=self.pick_database)
-        m_file.add_command(label="DB speichern unter…", command=self.save_database_as)
+        if not MATERIAL_DB_PRINTER_ONLY:
+            m_file.add_command(label="DB öffnen…", command=self.pick_database)
+            m_file.add_command(label="DB speichern unter…", command=self.save_database_as)
         m_file.add_command(label="material_options.json exportieren…", command=self.export_options)
         m_file.add_separator()
         m_file.add_command(label="Daten sichern (ZIP)…", command=self.backup_data)
@@ -567,7 +571,7 @@ class TDFilamentStudioApp(AppTk):
         ).pack(side="left", pady=2)
         r2 = ttk.Frame(sec_reader)
         r2.pack(fill="x")
-        for text, cmd, help_txt in (
+        reader_actions: list[tuple[str, object, str]] = [
             (
                 "Tag-Halter STL speichern…",
                 lambda: save_bundled_plastic_holder_stls(self),
@@ -583,8 +587,12 @@ class TDFilamentStudioApp(AppTk):
                 self.open_printer_manager,
                 "Drucker-IP, Modell und SSH-Passwort verwalten und übernehmen.",
             ),
-            ("DB speichern…", self.save_database_as, "Material-Datenbank als JSON-Datei speichern."),
-        ):
+        ]
+        if not MATERIAL_DB_PRINTER_ONLY:
+            reader_actions.append(
+                ("DB speichern…", self.save_database_as, "Material-Datenbank als JSON-Datei speichern."),
+            )
+        for text, cmd, help_txt in reader_actions:
             tip(
                 ttk.Button(r2, text=text, command=cmd, style="Secondary.TButton"),
                 help_txt,
@@ -674,16 +682,19 @@ class TDFilamentStudioApp(AppTk):
         prof_btns = ttk.Frame(form)
         prof_btns.columnconfigure(0, weight=1)
         prof_btns.columnconfigure(1, weight=1)
-        tip(
+        self._btn_edit_profile = tip(
             ttk.Button(
                 prof_btns,
                 text="Profil bearbeiten",
                 command=self.edit_filament,
                 style="Secondary.TButton",
             ),
-            "Tab „Filament-Profil“ öffnen und Material bearbeiten.",
-        ).grid(row=0, column=0, sticky="ew", padx=(0, 4), pady=2)
-        tip(
+            "Tab „Filament-Profil“ — Profil anzeigen (nur Lesen, Daten vom Drucker)."
+            if MATERIAL_DB_PRINTER_ONLY
+            else "Tab „Filament-Profil“ öffnen und Material bearbeiten.",
+        )
+        self._btn_edit_profile.grid(row=0, column=0, sticky="ew", padx=(0, 4), pady=2)
+        self._btn_new_profile = tip(
             ttk.Button(
                 prof_btns,
                 text="Neues Profil…",
@@ -691,7 +702,11 @@ class TDFilamentStudioApp(AppTk):
                 style="Secondary.TButton",
             ),
             "Neues Filament-Profil in der Datenbank anlegen.",
-        ).grid(row=0, column=1, sticky="ew", pady=2)
+        )
+        self._btn_new_profile.grid(row=0, column=1, sticky="ew", pady=2)
+        if MATERIAL_DB_PRINTER_ONLY:
+            self._btn_new_profile.grid_remove()
+            self._btn_edit_profile.grid(row=0, column=0, columnspan=2, sticky="ew", padx=0, pady=2)
         tip(
             ttk.Button(
                 prof_btns,
@@ -699,7 +714,9 @@ class TDFilamentStudioApp(AppTk):
                 command=self._goto_db_tab,
                 style="Secondary.TButton",
             ),
-            "Zum Tab Material-Datenbank wechseln (Import vom Drucker/Cloud).",
+            "Zum Tab Material-Datenbank — Profil nur per „Vom Drucker (SSH)“ laden."
+            if MATERIAL_DB_PRINTER_ONLY
+            else "Zum Tab Material-Datenbank wechseln (Import vom Drucker/Cloud).",
         ).grid(row=1, column=0, columnspan=2, sticky="ew", pady=2)
         _grid_row(7, "Profil", prof_btns, pady=(6, 4))
 
@@ -774,7 +791,9 @@ class TDFilamentStudioApp(AppTk):
                 command=self._goto_profile_tab,
                 style="Accent.TButton",
             ),
-            "Gewähltes Material im eigenen Tab bearbeiten und in der DB speichern.",
+            "Gewähltes Material im Tab Filament-Profil ansehen (nur Lesen, Daten vom Drucker)."
+            if MATERIAL_DB_PRINTER_ONLY
+            else "Gewähltes Material im eigenen Tab bearbeiten und in der DB speichern.",
         ).pack(anchor="w", pady=(8, 4))
 
         sec_diag = section(scroll, "Tag-Rohdaten (Reader-Auslesen)")
@@ -815,6 +834,7 @@ class TDFilamentStudioApp(AppTk):
             root,
             self.db_data if self.db_data else empty_db,
             self._on_filament_saved,
+            readonly=MATERIAL_DB_PRINTER_ONLY,
         )
         self._filament_panel.pack(fill="both", expand=True, padx=8, pady=(0, 8))
 
@@ -828,50 +848,71 @@ class TDFilamentStudioApp(AppTk):
         top.columnconfigure(0, weight=1)
         top.rowconfigure(1, weight=1)
 
-        sec = section(top, "Material-Datenbank (nur Lesen vom Drucker)")
+        sec = section(top, "Material-Datenbank (nur vom Drucker)")
         sec.grid(row=0, column=0, sticky="ew", padx=4, pady=(4, 2))
-        ttk.Label(
-            sec,
-            text="Sicherer Modus: Profile vom K2 holen und lokal bearbeiten — "
-            "nichts wird per SSH auf den Drucker geschrieben. "
-            "Druckparameter am Drucker änderst du in Creality Print.",
-            style="Muted.TLabel",
-            wraplength=820,
-        ).pack(anchor="w", pady=(0, 6))
+        if MATERIAL_DB_PRINTER_ONLY:
+            intro = (
+                "Die Profil-Liste kommt nur aus „Vom Drucker (SSH)“ — keine Cloud, "
+                "keine Datei, kein Merge. Tab „Filament-Profil“ zeigt nur an "
+                "(kein Speichern). Druckparameter änderst du in Creality Print."
+            )
+        else:
+            intro = (
+                "Sicherer Modus: Profile vom K2 holen und lokal bearbeiten — "
+                "nichts wird per SSH auf den Drucker geschrieben. "
+                "Druckparameter am Drucker änderst du in Creality Print."
+            )
+        ttk.Label(sec, text=intro, style="Muted.TLabel", wraplength=820).pack(
+            anchor="w", pady=(0, 6)
+        )
         self.db_label = ttk.Label(sec, text="Lade…", style="Muted.TLabel", wraplength=800)
         self.db_label.pack(anchor="w", pady=(0, 6))
 
         grid = ttk.Frame(sec)
         grid.pack(fill="x")
-        actions = [
-            (
-                "Von Creality Cloud",
-                self.sync_database,
-                "Material-Datenbank von Creality Cloud herunterladen.",
-            ),
-            (
-                "Vom Drucker (SSH)",
-                self.sync_from_printer,
-                "material_database.json per SSH vom Drucker holen (nur Lesen).",
-            ),
-            (
-                "Cloud mergen",
-                self.merge_cloud,
-                "Cloud-Daten mit der lokalen Datenbank zusammenführen.",
-            ),
-            ("Datei öffnen…", self.pick_database, "Bestehende JSON-Datenbank von der Festplatte laden."),
-            (
-                "Slicer-Profile import…",
-                self.import_slicer_profiles,
-                "Orca/Creality JSON — Notizen: {\"id\",\"vendor\",\"type\",\"name\"}.",
-            ),
-            ("DB speichern…", self.save_database_as, "Datenbank als JSON-Datei exportieren."),
-            (
-                "CFS-RFID ZIP…",
-                self.import_cfs_zip,
-                "Backup-ZIP mit Datenbank und Einstellungen importieren.",
-            ),
-        ]
+        if MATERIAL_DB_PRINTER_ONLY:
+            actions = [
+                (
+                    "Vom Drucker (SSH)",
+                    self.sync_from_printer,
+                    "material_database.json per SSH vom Drucker holen.",
+                ),
+                (
+                    "CFS-RFID ZIP…",
+                    self.import_cfs_zip,
+                    "Backup-ZIP mit Datenbank und Einstellungen importieren.",
+                ),
+            ]
+        else:
+            actions = [
+                (
+                    "Von Creality Cloud",
+                    self.sync_database,
+                    "Material-Datenbank von Creality Cloud herunterladen.",
+                ),
+                (
+                    "Vom Drucker (SSH)",
+                    self.sync_from_printer,
+                    "material_database.json per SSH vom Drucker holen (nur Lesen).",
+                ),
+                (
+                    "Cloud mergen",
+                    self.merge_cloud,
+                    "Cloud-Daten mit der lokalen Datenbank zusammenführen.",
+                ),
+                ("Datei öffnen…", self.pick_database, "Bestehende JSON-Datenbank von der Festplatte laden."),
+                (
+                    "Slicer-Profile import…",
+                    self.import_slicer_profiles,
+                    "Orca/Creality JSON — Notizen: {\"id\",\"vendor\",\"type\",\"name\"}.",
+                ),
+                ("DB speichern…", self.save_database_as, "Datenbank als JSON-Datei exportieren."),
+                (
+                    "CFS-RFID ZIP…",
+                    self.import_cfs_zip,
+                    "Backup-ZIP mit Datenbank und Einstellungen importieren.",
+                ),
+            ]
         for c in range(4):
             grid.columnconfigure(c, weight=1)
         for i, (text, cmd, help_txt) in enumerate(actions):
@@ -1443,9 +1484,10 @@ class TDFilamentStudioApp(AppTk):
 
     def _apply_database(self, data: dict, source: str) -> None:
         path = db_path_for_printer(DATA_DIR, self.printer_var.get().strip())
-        save_database(path, data)
+        if not MATERIAL_DB_PRINTER_ONLY:
+            save_database(path, data)
         self.db_data = data
-        self.db_path = path
+        self.db_path = path if not MATERIAL_DB_PRINTER_ONLY else None
         self.profiles = profiles_from_db(data)
         self._demo_mode = False
         self._db_source = source
@@ -1608,6 +1650,9 @@ class TDFilamentStudioApp(AppTk):
             self.notify(f"{label} abgeschlossen.", "ok")
 
     def sync_database(self) -> None:
+        if MATERIAL_DB_PRINTER_ONLY:
+            self.notify("Creality-Cloud-Import ist deaktiviert — nur „Vom Drucker“.", "warn")
+            return
         printer = self.printer_var.get().strip() or "K2 Pro"
 
         def work():
@@ -1632,6 +1677,9 @@ class TDFilamentStudioApp(AppTk):
         self._run_bg_job(f"Creality Cloud ({printer})", work, on_ok=on_ok)
 
     def merge_cloud(self) -> None:
+        if MATERIAL_DB_PRINTER_ONLY:
+            self.notify("Cloud-Merge ist deaktiviert — nur „Vom Drucker“.", "warn")
+            return
         if not self._ensure_db():
             return
         printer = self.printer_var.get().strip() or "K2 Pro"
@@ -1702,7 +1750,10 @@ class TDFilamentStudioApp(AppTk):
             return download_database_from_printer(host, password, printer)
 
         def on_ok(data: dict) -> None:
-            if self.db_data and self.db_data.get("result", {}).get("list"):
+            if MATERIAL_DB_PRINTER_ONLY:
+                self._apply_database(data, "printer")
+                msg = f"{len(self.profiles)} Material-Profile vom Drucker geladen (lokal ersetzt)."
+            elif self.db_data and self.db_data.get("result", {}).get("list"):
                 merged = merge_databases(self.db_data, data, prefer="cloud")
                 added, updated, total, skipped = merge_stats(self.db_data, data)
                 self._apply_database(merged, "printer")
@@ -1719,6 +1770,9 @@ class TDFilamentStudioApp(AppTk):
         self._run_ssh_job("Vom Drucker laden", work, on_ok=on_ok)
 
     def pick_database(self) -> None:
+        if MATERIAL_DB_PRINTER_ONLY:
+            self.notify("Datei-Import ist deaktiviert — nur „Vom Drucker (SSH)“.", "warn")
+            return
         path = filedialog.askopenfilename(filetypes=[("JSON", "*.json"), ("Alle", "*.*")])
         if not path:
             return
@@ -1730,6 +1784,9 @@ class TDFilamentStudioApp(AppTk):
 
     def import_slicer_profiles(self) -> None:
         """OrcaSlicer/Creality-Print Filament-JSONs in die Material-DB."""
+        if MATERIAL_DB_PRINTER_ONLY:
+            self.notify("Slicer-Import ist deaktiviert — nur „Vom Drucker (SSH)“.", "warn")
+            return
         if not self._ensure_db():
             return
         paths: list[Path] = []
@@ -1777,6 +1834,9 @@ class TDFilamentStudioApp(AppTk):
         )
 
     def save_database_as(self) -> None:
+        if MATERIAL_DB_PRINTER_ONLY:
+            self.notify("„DB speichern unter“ ist deaktiviert — nur „Vom Drucker (SSH)“.", "warn")
+            return
         if not self.db_data:
             self.notify("Keine DB geladen.")
             return
@@ -1828,6 +1888,9 @@ class TDFilamentStudioApp(AppTk):
             self._filament_panel.set_db_data(self.db_data)
 
     def add_filament(self) -> None:
+        if MATERIAL_DB_PRINTER_ONLY:
+            self.notify("Neue Profile nur am Drucker / in Creality Print — nicht in TD Studio.", "warn")
+            return
         if not self._ensure_db():
             return
         self.notebook.select(self.tab_profile)
@@ -1856,6 +1919,8 @@ class TDFilamentStudioApp(AppTk):
         self._goto_profile_tab()
 
     def _save_db(self) -> None:
+        if MATERIAL_DB_PRINTER_ONLY:
+            return
         if self.db_data and self.db_path:
             save_database(self.db_path, self.db_data)
 
@@ -3403,7 +3468,7 @@ class TDFilamentStudioApp(AppTk):
             show_on_startup=self.settings.show_setup_on_startup,
             on_open_help=lambda: self.notebook.select(self.tab_help),
             on_connect_reader=lambda: self.connect_reader(show_errors=True),
-            on_load_db=self.sync_database,
+            on_load_db=self.sync_from_printer if MATERIAL_DB_PRINTER_ONLY else self.sync_database,
             on_done=on_done,
         )
 

@@ -2,10 +2,11 @@
 # Creates latest stable release and removes the previous stable release tag.
 
 param(
-    [string]$Version = "1.5.45",
-    [string]$Tag = "v1.5.45-stable",
+    [string]$Version = "1.5.47",
+    [string]$Tag = "v1.5.47-stable",
     [string]$Repo = "thorsten76dudd-cloud/td-filament-studio",
-    [string]$RemoveTag = "v1.5.44-stable"
+    [string]$RemoveTag = "v1.5.45-stable",
+    [switch]$DeleteAllOldReleases
 )
 
 $ErrorActionPreference = "Stop"
@@ -30,11 +31,11 @@ if (-not (Test-Path $Setup)) {
 $notes = @(
     "## TD Filament Studio $Version",
     "",
-    "* Read-only printer DB: download only, no SSH upload to K2",
-    "* RFID tags and local spool management unchanged",
-    "* Save and push to printer, post-print deduct memory",
+    "* Material-DB nur vom Drucker (SSH) — kein Cloud/Datei/Merge, kein lokales DB-Speichern",
+    "* Filament-Profil nur Lesen; RFID-Tags und Meine Spulen unverändert",
+    "* Werkreset: leere DB, keine Beispiel-Drucker",
     "",
-    "Run Setup. Set printer IP and SSH in Material Database tab."
+    "Setup ausführen. Material-Datenbank: „Vom Drucker (SSH)“ (IP + Root-SSH)."
 ) -join [Environment]::NewLine
 Set-Content -Path $NotesFile -Value $notes -Encoding UTF8
 
@@ -47,7 +48,16 @@ function Test-GhRelease([string]$ReleaseTag) {
     return $ok
 }
 
-if ($RemoveTag -and (Test-GhRelease $RemoveTag)) {
+if ($DeleteAllOldReleases) {
+    $releases = gh release list --repo $Repo --limit 100 --json tagName -q '.[].tagName' 2>$null
+    if ($releases) {
+        foreach ($t in $releases) {
+            if ($t -eq $Tag) { continue }
+            Write-Host ("Removing old release " + $t + " ...")
+            gh release delete $t --repo $Repo --yes --cleanup-tag 2>$null
+        }
+    }
+} elseif ($RemoveTag -and (Test-GhRelease $RemoveTag)) {
     Write-Host ("Removing old release " + $RemoveTag + " ...")
     gh release delete $RemoveTag --repo $Repo --yes --cleanup-tag
 }

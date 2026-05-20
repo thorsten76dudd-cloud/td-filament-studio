@@ -70,41 +70,16 @@ def default_backup_name() -> str:
     return f"spooltag_backup_{datetime.now().strftime('%Y%m%d_%H%M')}.zip"
 
 
-_TEMPLATE_FILES = ("k2_pro.json", "k2_max.json", "printers.example.json")
+_EMPTY_MATERIAL_DB = json.dumps({"result": {"list": [], "count": 0}}, ensure_ascii=False) + "\n"
 
 
-def _read_install_templates(data_dir: Path) -> dict[str, bytes]:
-    """Standard-JSON aus Bundle oder data/ vor dem Löschen sichern."""
-    import sys
-
-    out: dict[str, bytes] = {}
-    sources: list[Path] = []
-    if data_dir.is_dir():
-        sources.append(data_dir)
-    if getattr(sys, "frozen", False):
-        bundle = Path(sys._MEIPASS) / "data"
-        if bundle.is_dir():
-            sources.append(bundle)
-    else:
-        from app.paths import APP_DIR
-
-        dev_data = APP_DIR / "data"
-        if dev_data.is_dir():
-            sources.append(dev_data)
-    for folder in sources:
-        for name in _TEMPLATE_FILES:
-            if name in out:
-                continue
-            path = folder / name
-            if path.is_file():
-                out[name] = path.read_bytes()
-    return out
-
-
-def _write_install_templates(data_dir: Path, templates: dict[str, bytes]) -> None:
-    for name, raw in templates.items():
-        dest_name = "printers.json" if name == "printers.example.json" else name
-        (data_dir / dest_name).write_bytes(raw)
+def _write_fresh_data_files(data_dir: Path) -> None:
+    """Leerer Werkzustand — keine Beispiel-Drucker, keine mitgelieferte Material-DB."""
+    (data_dir / "printers.json").write_text('{"printers": []}\n', encoding="utf-8")
+    for name in ("k2_pro.json", "k2_max.json"):
+        (data_dir / name).write_text(_EMPTY_MATERIAL_DB, encoding="utf-8")
+    (data_dir / "spools.json").write_text("[]\n", encoding="utf-8")
+    (data_dir / "printer_settings.json").write_text("{}\n", encoding="utf-8")
 
 
 def factory_reset_data_dir(data_dir: Path) -> None:
@@ -114,13 +89,13 @@ def factory_reset_data_dir(data_dir: Path) -> None:
     from creality_nfc.app_settings import AppSettings
     from creality_nfc.model_library import ModelLibrary
 
-    templates = _read_install_templates(data_dir)
     if data_dir.is_dir():
         shutil.rmtree(data_dir)
     data_dir.mkdir(parents=True, exist_ok=True)
-    if templates:
-        _write_install_templates(data_dir, templates)
-    AppSettings().save(data_dir / "app_settings.json")
+    _write_fresh_data_files(data_dir)
+    settings = AppSettings()
+    settings.setup_completed = False
+    settings.show_setup_on_startup = True
+    settings.preferred_reader = ""
+    settings.save(data_dir / "app_settings.json")
     ModelLibrary(data_dir / "model_library")
-    (data_dir / "spools.json").write_text("[]\n", encoding="utf-8")
-    (data_dir / "printer_settings.json").write_text("{}\n", encoding="utf-8")

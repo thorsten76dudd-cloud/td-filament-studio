@@ -1,5 +1,7 @@
 """Hilfetexte für TD Filament Studio."""
 
+from creality_nfc.config import MATERIAL_DB_PRINTER_ONLY
+
 PROGRAM_HELP = """
 TD FILAMENT STUDIO — Kurzanleitung
 ==================================
@@ -341,3 +343,55 @@ Dateien (data/)
 • printers.json — gespeicherte Drucker
 • printer_settings.json — zuletzt gewählter Drucker
 """
+
+if MATERIAL_DB_PRINTER_ONLY:
+    PROGRAM_HELP = (
+        PROGRAM_HELP.replace(
+            "• Profil bearbeiten / Neues Profil… / Datenbank laden…",
+            "• Profil bearbeiten (Ansicht) / Datenbank laden… — Liste nur „Vom Drucker (SSH)“; kein „Neues Profil“.",
+        )
+        .replace(
+            """Tab: Filament-Profil
+--------------------
+Bearbeitung der Druckparameter in der Material-Datenbank (nicht auf dem RFID-Tag).
+• Auswahl: Tab „RFID-Tag“ → Marke und Material (mit ID in der Liste)
+• Tabs: Basis (ID, Marke, Name, Typ, Min/Max °C), Druckparameter, JSON (kvParam)
+• „Vor Cloud/Drucker-Update schützen“ — eigene Temperaturen bleiben bei Cloud-Merge erhalten
+• In Datenbank speichern — nur lokal (k2_pro.json); Drucker wird nicht überschrieben
+
+Wichtig: Mehrere Profile können dieselbe 5-stellige ID haben (z. B. drei× „06001“).
+Immer das exakte Material in der Liste wählen (Name · ID), sonst falsche Temperaturen.""",
+            """Tab: Filament-Profil
+--------------------
+Anzeige der Druckparameter aus der Material-Datenbank (per „Vom Drucker“ geladen) — nicht auf dem RFID-Tag.
+Parameter änderst du in Creality Print / am Drucker; in TD Studio ist der Bereich nur lesend.
+
+• Auswahl: Tab „RFID-Tag“ → Marke und Material (mit ID in der Liste)
+• Tabs: Basis, Druckparameter, JSON (kvParam) — nur Ansicht
+
+Wichtig: Mehrere Profile können dieselbe 5-stellige ID haben (z. B. drei× „06001“).
+Immer das exakte Material in der Liste wählen (Name · ID), sonst falsche Temperaturen.""",
+        )
+        .replace(
+            """Tab: Material-Datenbank
+-----------------------
+• Cloud — offizielle Creality-Profile (Internet)
+• Vom Drucker — per SSH vom K2 laden (nur Lesen; Root aktivieren, gleiches WLAN)
+• Merge Cloud — Cloud-Profile in lokale DB einfügen
+• Slicer-Profile import… — Orca/Creality JSON (Notizen: {"id","vendor","type","name"})
+• Drucker SSH — IP und Passwort im Tab
+• Drucker-Dashboard — Status, DB vergleichen, material_options.json, Neustart
+
+Menü „Datei“
+• DB öffnen / speichern unter…""",
+            """Tab: Material-Datenbank
+-----------------------
+• Nur „Vom Drucker“ — per SSH die material_database.json vom K2 laden (nur Lesen; Root aktivieren, gleiches WLAN).
+  Cloud-, Datei- und Slicer-Import sowie Cloud-Merge sind ausgeschaltet.
+• Drucker SSH — IP und Passwort im Tab
+• Drucker-Dashboard — Status, DB vergleichen, material_options.json, Neustart
+
+Menü „Datei“
+• Material-DB: kein „DB öffnen“ / „speichern unter“ — lokale Datei folgt dem SSH-Ladevorgang.""",
+        )
+    )
