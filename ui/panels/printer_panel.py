@@ -9,7 +9,6 @@ from datetime import datetime
 from tkinter import scrolledtext, ttk
 from typing import TYPE_CHECKING
 
-from creality_nfc.config import APP_NAME, MANUAL_PRINTER_RESTART_HINT
 from creality_nfc.db_compare import compare_databases, format_compare_report
 from creality_nfc.material_options import build_material_options
 from creality_nfc.printer_camera import printer_reachable
@@ -18,7 +17,6 @@ from creality_nfc.printer_ssh import (
     download_options_from_printer,
     fetch_printer_info,
     normalize_host,
-    upload_options_to_printer,
 )
 from ui.dialog_theme import theme_dialog
 from ui.theme import BG_SUBTLE, apply_text_area_style
@@ -61,13 +59,7 @@ class PrinterDashboardPanel(ttk.LabelFrame):
                 self.compare_db,
                 "Lokale und Drucker-Datenbank vergleichen (Unterschiede anzeigen).",
             ),
-            ("Options vom Drucker", self.pull_options, "Material-Options-Datei vom Drucker laden."),
-            ("Options zum Drucker", self.push_options, "Material-Options auf den Drucker hochladen."),
-            (
-                "Neustart-Hinweis",
-                self.reboot,
-                "Anleitung: Drucker nach DB-Upload manuell neu starten (Strom aus/an).",
-            ),
+            ("Options vom Drucker", self.pull_options, "Material-Options-Datei vom Drucker laden (nur Lesen)."),
         ):
             tip(
                 ttk.Button(btns, text=text, command=cmd, style="Secondary.TButton"),
@@ -201,26 +193,3 @@ class PrinterDashboardPanel(ttk.LabelFrame):
 
         self._run_bg("Options vom Drucker", work, on_ok)
 
-    def push_options(self) -> None:
-        if not self.app.db_data:
-            notify(self, "Zuerst Material-DB laden.", "warn")
-            return
-        creds = self._creds()
-        if not creds:
-            return
-        host, password, printer = creds
-        options = build_material_options(self.app.db_data)
-
-        def work():
-            upload_options_to_printer(host, password, printer, options)
-            return len(options.get("brands", []))
-
-        def on_ok(n: int) -> None:
-            self._log(f"Options geschrieben ({n} Marken) — Drucker manuell neu starten (Strom aus/an).")
-
-        self._run_bg("Options zum Drucker", work, on_ok)
-
-    def reboot(self) -> None:
-        from tkinter import messagebox
-
-        messagebox.showinfo(APP_NAME, MANUAL_PRINTER_RESTART_HINT)

@@ -100,39 +100,16 @@ class SettingsPanel(ttk.Frame):
         self.reader_var = tk.StringVar(value=settings.preferred_reader)
         ttk.Combobox(reader, textvariable=self.reader_var, values=names).pack(fill="x", padx=8, pady=4)
 
-        db_sync = ttk.LabelFrame(self, text="Material-Datenbank → Drucker (SSH)")
+        db_sync = ttk.LabelFrame(self, text="Material-Datenbank (nur Lesen)")
         db_sync.pack(fill="x", **frame_pad)
-        self.auto_push_db = tk.BooleanVar(value=getattr(settings, "auto_push_db_to_printer", False))
-        self.auto_push_options = tk.BooleanVar(
-            value=getattr(settings, "auto_push_options_with_db", True)
-        )
-        ttk.Checkbutton(
-            db_sync,
-            text="Nach „In Datenbank speichern“ automatisch zum Drucker senden",
-            variable=self.auto_push_db,
-        ).pack(anchor="w", padx=8)
-        ttk.Checkbutton(
-            db_sync,
-            text="Dabei Display-Menü (material_options.json) mit aktualisieren",
-            variable=self.auto_push_options,
-        ).pack(anchor="w", padx=8)
-        for var in (self.auto_push_db, self.auto_push_options):
-            var.trace_add("write", lambda *_a: self._persist_db_sync_flags())
         ttk.Label(
             db_sync,
-            text="Nach jedem Upload: Drucker manuell neu starten (Strom aus, "
-            "10–20 s warten, wieder ein) — CFS und Profile laden so zuverlässig.",
+            text="Der Drucker wird nicht per SSH beschrieben (sicherer Modus). "
+            "Profile nur mit „Vom Drucker“ holen und lokal bearbeiten. "
+            "Druckparameter am K2 änderst du in Creality Print.",
             style="Muted.TLabel",
             wraplength=520,
-        ).pack(anchor="w", padx=8, pady=(4, 0))
-        ttk.Label(
-            db_sync,
-            text="Voraussetzung: Drucker-IP und SSH-Passwort (Tab Material-Datenbank). "
-            "Haken gelten sofort (ohne extra Speichern). "
-            "Creality Print bekommt die Daten nicht automatisch — nur der K2.",
-            style="Muted.TLabel",
-            wraplength=520,
-        ).pack(anchor="w", padx=8, pady=(0, 6))
+        ).pack(anchor="w", padx=8, pady=(4, 8))
 
         merge = ttk.LabelFrame(self, text="DB-Merge")
         merge.pack(fill="x", **frame_pad)
@@ -177,13 +154,6 @@ class SettingsPanel(ttk.Frame):
                 "Alle lokalen Daten löschen (wie Neuinstallation). Vorher ZIP-Backup empfohlen!",
             ).pack(side="left")
 
-    def _persist_db_sync_flags(self) -> None:
-        """DB-Sync-Haken sofort in app_settings.json (ohne Popup)."""
-        s = self._settings
-        s.auto_push_db_to_printer = self.auto_push_db.get()
-        s.auto_push_options_with_db = self.auto_push_options.get()
-        s.save(DEFAULT_SETTINGS_PATH)
-
     def _save(self) -> None:
         s = self._settings
         s.auto_read_tag = self.auto_read.get()
@@ -201,6 +171,4 @@ class SettingsPanel(ttk.Frame):
         s.default_post_print_deduct_g = int(self.default_deduct_g.get())
         s.protect_tag_overwrite = self.protect_tag.get()
         s.launch_with_creality_print = self.launch_with_creality.get()
-        s.auto_push_db_to_printer = self.auto_push_db.get()
-        s.auto_push_options_with_db = self.auto_push_options.get()
         self._on_save(s)

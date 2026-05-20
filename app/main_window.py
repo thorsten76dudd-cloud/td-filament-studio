@@ -28,7 +28,6 @@ from creality_nfc.config import (
     APP_VERSION,
     GITHUB_RELEASES_REPO,
     GITHUB_URL,
-    MANUAL_PRINTER_RESTART_HINT,
 )
 from creality_nfc.db_merge import merge_databases, merge_stats
 from creality_nfc.db_store import (
@@ -57,8 +56,6 @@ from creality_nfc.materials import (
 from creality_nfc.printer_camera import printer_reachable
 from creality_nfc.printer_ssh import (
     download_database_from_printer,
-    upload_database_to_printer,
-    upload_options_to_printer,
 )
 from creality_nfc.reader import CrealityNfcReader, NfcReaderError
 from creality_nfc.reader_monitor import NfcCardMonitor
@@ -252,7 +249,6 @@ class TDFilamentStudioApp(AppTk):
         m_file.add_separator()
         m_file.add_command(label="DB öffnen…", command=self.pick_database)
         m_file.add_command(label="DB speichern unter…", command=self.save_database_as)
-        m_file.add_command(label="Zum Drucker senden (SSH)…", command=self.upload_to_printer)
         m_file.add_command(label="material_options.json exportieren…", command=self.export_options)
         m_file.add_separator()
         m_file.add_command(label="Daten sichern (ZIP)…", command=self.backup_data)
@@ -819,7 +815,6 @@ class TDFilamentStudioApp(AppTk):
             root,
             self.db_data if self.db_data else empty_db,
             self._on_filament_saved,
-            on_save_and_push=self.push_db_after_filament_save,
         )
         self._filament_panel.pack(fill="both", expand=True, padx=8, pady=(0, 8))
 
@@ -833,8 +828,16 @@ class TDFilamentStudioApp(AppTk):
         top.columnconfigure(0, weight=1)
         top.rowconfigure(1, weight=1)
 
-        sec = section(top, "Import — Material-Datenbank")
+        sec = section(top, "Material-Datenbank (nur Lesen vom Drucker)")
         sec.grid(row=0, column=0, sticky="ew", padx=4, pady=(4, 2))
+        ttk.Label(
+            sec,
+            text="Sicherer Modus: Profile vom K2 holen und lokal bearbeiten — "
+            "nichts wird per SSH auf den Drucker geschrieben. "
+            "Druckparameter am Drucker änderst du in Creality Print.",
+            style="Muted.TLabel",
+            wraplength=820,
+        ).pack(anchor="w", pady=(0, 6))
         self.db_label = ttk.Label(sec, text="Lade…", style="Muted.TLabel", wraplength=800)
         self.db_label.pack(anchor="w", pady=(0, 6))
 
@@ -849,12 +852,7 @@ class TDFilamentStudioApp(AppTk):
             (
                 "Vom Drucker (SSH)",
                 self.sync_from_printer,
-                "filament_database.json per SSH vom Drucker holen.",
-            ),
-            (
-                "Zum Drucker (SSH)",
-                self.upload_to_printer,
-                "Aktuelle Datenbank per SSH auf den Drucker kopieren.",
+                "material_database.json per SSH vom Drucker holen (nur Lesen).",
             ),
             (
                 "Cloud mergen",
@@ -1670,7 +1668,7 @@ class TDFilamentStudioApp(AppTk):
                 "(Tab „Material-Datenbank“ unten oder „RFID-Tag“)."
             )
             if quiet:
-                self.notify("Auto-Sync: keine Drucker-IP — Upload übersprungen.", "warn")
+                self.notify("Keine Drucker-IP — SSH-Lesen nicht möglich.", "warn")
             else:
                 self.notify(msg.replace("\n", " "), "warn")
                 messagebox.showwarning(APP_NAME, msg)
@@ -1719,143 +1717,6 @@ class TDFilamentStudioApp(AppTk):
             messagebox.showinfo(APP_NAME, msg)
 
         self._run_ssh_job("Vom Drucker laden", work, on_ok=on_ok)
-
-    def _push_db_bundle_on_printer(
-        self,
-        host: str,
-        password: str,
-        printer: str,
-        *,
-        with_options: bool,
-    ) -> list[str]:
-        """Schreibt DB (+ optional Options). Gibt Kurz-Meldungen zurück."""
-        if not self.db_data:
-            raise RuntimeError("Keine Material-Datenbank geladen.")
-        steps: list[str] = []
-        upload_database_to_printer(host, password, printer, self.db_data)
-        steps.append("material_database.json geschrieben")
-        if with_options:
-            upload_options_to_printer(
-                host, password, printer, build_material_options(self.db_data)
-            )
-            steps.append("material_options.json (Display-Menü) aktualisiert")
-        return steps
-
-    def _sync_db_push_flags_from_panel(self) -> None:
-        """Aktuelle Haken aus Einstellungen (nicht nur letzter Speichern-Klick)."""
-        panel = getattr(self, "_settings_panel", None)
-        if panel is None:
-            return
-        self.settings.auto_push_db_to_printer = panel.auto_push_db.get()
-        self.settings.auto_push_options_with_db = panel.auto_push_options.get()
-
-    def _notify_db_push_result(
-        self,
-        host: str,
-        steps: list[str],
-        *,
-        popup: bool,
-    ) -> None:
-        body = f"Drucker {host}:\n\n" + "\n".join(f"• {s}" for s in steps)
-        body += f"\n\n{MANUAL_PRINTER_RESTART_HINT}"
-        self._set_status("Drucker-Sync OK — bitte manuell neu starten", "ok")
-        self.notify(
-            "Upload OK — Drucker bitte manuell neu starten (Strom aus/an).",
-            "ok",
-        )
-        if popup:
-            messagebox.showinfo(APP_NAME, body)
-
-    def _start_db_push_to_printer(
-        self,
-        *,
-        label: str = "Zum Drucker senden",
-        with_options: bool | None = None,
-        confirm: bool = True,
-        popup_on_ok: bool = True,
-    ) -> None:
-        if not self.db_data:
-            self.notify("Zuerst Material-DB laden.", "warn")
-            if confirm:
-                messagebox.showwarning(
-                    APP_NAME,
-                    "Zuerst eine Material-Datenbank laden\n"
-                    "(z. B. „Vom Drucker“ oder „Datei öffnen…“).",
-                )
-            return
-        printer = self.printer_var.get().strip()
-        creds = self._ssh_credentials(printer, quiet=not confirm)
-        if not creds:
-            return
-        host, password = creds
-        self._sync_db_push_flags_from_panel()
-        do_options = (
-            self.settings.auto_push_options_with_db
-            if with_options is None
-            else with_options
-        )
-        if confirm:
-            extra_txt = (
-                "\n\nZusätzlich: Display-Menü (Options)"
-                if do_options
-                else ""
-            )
-            if not messagebox.askyesno(
-                APP_NAME,
-                f"Material-Datenbank auf {host} schreiben?{extra_txt}\n\n"
-                "Der K2 nutzt diese Datei beim RFID-Druck. "
-                "Creality Print wird nicht automatisch aktualisiert.\n\n"
-                "Danach: Drucker manuell neu starten (Strom aus/an).",
-                default="yes",
-            ):
-                self.notify("Upload abgebrochen.", "info")
-                return
-
-        def work(host: str, password: str, printer: str) -> list[str]:
-            return self._push_db_bundle_on_printer(
-                host,
-                password,
-                printer,
-                with_options=do_options,
-            )
-
-        def on_ok(steps: list[str]) -> None:
-            self._save_db()
-            self._notify_db_push_result(host, steps, popup=popup_on_ok)
-
-        self._run_ssh_job(label, work, on_ok=on_ok)
-
-    def upload_to_printer(self) -> None:
-        self._start_db_push_to_printer(confirm=True, popup_on_ok=True)
-
-    def push_db_after_filament_save(self, db_data: dict) -> None:
-        """Nach Speichern im Editor: lokal übernehmen und einmal zum Drucker senden."""
-        self._apply_filament_db_state(db_data)
-        printer = self.printer_var.get().strip()
-        creds = self._ssh_credentials(printer, quiet=True)
-        if not creds:
-            messagebox.showwarning(
-                APP_NAME,
-                "Lokal gespeichert.\n\n"
-                "Upload zum Drucker nicht möglich:\n"
-                "Keine Drucker-IP oder kein SSH-Passwort.\n\n"
-                "Tab „Drucker“ → IP und Passwort eintragen, dann erneut "
-                "„Speichern & an Drucker“.",
-            )
-            self.notify("Gespeichert — Drucker-Upload fehlgeschlagen (SSH fehlt).", "warn")
-            return
-        host, _password = creds
-        self._set_status(f"Upload zu {host}…", "info")
-        self.notify(
-            f"Lokal gespeichert — lade material_database.json auf {host} … "
-            "(Status unten, 1–2 Min.)",
-            "info",
-        )
-        self._start_db_push_to_printer(
-            label="Speichern & an Drucker senden",
-            confirm=False,
-            popup_on_ok=True,
-        )
 
     def pick_database(self) -> None:
         path = filedialog.askopenfilename(filetypes=[("JSON", "*.json"), ("Alle", "*.*")])
@@ -1911,7 +1772,7 @@ class TDFilamentStudioApp(AppTk):
             APP_NAME,
             f"{len(profiles)} Slicer-Profile verarbeitet.\n\n"
             f"Neu: {added}\nAktualisiert: {updated}\n\n"
-            "Optional: „Zum Drucker (SSH)“ — Drucker neu starten.",
+            "Nur lokal gespeichert — der Drucker wird nicht überschrieben.",
             parent=self,
         )
 
@@ -1961,13 +1822,6 @@ class TDFilamentStudioApp(AppTk):
 
     def _on_filament_saved(self, db_data: dict) -> None:
         self._apply_filament_db_state(db_data)
-        self._sync_db_push_flags_from_panel()
-        if self.settings.auto_push_db_to_printer:
-            self._start_db_push_to_printer(
-                label="Auto-Sync zum Drucker",
-                confirm=False,
-                popup_on_ok=False,
-            )
 
     def _sync_filament_panel_db(self) -> None:
         if hasattr(self, "_filament_panel") and self.db_data:

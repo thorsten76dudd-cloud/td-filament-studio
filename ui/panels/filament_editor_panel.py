@@ -45,13 +45,11 @@ class FilamentEditorPanel(ttk.Frame):
         parent: tk.Misc,
         db_data: dict,
         on_saved: Callable[[dict], None],
-        on_save_and_push: Callable[[dict], None] | None = None,
     ) -> None:
         super().__init__(parent)
         theme_dialog(self)
         self.db_data = db_data
         self._on_saved = on_saved
-        self._on_save_and_push = on_save_and_push
         self._existing_item: dict | None = None
         self._template_item: dict | None = None
         self._print_vars: dict[str, tk.StringVar] = {}
@@ -66,18 +64,8 @@ class FilamentEditorPanel(ttk.Frame):
         ).pack(side="right", padx=4)
         tip(
             ttk.Button(hdr, text="In Datenbank speichern", command=self._save, style="Accent.TButton"),
-            "Nur lokal speichern (k2_pro.json). Mit Auto-Sync in Einstellungen auch zum Drucker.",
+            "Nur lokal (k2_pro.json). Der Drucker wird nicht überschrieben.",
         ).pack(side="right", padx=(0, 4))
-        if self._on_save_and_push is not None:
-            tip(
-                ttk.Button(
-                    hdr,
-                    text="Speichern & an Drucker",
-                    command=self._save_and_push,
-                    style="Secondary.TButton",
-                ),
-                "Lokal speichern und per SSH auf den K2 senden (danach Drucker manuell neu starten).",
-            ).pack(side="right")
 
         pad = {"padx": 8, "pady": 2}
         self.fid_var = tk.StringVar()
@@ -245,12 +233,3 @@ class FilamentEditorPanel(ttk.Frame):
         )
         return updated
 
-    def _save_and_push(self) -> None:
-        updated = self._commit_save()
-        if updated is None:
-            return
-        if self._on_save_and_push is not None:
-            self._on_save_and_push(updated)
-        else:
-            self._on_saved(updated)
-            notify(self, f"„{self.brand_var.get()} — {self.name_var.get()}“ gespeichert.", "ok")

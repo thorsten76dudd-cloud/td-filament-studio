@@ -33,11 +33,9 @@ class AppSettings:
     cfs_auto_feed_before_print: bool = False
     # Hintergrund-Wächter: TD Filament Studio starten, wenn Creality Print startet.
     launch_with_creality_print: bool = False
-    # Nach „In Datenbank speichern“: material_database.json per SSH auf den K2.
+    # Veraltet (ab 1.5.45): kein Upload mehr — nur Lesen vom Drucker.
     auto_push_db_to_printer: bool = False
-    # Mit DB-Upload auch material_options.json (Display-Menü) aktualisieren.
-    auto_push_options_with_db: bool = True
-    # Veraltet (ab 1.5.44): Neustart nur noch manuell (Strom aus/an).
+    auto_push_options_with_db: bool = False
     auto_reboot_after_db_push: bool = False
     # Bekannte funktionierende Kamera-Snapshot-URL pro Drucker-IP (schnellerer Start).
     camera_snapshot_by_host: dict[str, str] = field(default_factory=dict)

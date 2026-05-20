@@ -96,8 +96,7 @@ Bearbeitung der Druckparameter in der Material-Datenbank (nicht auf dem RFID-Tag
 • Auswahl: Tab „RFID-Tag“ → Marke und Material (mit ID in der Liste)
 • Tabs: Basis (ID, Marke, Name, Typ, Min/Max °C), Druckparameter, JSON (kvParam)
 • „Vor Cloud/Drucker-Update schützen“ — eigene Temperaturen bleiben bei Cloud-Merge erhalten
-• In Datenbank speichern — lokal (k2_pro.json); mit Einstellung „automatisch zum Drucker“ auch SSH-Upload
-• Speichern & an Drucker — ein Klick: lokal + material_database.json auf den K2
+• In Datenbank speichern — nur lokal (k2_pro.json); Drucker wird nicht überschrieben
 
 Wichtig: Mehrere Profile können dieselbe 5-stellige ID haben (z. B. drei× „06001“).
 Immer das exakte Material in der Liste wählen (Name · ID), sonst falsche Temperaturen.
@@ -106,8 +105,7 @@ Immer das exakte Material in der Liste wählen (Name · ID), sonst falsche Tempe
 Tab: Material-Datenbank
 -----------------------
 • Cloud — offizielle Creality-Profile (Internet)
-• Vom Drucker — per SSH vom K2 laden (Root aktivieren, gleiches WLAN)
-• Zum Drucker — geänderte DB auf den K2 kopieren (danach Drucker neu starten)
+• Vom Drucker — per SSH vom K2 laden (nur Lesen; Root aktivieren, gleiches WLAN)
 • Merge Cloud — Cloud-Profile in lokale DB einfügen
 • Slicer-Profile import… — Orca/Creality JSON (Notizen: {"id","vendor","type","name"})
 • Drucker SSH — IP und Passwort im Tab

@@ -2,10 +2,10 @@
 # Creates latest stable release and removes the previous stable release tag.
 
 param(
-    [string]$Version = "1.5.44",
-    [string]$Tag = "v1.5.44-stable",
+    [string]$Version = "1.5.45",
+    [string]$Tag = "v1.5.45-stable",
     [string]$Repo = "thorsten76dudd-cloud/td-filament-studio",
-    [string]$RemoveTag = "v1.5.43-stable"
+    [string]$RemoveTag = "v1.5.44-stable"
 )
 
 $ErrorActionPreference = "Stop"
@@ -30,8 +30,8 @@ if (-not (Test-Path $Setup)) {
 $notes = @(
     "## TD Filament Studio $Version",
     "",
-    "* After DB upload: manual printer restart hint (power off/on)",
-    "* No automatic SSH reboot (more reliable for CFS)",
+    "* Read-only printer DB: download only, no SSH upload to K2",
+    "* RFID tags and local spool management unchanged",
     "* Save and push to printer, post-print deduct memory",
     "",
     "Run Setup. Set printer IP and SSH in Material Database tab."
