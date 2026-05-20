@@ -31,11 +31,11 @@ if (-not (Test-Path $Setup)) {
 $notes = @(
     "## TD Filament Studio $Version",
     "",
-    "* Material-DB nur vom Drucker (SSH) — kein Cloud/Datei/Merge, kein lokales DB-Speichern",
-    "* Filament-Profil nur Lesen; RFID-Tags und Meine Spulen unverändert",
+    "* Material-DB nur vom Drucker (SSH) - kein Cloud/Datei/Merge, kein lokales DB-Speichern",
+    "* Filament-Profil nur Lesen; RFID-Tags und Meine Spulen unveraendert",
     "* Werkreset: leere DB, keine Beispiel-Drucker",
     "",
-    "Setup ausführen. Material-Datenbank: „Vom Drucker (SSH)“ (IP + Root-SSH)."
+    "Setup ausfuehren. Material-Datenbank: Vom Drucker (SSH) (IP + Root-SSH)."
 ) -join [Environment]::NewLine
 Set-Content -Path $NotesFile -Value $notes -Encoding UTF8
 
