@@ -2,7 +2,7 @@
 ; Kompilieren: iscc installer\setup.iss  (Inno Setup 6)
 
 #define MyAppName "TD Filament Studio"
-#define MyAppVersion "1.5.0"
+#define MyAppVersion "1.5.38"
 #define MyAppPublisher "TD"
 #define MyAppExeName "TD Filament Studio.exe"
 
@@ -16,12 +16,13 @@ DefaultGroupName={#MyAppName}
 DisableProgramGroupPage=no
 OutputDir=..\installer_output
 OutputBaseFilename=TD-Filament-Studio-Setup
-SetupIconFile=
+SetupIconFile=..\assets\icons\app_icon.ico
 Compression=lzma2
 SolidCompression=yes
 WizardStyle=modern
 PrivilegesRequired=lowest
 ArchitecturesInstallIn64BitMode=x64compatible
+UninstallDisplayIcon={app}\{#MyAppExeName}
 
 [Languages]
 Name: "german"; MessagesFile: "compiler:Languages\German.isl"
@@ -31,11 +32,12 @@ Name: "desktopicon"; Description: "Verknüpfung auf dem Desktop"; GroupDescripti
 
 [Files]
 Source: "..\dist\{#MyAppExeName}"; DestDir: "{app}"; Flags: ignoreversion
+Source: "..\assets\icons\app_icon.ico"; DestDir: "{app}"; Flags: ignoreversion
 Source: "..\data\*"; DestDir: "{app}\data"; Flags: ignoreversion onlyifdoesntexist recursesubdirs createallsubdirs
 
 [Icons]
-Name: "{group}\{#MyAppName}"; Filename: "{app}\{#MyAppExeName}"
-Name: "{autodesktop}\{#MyAppName}"; Filename: "{app}\{#MyAppExeName}"; Tasks: desktopicon
+Name: "{group}\{#MyAppName}"; Filename: "{app}\{#MyAppExeName}"; IconFilename: "{app}\app_icon.ico"
+Name: "{autodesktop}\{#MyAppName}"; Filename: "{app}\{#MyAppExeName}"; IconFilename: "{app}\app_icon.ico"; Tasks: desktopicon
 
 [Run]
 Filename: "{app}\{#MyAppExeName}"; Description: "{#MyAppName} starten"; Flags: nowait postinstall skipifsilent

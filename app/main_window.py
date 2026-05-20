@@ -22,7 +22,7 @@ from app.constants import (
     normalize_printer_model,
 )
 from creality_nfc.app_settings import DEFAULT_SETTINGS_PATH, AppSettings
-from creality_nfc.config import APP_NAME, APP_TAGLINE, APP_VERSION
+from creality_nfc.config import APP_NAME, APP_TAGLINE, APP_VERSION, GITHUB_RELEASES_REPO, GITHUB_URL
 from creality_nfc.db_merge import merge_databases, merge_stats
 from creality_nfc.db_store import (
     db_path_for_printer,
@@ -90,7 +90,7 @@ from creality_nfc.tag_io import (
     payload_is_empty,
     verify_tag_payload,
 )
-from creality_nfc.update_check import fetch_latest_release_tag, is_newer
+from creality_nfc.update_check import ReleaseInfo, fetch_latest_release, is_newer
 from printer_connect import load_settings, save_settings
 from printer_manager import PrinterManagerDialog
 from tag_tools import TagToolsDialog
@@ -99,11 +99,9 @@ from creality_nfc.tag_export import build_tag_export, save_tag_export
 from ui.color_presets_menu import show_color_presets
 from ui.color_swatch import color_from_tag_field, normalize_hex
 from ui.setup_wizard import SetupWizardDialog
-from app.bundled_assets import CHIP_TAG_PLASTIC_3MF, save_bundled_asset
-from ui.tag_holder_links import (
-    TagHolderLinksDialog,
-    URL_PLASTIC_SPOOL_HOLDER,
-)
+from app.bundled_assets import save_bundled_plastic_holder_stls
+from ui.app_icon import apply_window_icon, load_header_logo
+from ui.tag_holder_links import TagHolderLinksDialog
 from ui.components import labeled_row, scrollable_tab, section
 from ui.rounded_widgets import rounded_button
 from ui.messaging import confirm
@@ -169,6 +167,7 @@ class TDFilamentStudioApp(AppTk):
                 self.geometry("1280x900")
 
         self.reader = CrealityNfcReader()
+        apply_window_icon(self)
         self.settings = AppSettings.load(DEFAULT_SETTINGS_PATH)
         self.profiles: list[FilamentProfile] = []
         self.db_data: dict | None = None
@@ -198,8 +197,11 @@ class TDFilamentStudioApp(AppTk):
         self._last_write_template: dict | None = None
         self._post_print_prompted = False
         self._post_print_deduct_file = ""
+        self._shutdown_done = False
+        self._reader_poll_after: str | None = None
         migrate_legacy_settings()
 
+        self.protocol("WM_DELETE_WINDOW", self._on_close)
         self._build_menu()
         # Statusleiste zuerst (unten), dann Kopf + Inhalt — sonst überlappt der Body die Leiste.
         self._build_statusbar()
@@ -246,7 +248,7 @@ class TDFilamentStudioApp(AppTk):
         m_file.add_command(label="Tag leeren…", command=self.format_tag_quick)
         m_file.add_command(label="Chip duplizieren…", command=self.duplicate_chip_start)
         m_file.add_separator()
-        m_file.add_command(label="Beenden", command=self.destroy)
+        m_file.add_command(label="Beenden", command=self._on_close)
 
         m_extra = tk.Menu(menubar, tearoff=0)
         menubar.add_cascade(label="Navigation", menu=m_extra)
@@ -268,14 +270,20 @@ class TDFilamentStudioApp(AppTk):
         m_extra.add_command(label="Nach Updates suchen", command=self.check_updates)
 
     def _build_header(self) -> None:
-        hdr = tk.Frame(self, bg=HEADER, height=96)
+        hdr = tk.Frame(self, bg=HEADER)
         hdr.pack(fill="x", side="top")
-        hdr.pack_propagate(False)
 
-        left = tk.Frame(hdr, bg=HEADER)
-        left.pack(side="left", fill="y", padx=28, pady=14)
+        row = tk.Frame(hdr, bg=HEADER)
+        row.pack(fill="x", padx=28, pady=(14, 16))
+
+        left = tk.Frame(row, bg=HEADER)
+        left.pack(side="left", fill="x", expand=True)
+
         title_row = tk.Frame(left, bg=HEADER)
-        title_row.pack(anchor="w")
+        title_row.pack(anchor="w", fill="x")
+        self._header_logo = load_header_logo(self, size=48)
+        if self._header_logo is not None:
+            tk.Label(title_row, image=self._header_logo, bg=HEADER).pack(side="left", padx=(0, 12))
         tk.Label(title_row, text=APP_NAME, bg=HEADER, fg="#ffffff", font=F_TITLE).pack(side="left")
         tk.Label(
             title_row,
@@ -286,18 +294,28 @@ class TDFilamentStudioApp(AppTk):
             padx=8,
             pady=4,
         ).pack(side="left", padx=(12, 0))
-        tk.Label(
+
+        self._header_subtitle = tk.Label(
             left,
             text=f"{APP_TAGLINE}  ·  Version {APP_VERSION}",
             bg=HEADER,
             fg=ON_HEADER_SUB,
             font=F_HEADER_SUB,
-            wraplength=720,
             justify="left",
-        ).pack(anchor="w", pady=(8, 0))
+            anchor="nw",
+            wraplength=820,
+        )
+        self._header_subtitle.pack(anchor="w", fill="x", pady=(10, 0), ipady=2)
 
-        right = tk.Frame(hdr, bg=HEADER)
-        right.pack(side="right", fill="y", padx=28, pady=14)
+        def _resize_header_subtitle(event: tk.Event | None = None) -> None:
+            w = left.winfo_width()
+            if w > 120 and hasattr(self, "_header_subtitle"):
+                self._header_subtitle.configure(wraplength=max(320, w - 8))
+
+        left.bind("<Configure>", _resize_header_subtitle)
+
+        right = tk.Frame(row, bg=HEADER)
+        right.pack(side="right", anchor="n", padx=(16, 0))
         self.db_badge = tk.Label(
             right,
             text="Datenbank: …",
@@ -475,6 +493,31 @@ class TDFilamentStudioApp(AppTk):
             "Aktuelle Tag-Daten als Spule unter „Meine Spulen“ speichern.",
         ).pack(side="left")
 
+        placement_box = tk.Frame(
+            action_bar,
+            bg=BG_SUBTLE,
+            highlightbackground=BORDER,
+            highlightthickness=1,
+        )
+        placement_box.pack(fill="x", pady=(12, 2))
+        self._placement_hint_label = tk.Label(
+            placement_box,
+            text=RFID_PLACEMENT_SHORT,
+            bg=BG_SUBTLE,
+            fg=TEXT,
+            font=F_BODY,
+            justify="left",
+            anchor="nw",
+            wraplength=880,
+        )
+        self._placement_hint_label.pack(fill="x", padx=12, pady=10)
+        placement_box.bind(
+            "<Configure>",
+            lambda e, lbl=self._placement_hint_label: lbl.configure(
+                wraplength=max(280, e.width - 28)
+            ),
+        )
+
         _canvas, scroll = scrollable_tab(root)
 
         sec_reader = section(scroll, "NFC-Reader")
@@ -498,18 +541,9 @@ class TDFilamentStudioApp(AppTk):
         r2.pack(fill="x")
         for text, cmd, help_txt in (
             (
-                "Chip-Tag.3mf speichern…",
-                lambda: save_bundled_asset(
-                    self,
-                    CHIP_TAG_PLASTIC_3MF,
-                    title="Chip-Tag für Creality-Kunststoffspule speichern",
-                ),
-                "RFID-Tag-Halter (3MF) für offizielle Creality-Kunststoffspulen — 2× pro Spule drucken.",
-            ),
-            (
-                "STL Kunststoffrolle…",
-                lambda: webbrowser.open(URL_PLASTIC_SPOOL_HOLDER),
-                "Printables: weitere RFID-Halter für Creality-Kunststoffspulen.",
+                "Tag-Halter STL speichern…",
+                lambda: save_bundled_plastic_holder_stls(self),
+                "RFID-Tag-Halter für Creality-Kunststoffspulen: Deckel + Komponente 1–4 (5 STL) — 2× pro Spule drucken.",
             ),
             (
                 "Tag-Halter (Links)…",
@@ -536,14 +570,6 @@ class TDFilamentStudioApp(AppTk):
             ),
             "Letztes Material erneut laden — Seriennummer +1, neuer Tag.",
         ).pack(side="left", padx=(0, 6), pady=2)
-
-        ttk.Label(
-            scroll,
-            text=RFID_PLACEMENT_SHORT,
-            style="Muted.TLabel",
-            wraplength=900,
-            justify="left",
-        ).pack(anchor="w", padx=2, pady=(0, 4))
 
         sec_mat = section(scroll, "Filament für den Tag")
         form = ttk.Frame(sec_mat)
@@ -3566,11 +3592,15 @@ class TDFilamentStudioApp(AppTk):
             self.notify(str(exc), "error")
 
     def _schedule_reader_poll(self) -> None:
+        if self._shutdown_done:
+            return
         sec = max(5, int(self.settings.poll_reader_sec))
         self._poll_reader()
-        self.after(sec * 1000, self._schedule_reader_poll)
+        self._reader_poll_after = self.after(sec * 1000, self._schedule_reader_poll)
 
     def _poll_reader(self) -> None:
+        if self._shutdown_done:
+            return
         state = probe_pcsc()
         if state == "ok":
             try:
@@ -3590,26 +3620,78 @@ class TDFilamentStudioApp(AppTk):
 
     def _check_updates_quiet(self) -> None:
         try:
-            tag = fetch_latest_release_tag()
-            if tag and is_newer(tag.lstrip("v"), APP_VERSION):
-                self._set_status(f"Update: {tag}", "warn")
+            info = fetch_latest_release()
+            if info and is_newer(info.version, APP_VERSION):
+                hint = f"Update: {info.tag}"
+                if info.download_label:
+                    hint += f" — Navigation → Nach Updates suchen"
+                self._set_status(hint, "warn")
         except Exception:
             pass
 
     def check_updates(self) -> None:
-        tag = fetch_latest_release_tag()
-        if not tag:
-            self.notify("Keine Versionsinfo.")
+        from tkinter import messagebox
+
+        info = fetch_latest_release()
+        if not info:
+            self.notify(
+                "Keine Release-Infos von GitHub.\n\n"
+                f"Repo: {GITHUB_RELEASES_REPO}\n"
+                f"{GITHUB_URL}/releases\n\n"
+                "Nach dem Upload: Release mit Tag (z. B. v1.5.31) anlegen "
+                "und Setup-EXE als Asset anhängen.",
+                "warn",
+            )
             return
-        if is_newer(tag.lstrip("v"), APP_VERSION):
-            self.notify(f"Neu: {tag} — installiert: {APP_VERSION}", "warn")
+        if is_newer(info.version, APP_VERSION):
+            self._offer_update_download(info)
         else:
-            self.notify(f"Aktuell ({APP_VERSION}).", "ok")
+            self.notify(
+                f"Aktuell ({APP_VERSION}).\nNeuestes GitHub-Release: {info.tag}",
+                "ok",
+            )
+
+    def _offer_update_download(self, info: ReleaseInfo) -> None:
+        from tkinter import messagebox
+
+        lines = [
+            f"Neue Version: {info.tag}",
+            f"Installiert: {APP_VERSION}",
+            "",
+        ]
+        if info.name and info.name != info.tag:
+            lines.append(info.name)
+            lines.append("")
+        if info.download_url and info.download_label:
+            lines.append(f"Download: {info.download_label}")
+        lines.append(f"Seite: {info.html_url}")
+        msg = "\n".join(lines)
+        if messagebox.askyesno(
+            "Update verfügbar",
+            msg + "\n\nIm Browser öffnen?",
+            parent=self,
+        ):
+            webbrowser.open(info.download_url or info.html_url)
+
+    def _on_close(self) -> None:
+        if self._shutdown_done:
+            return
+        self._shutdown_done = True
+        try:
+            self._save_settings()
+        except Exception:
+            pass
+        from app.shutdown import shutdown_application
+
+        shutdown_application(self)
+        try:
+            self.quit()
+        except tk.TclError:
+            pass
+        super().destroy()
 
     def destroy(self) -> None:
-        if self._monitor:
-            self._monitor.stop()
-        if hasattr(self, "_device_panel"):
-            self._device_panel.disconnect()
-        self._save_settings()
+        if not self._shutdown_done:
+            self._on_close()
+            return
         super().destroy()

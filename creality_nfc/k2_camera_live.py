@@ -479,6 +479,9 @@ class K2CameraWorker:
     def stop(self) -> None:
         self._stop.set()
         self._go2rtc.stop()
+        if self._thread and self._thread.is_alive():
+            self._thread.join(timeout=3.0)
+        self._thread = None
 
     def _status(self, msg: str) -> None:
         if self.on_status:

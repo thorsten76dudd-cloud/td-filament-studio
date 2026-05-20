@@ -6,20 +6,14 @@ import tkinter as tk
 import webbrowser
 from tkinter import ttk
 
-from app.bundled_assets import CHIP_TAG_PLASTIC_3MF, save_bundled_asset
+from app.bundled_assets import save_bundled_plastic_holder_stls
 from ui.components import scrollable_tab
 from ui.dialog_theme import prepare_toplevel
 
 # (Titel, Kurzbeschreibung, URL)
-URL_PLASTIC_SPOOL_HOLDER = "https://www.printables.com/model/1413513-rfid-holders-creality"
 URL_PLASTIC_SPOOL_HEX = "https://www.printables.com/model/1204576-creality-cfs-rfid-reusable-spool-hex"
 
 TAG_HOLDER_LINKS: tuple[tuple[str, str, str], ...] = (
-    (
-        "Creality Kunststoffrollen (offizielle Spule)",
-        "Für Creality-Kunststoffspulen (nicht Karton). 25-mm-MIFARE-Tags, links + rechts.",
-        URL_PLASTIC_SPOOL_HOLDER,
-    ),
     (
         "Creality wiederverwendbare Spule (Hex + RFID)",
         "Komplette Hex-Spule zum Drucken mit eingebautem 25-mm-Tag-Fach (Remix, JBFuller).",
@@ -63,7 +57,7 @@ class TagHolderLinksDialog(tk.Toplevel):
         ttk.Label(
             self,
             text="3D-Modelle für 25-mm-MIFARE-Classic-1K-Tags (Creality CFS).\n"
-            "Für offizielle Creality-Kunststoffrollen: zuerst „Kunststoffrollen“ — Karton-Modelle passen dort nicht.",
+            "Für offizielle Creality-Kunststoffrollen: zuerst die mitgelieferten STL unten — Karton-Modelle passen dort nicht.",
             wraplength=540,
             justify="left",
         ).pack(anchor="w", **pad)
@@ -72,28 +66,22 @@ class TagHolderLinksDialog(tk.Toplevel):
         ttk.Label(quick, text="Schnellzugriff:", style="Muted.TLabel").pack(side="left", padx=(0, 8))
         ttk.Button(
             quick,
-            text="Chip-Tag.3mf speichern…",
-            command=self._save_chip_tag,
+            text="Tag-Halter STL speichern…",
+            command=self._save_plastic_holder,
             style="Accent.TButton",
         ).pack(side="left", padx=(0, 8))
-        ttk.Button(
-            quick,
-            text="Printables (Kunststoffrolle)",
-            command=lambda: webbrowser.open(URL_PLASTIC_SPOOL_HOLDER),
-            style="Secondary.TButton",
-        ).pack(side="left")
 
         featured = ttk.LabelFrame(
             self,
-            text="  TD Filament Studio — Chip-Tag (Kunststoffspule)  ",
+            text="  TD Filament Studio — Tag-Halter (Kunststoffspule)  ",
             padding=10,
         )
         featured.pack(fill="x", padx=12, pady=(0, 8))
         ttk.Label(
             featured,
             text=(
-                "3MF-Halter für 25-mm-MIFARE-Tags an offiziellen Creality-Kunststoffspulen.\n"
-                "Pro Spule 2× drucken (links + rechts am Flansch, ca. 25 mm vom Rand)."
+                "Mitgelieferte STL für 25-mm-MIFARE-Tags an offiziellen Creality-Kunststoffspulen.\n"
+                "5 Teile: Deckel, Komponente 1–4. Pro Spule 2× komplett drucken (links + rechts am Flansch)."
             ),
             wraplength=540,
             justify="left",
@@ -102,8 +90,8 @@ class TagHolderLinksDialog(tk.Toplevel):
         btn_row.pack(anchor="w", pady=(8, 0))
         ttk.Button(
             btn_row,
-            text="Chip-Tag.3mf herunterladen…",
-            command=self._save_chip_tag,
+            text="Alle STL in Ordner speichern…",
+            command=self._save_plastic_holder,
             style="Accent.TButton",
         ).pack(side="left")
 
@@ -133,9 +121,5 @@ class TagHolderLinksDialog(tk.Toplevel):
         ttk.Button(footer, text="Schließen", command=self.destroy).pack(anchor="e")
         prepare_toplevel(self, parent, width=580, height=560)
 
-    def _save_chip_tag(self) -> None:
-        save_bundled_asset(
-            self,
-            CHIP_TAG_PLASTIC_3MF,
-            title="Chip-Tag für Creality-Kunststoffspule speichern",
-        )
+    def _save_plastic_holder(self) -> None:
+        save_bundled_plastic_holder_stls(self)

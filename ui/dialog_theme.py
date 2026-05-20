@@ -5,6 +5,7 @@ from __future__ import annotations
 import tkinter as tk
 from collections.abc import Callable
 
+from ui.app_icon import apply_window_icon
 from ui.rounded_widgets import rounded_button
 from ui.theme import BG, apply_theme
 
@@ -36,6 +37,7 @@ def prepare_toplevel(
 ) -> None:
     """Theme + optional modal + zentriert auf dem Monitor."""
     theme_dialog(win)
+    apply_window_icon(win)
     if parent is not None:
         win.transient(parent)
     if modal:

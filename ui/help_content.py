@@ -39,7 +39,7 @@ Windows (Voraussetzung)
 • TD Filament Studio braucht kein Admin für normale Nutzung; nur zum Dienst-Start ggf. UAC
 
 Optional
-• 3D-Halter: „Chip-Tag.3mf speichern…“ (mitgeliefert) oder „Tag-Halter (Links)…“ im Tab RFID-Tag
+• 3D-Halter: „Tag-Halter STL speichern…“ (mitgeliefert) oder „Tag-Halter (Links)…“ im Tab RFID-Tag
 • K2/CFS-Drucker + WLAN: nur für Material-DB und Live-Steuerung, nicht fürs Tag-Schreiben
 
 
@@ -219,7 +219,7 @@ Tab: Einstellungen
 • Nach Druck Filament abfragen — automatischer Abzugs-Dialog (Tab Einstellungen)
 • Tag-Schutz — vor Überschreiben warnen (Tab Einstellungen)
 • Mehrfarbig — mehrere Zeilen im Abzugs-Dialog (eine pro Farbe mit Verbrauch > 0 g)
-• Updates beim Start prüfen
+• Updates beim Start prüfen — vergleicht mit GitHub-Releases deines Repos (Navigation → Nach Updates suchen)
 • Fehlerprotokoll — data/app.log bei Abstürzen
 
 Ersteinrichtung
@@ -293,15 +293,12 @@ RFID-Tag an der Spule
 
 3D-Halter (Download)
 --------------------
-Tab RFID-Tag → „Chip-Tag.3mf speichern…“
-Speichert die mitgelieferte 3MF-Datei für 25-mm-MIFARE-Tags an offiziellen
-Creality-Kunststoffspulen (pro Spule 2× drucken, links + rechts am Flansch).
+Tab RFID-Tag → „Tag-Halter STL speichern…“
+Speichert die mitgelieferten STL (Deckel + Komponente 1–4) für 25-mm-MIFARE-Tags
+an offiziellen Creality-Kunststoffspulen (pro Spule 2× komplett drucken).
 
 Tab RFID-Tag → „Tag-Halter (Links)…“ (oder Navigation → Tag-Halter (Links)…)
 Weitere Modelle im Browser (STL/3MF selbst herunterladen):
-
-• Creality Kunststoffrollen (offizielle Spule) — Printables (Does Plastic)
-  https://www.printables.com/model/1413513-rfid-holders-creality
 
 • Creality Spule Hex inkl. RFID-Fach — Printables (komplette Spule drucken)
   https://www.printables.com/model/1204576-creality-cfs-rfid-reusable-spool-hex
@@ -322,6 +319,19 @@ Weitere Modelle im Browser (STL/3MF selbst herunterladen):
   https://www.printables.com/model/1280735-cfs-rfid-tag-for-spools
 
 Pro Spule 2× drucken (PLA/PETG, 0,2 mm). Tag nach dem Beschreiben einsetzen oder kleben.
+
+
+Updates (GitHub)
+----------------
+Navigation → „Nach Updates suchen“ oder Einstellungen → „Beim Start auf Updates prüfen“.
+
+Die App fragt das neueste Release auf GitHub ab (Repo in creality_nfc/config.py:
+GITHUB_RELEASES_REPO). Gibt es eine neuere Version als installiert, erscheint ein Dialog —
+„Im Browser öffnen“ lädt die Release-Seite oder den direkten Download (Setup-EXE, falls
+als Release-Asset hochgeladen).
+
+Auf GitHub pro Version ein Release anlegen, Tag z. B. v1.5.31, Asset:
+installer_output/TD-Filament-Studio-Setup.exe (oder dist/TD Filament Studio.exe).
 
 
 Dateien (data/)

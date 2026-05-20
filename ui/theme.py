@@ -37,7 +37,7 @@ WARN = "#f5a623"
 ERR = "#f87171"
 
 ON_HEADER = "#f1f5f9"
-ON_HEADER_SUB = "#cbd5e1"
+ON_HEADER_SUB = "#e2e8f0"
 ON_HEADER_MUTED = "#94a3b8"
 ON_HEADER_OK = "#6ee7b7"
 ON_HEADER_WARN = "#fcd34d"
@@ -50,7 +50,7 @@ LOG_FG = "#d1d5db"
 
 FONT = "Segoe UI"
 F_TITLE = (FONT, 22, "bold")
-F_HEADER_SUB = (FONT, 11)
+F_HEADER_SUB = (FONT, 12)
 F_HEAD = (FONT, 12, "bold")
 F_SECTION = (FONT, 11, "bold")
 F_BODY = (FONT, 11)

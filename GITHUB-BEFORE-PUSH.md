@@ -39,17 +39,23 @@ Während du testest, kurz notieren (OK / Fehler):
 Im Ordner `cfs-rfid-tool` (nach `gh auth login` oder mit HTTPS):
 
 ```bat
-git remote add origin https://github.com/DEIN_USER/DEIN_REPO.git
+git remote add origin https://github.com/tdudd/td-filament-studio.git
 git push -u origin master
-git push origin v1.5.23-stable v1.5.24-stable v1.5.25-stable
+git push origin --tags
 ```
+
+**Vor dem Push:** In `creality_nfc/config.py` prüfen — `GITHUB_RELEASES_REPO` muss zu deinem Repo passen (Standard: `tdudd/td-filament-studio`).
 
 **Tags mitpushen**, damit stabile Stände auf GitHub sichtbar sind.
 
-Optional Release auf GitHub:
+### GitHub Release (für „Nach Updates suchen“)
 
-- Tag `v1.5.25-stable` → Asset: `TD Filament Studio.exe` aus `dist\`
-- ZIP-Backup liegt lokal: `..\snapshots\TD-Filament-Studio-v1.5.25-stable.zip` (nicht automatisch auf GitHub)
+1. Auf GitHub: **Releases** → **Draft a new release**
+2. Tag: `v1.5.31` (gleiche Zahl wie `APP_VERSION` in `config.py`)
+3. Asset anhängen: `installer_output\TD-Filament-Studio-Setup.exe` (empfohlen) oder `dist\TD Filament Studio.exe`
+4. Veröffentlichen
+
+Die App erkennt dann neuere Versionen und bietet den Download im Browser an.
 
 ---
 

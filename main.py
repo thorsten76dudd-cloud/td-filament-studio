@@ -32,7 +32,12 @@ def main(argv: list[str] | None = None) -> int:
     ensure_data_dir()
     _install_exception_logging()
     app = TDFilamentStudioApp()
-    app.mainloop()
+    try:
+        app.mainloop()
+    finally:
+        from app.shutdown import exit_process_after_frozen_app
+
+        exit_process_after_frozen_app()
     return 0
 
 
