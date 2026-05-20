@@ -25,16 +25,17 @@ if (-not (Test-Path $Setup)) {
     if (-not (Test-Path $Setup)) { Write-Error "Setup nicht gefunden: $Setup" }
 }
 
-@'
-## TD Filament Studio 1.5.41
-
-* Speichern und an Drucker — klares Feedback
-* Auto-Sync Material-DB per SSH (optional)
-* Verbrauchs-Dialog merkt erledigte Drucke
-* Chip-Duplikat / NFC (ab 1.5.39)
-
-Setup ausfuehren. Drucker-IP und SSH im Tab Material-Datenbank.
-'@ | Set-Content -Path $NotesFile -Encoding UTF8
+$notes = @(
+    "## TD Filament Studio 1.5.41",
+    "",
+    "* Speichern und an Drucker - klares Feedback",
+    "* Auto-Sync Material-DB per SSH (optional)",
+    "* Verbrauchs-Dialog merkt erledigte Drucke",
+    "* Chip-Duplikat / NFC (ab 1.5.39)",
+    "",
+    "Setup ausfuehren. Drucker-IP und SSH im Tab Material-Datenbank."
+) -join "`n"
+Set-Content -Path $NotesFile -Value $notes -Encoding UTF8
 
 $OldTags = @(
     "v1.5.23-stable", "v1.5.24-stable", "v1.5.25-stable", "v1.5.26-stable",
