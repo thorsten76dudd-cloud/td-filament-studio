@@ -1735,14 +1735,39 @@ class TDFilamentStudioApp(AppTk):
             )
             steps.append("material_options.json (Display-Menü) aktualisiert")
         if with_reboot:
-            reboot_printer(host, password)
-            steps.append("Drucker neu gestartet")
+            try:
+                reboot_printer(host, password)
+                steps.append("Drucker neu gestartet")
+            except Exception as exc:
+                steps.append(f"Neustart fehlgeschlagen: {exc}")
         return steps
 
-    def _notify_db_push_result(self, host: str, steps: list[str], *, popup: bool) -> None:
+    def _sync_db_push_flags_from_panel(self) -> None:
+        """Aktuelle Haken aus Einstellungen (nicht nur letzter Speichern-Klick)."""
+        panel = getattr(self, "_settings_panel", None)
+        if panel is None:
+            return
+        self.settings.auto_push_db_to_printer = panel.auto_push_db.get()
+        self.settings.auto_push_options_with_db = panel.auto_push_options.get()
+        self.settings.auto_reboot_after_db_push = panel.auto_reboot_db.get()
+
+    def _notify_db_push_result(
+        self,
+        host: str,
+        steps: list[str],
+        *,
+        popup: bool,
+        reboot_requested: bool = False,
+    ) -> None:
         body = f"Drucker {host}:\n\n" + "\n".join(f"• {s}" for s in steps)
-        if any("neu gestartet" in s for s in steps):
-            body += "\n\nDer Drucker lädt die Profile neu."
+        rebooted = any("neu gestartet" in s for s in steps)
+        if rebooted:
+            body += "\n\nDer Drucker startet neu (~2 Min. offline), dann Profile neu laden."
+        elif reboot_requested:
+            body += (
+                "\n\nNeustart war eingeschaltet, wurde aber nicht ausgeführt. "
+                "Bitte Tab Drucker → „Drucker neu starten“ oder am Display."
+            )
         elif "Options" in "".join(steps):
             body += "\n\nTipp: Bei fehlenden Profilen am Display „Drucker neu starten“."
         self._set_status("Drucker-Sync OK", "ok")
@@ -1773,6 +1798,7 @@ class TDFilamentStudioApp(AppTk):
         if not creds:
             return
         host, password = creds
+        self._sync_db_push_flags_from_panel()
         do_options = (
             self.settings.auto_push_options_with_db
             if with_options is None
@@ -1811,7 +1837,9 @@ class TDFilamentStudioApp(AppTk):
 
         def on_ok(steps: list[str]) -> None:
             self._save_db()
-            self._notify_db_push_result(host, steps, popup=popup_on_ok)
+            self._notify_db_push_result(
+                host, steps, popup=popup_on_ok, reboot_requested=do_reboot
+            )
 
         self._run_ssh_job(label, work, on_ok=on_ok)
 
@@ -1951,6 +1979,7 @@ class TDFilamentStudioApp(AppTk):
 
     def _on_filament_saved(self, db_data: dict) -> None:
         self._apply_filament_db_state(db_data)
+        self._sync_db_push_flags_from_panel()
         if self.settings.auto_push_db_to_printer:
             self._start_db_push_to_printer(
                 label="Auto-Sync zum Drucker",

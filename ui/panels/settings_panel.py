@@ -6,7 +6,7 @@ import tkinter as tk
 from collections.abc import Callable
 from tkinter import ttk
 
-from creality_nfc.app_settings import AppSettings
+from creality_nfc.app_settings import DEFAULT_SETTINGS_PATH, AppSettings
 from creality_nfc.reader import CrealityNfcReader
 from ui.dialog_theme import theme_dialog
 from ui.tooltip import tip
@@ -124,9 +124,12 @@ class SettingsPanel(ttk.Frame):
             text="Danach Drucker neu starten (empfohlen wenn Profile am Display fehlen)",
             variable=self.auto_reboot_db,
         ).pack(anchor="w", padx=8, pady=(0, 4))
+        for var in (self.auto_push_db, self.auto_push_options, self.auto_reboot_db):
+            var.trace_add("write", lambda *_a: self._persist_db_sync_flags())
         ttk.Label(
             db_sync,
             text="Voraussetzung: Drucker-IP und SSH-Passwort (Tab Material-Datenbank). "
+            "Haken fuer Upload/Neustart gelten sofort (ohne extra Speichern). "
             "Creality Print bekommt die Daten nicht automatisch — nur der K2.",
             style="Muted.TLabel",
             wraplength=520,
@@ -174,6 +177,14 @@ class SettingsPanel(ttk.Frame):
                 ),
                 "Alle lokalen Daten löschen (wie Neuinstallation). Vorher ZIP-Backup empfohlen!",
             ).pack(side="left")
+
+    def _persist_db_sync_flags(self) -> None:
+        """DB-Sync-Haken sofort in app_settings.json (ohne Popup)."""
+        s = self._settings
+        s.auto_push_db_to_printer = self.auto_push_db.get()
+        s.auto_push_options_with_db = self.auto_push_options.get()
+        s.auto_reboot_after_db_push = self.auto_reboot_db.get()
+        s.save(DEFAULT_SETTINGS_PATH)
 
     def _save(self) -> None:
         s = self._settings

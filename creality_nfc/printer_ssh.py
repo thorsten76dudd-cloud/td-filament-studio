@@ -460,6 +460,26 @@ def reboot_printer(
     username: str = "root",
     port: int = 22,
 ) -> None:
+    """K2-Neustart per SSH. Verbindungsabbruch nach dem Befehl gilt als Erfolg."""
     host = normalize_host(host)
+    commands = (
+        "sync; (nohup reboot >/dev/null 2>&1 &) || (nohup /sbin/reboot >/dev/null 2>&1 &)",
+        "sync; systemctl reboot",
+        "reboot",
+    )
+    last_err = ""
     with ssh_client(host, password, username, port) as client:
-        _run_command(client, "nohup reboot >/dev/null 2>&1 &")
+        for cmd in commands:
+            try:
+                code, _out, err = _run_command(client, cmd, timeout=8.0)
+                if code == 0:
+                    return
+                last_err = err or f"exit {code}"
+            except (TimeoutError, OSError):
+                # SSH bricht ab, sobald der Drucker neu startet — das ist OK.
+                return
+    raise RuntimeError(
+        "Neustart-Befehl am Drucker fehlgeschlagen. "
+        "Bitte am Display manuell neu starten."
+        + (f" ({last_err})" if last_err else "")
+    )
