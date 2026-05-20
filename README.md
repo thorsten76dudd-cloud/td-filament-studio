@@ -1,5 +1,7 @@
 # TD Filament Studio
 
+Deutsch · **[English](README.en.md)**
+
 Windows-App für **Creality K2 mit CFS**: RFID-Tags programmieren (MIFARE Classic 1K), Material-Datenbank verwalten, Spulen inventarisieren, Drucker per WebSocket ansteuern.
 
 **Unterstützte Modelle:** K2 Pro, K2 Plus, K2, K2 Max, K2 SE (kein K1 / Creality Hi).
