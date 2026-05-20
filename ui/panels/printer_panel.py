@@ -9,6 +9,7 @@ from datetime import datetime
 from tkinter import scrolledtext, ttk
 from typing import TYPE_CHECKING
 
+from creality_nfc.config import APP_NAME, MANUAL_PRINTER_RESTART_HINT
 from creality_nfc.db_compare import compare_databases, format_compare_report
 from creality_nfc.material_options import build_material_options
 from creality_nfc.printer_camera import printer_reachable
@@ -17,7 +18,6 @@ from creality_nfc.printer_ssh import (
     download_options_from_printer,
     fetch_printer_info,
     normalize_host,
-    reboot_printer,
     upload_options_to_printer,
 )
 from ui.dialog_theme import theme_dialog
@@ -63,7 +63,11 @@ class PrinterDashboardPanel(ttk.LabelFrame):
             ),
             ("Options vom Drucker", self.pull_options, "Material-Options-Datei vom Drucker laden."),
             ("Options zum Drucker", self.push_options, "Material-Options auf den Drucker hochladen."),
-            ("Drucker neu starten", self.reboot, "Drucker per SSH neu starten (nach DB-Upload)."),
+            (
+                "Neustart-Hinweis",
+                self.reboot,
+                "Anleitung: Drucker nach DB-Upload manuell neu starten (Strom aus/an).",
+            ),
         ):
             tip(
                 ttk.Button(btns, text=text, command=cmd, style="Secondary.TButton"),
@@ -212,20 +216,11 @@ class PrinterDashboardPanel(ttk.LabelFrame):
             return len(options.get("brands", []))
 
         def on_ok(n: int) -> None:
-            self._log(f"Options geschrieben ({n} Marken) — Drucker neu starten.")
+            self._log(f"Options geschrieben ({n} Marken) — Drucker manuell neu starten (Strom aus/an).")
 
         self._run_bg("Options zum Drucker", work, on_ok)
 
     def reboot(self) -> None:
-        creds = self._creds()
-        if not creds:
-            return
-        host, password, _ = creds
+        from tkinter import messagebox
 
-        def do_reboot() -> None:
-            def work():
-                reboot_printer(host, password)
-
-            self._run_bg("Drucker neu starten", work)
-
-        confirm(self, f"Drucker {host} wirklich neu starten?", do_reboot)
+        messagebox.showinfo(APP_NAME, MANUAL_PRINTER_RESTART_HINT)

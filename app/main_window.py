@@ -22,7 +22,14 @@ from app.constants import (
     normalize_printer_model,
 )
 from creality_nfc.app_settings import DEFAULT_SETTINGS_PATH, AppSettings
-from creality_nfc.config import APP_NAME, APP_TAGLINE, APP_VERSION, GITHUB_RELEASES_REPO, GITHUB_URL
+from creality_nfc.config import (
+    APP_NAME,
+    APP_TAGLINE,
+    APP_VERSION,
+    GITHUB_RELEASES_REPO,
+    GITHUB_URL,
+    MANUAL_PRINTER_RESTART_HINT,
+)
 from creality_nfc.db_merge import merge_databases, merge_stats
 from creality_nfc.db_store import (
     db_path_for_printer,
@@ -50,7 +57,6 @@ from creality_nfc.materials import (
 from creality_nfc.printer_camera import printer_reachable
 from creality_nfc.printer_ssh import (
     download_database_from_printer,
-    reboot_printer,
     upload_database_to_printer,
     upload_options_to_printer,
 )
@@ -1721,9 +1727,8 @@ class TDFilamentStudioApp(AppTk):
         printer: str,
         *,
         with_options: bool,
-        with_reboot: bool,
     ) -> list[str]:
-        """Schreibt DB (+ optional Options, Neustart). Gibt Kurz-Meldungen zurück."""
+        """Schreibt DB (+ optional Options). Gibt Kurz-Meldungen zurück."""
         if not self.db_data:
             raise RuntimeError("Keine Material-Datenbank geladen.")
         steps: list[str] = []
@@ -1734,14 +1739,6 @@ class TDFilamentStudioApp(AppTk):
                 host, password, printer, build_material_options(self.db_data)
             )
             steps.append("material_options.json (Display-Menü) aktualisiert")
-        if with_reboot:
-            try:
-                via = reboot_printer(host, password)
-                steps.append(
-                    f"Neustart-Befehl gesendet ({via}) — Drucker ca. 2 Min. offline"
-                )
-            except Exception as exc:
-                steps.append(f"Neustart fehlgeschlagen: {exc}")
         return steps
 
     def _sync_db_push_flags_from_panel(self) -> None:
@@ -1751,7 +1748,6 @@ class TDFilamentStudioApp(AppTk):
             return
         self.settings.auto_push_db_to_printer = panel.auto_push_db.get()
         self.settings.auto_push_options_with_db = panel.auto_push_options.get()
-        self.settings.auto_reboot_after_db_push = panel.auto_reboot_db.get()
 
     def _notify_db_push_result(
         self,
@@ -1759,26 +1755,14 @@ class TDFilamentStudioApp(AppTk):
         steps: list[str],
         *,
         popup: bool,
-        reboot_requested: bool = False,
     ) -> None:
         body = f"Drucker {host}:\n\n" + "\n".join(f"• {s}" for s in steps)
-        rebooted = any(
-            "Neustart-Befehl gesendet" in s or "neu gestartet" in s for s in steps
+        body += f"\n\n{MANUAL_PRINTER_RESTART_HINT}"
+        self._set_status("Drucker-Sync OK — bitte manuell neu starten", "ok")
+        self.notify(
+            "Upload OK — Drucker bitte manuell neu starten (Strom aus/an).",
+            "ok",
         )
-        reboot_failed = any("Neustart fehlgeschlagen" in s for s in steps)
-        if rebooted and not reboot_failed:
-            body += "\n\nDer Drucker sollte jetzt neu starten (~2 Min. offline)."
-        elif reboot_requested and reboot_failed:
-            body += "\n\nNeustart per App nicht gelungen — bitte am Display neu starten."
-        elif reboot_requested:
-            body += (
-                "\n\nNeustart war eingeschaltet, wurde aber nicht ausgeführt. "
-                "Bitte Tab Drucker → „Drucker neu starten“ oder am Display."
-            )
-        elif "Options" in "".join(steps):
-            body += "\n\nTipp: Bei fehlenden Profilen am Display „Drucker neu starten“."
-        self._set_status("Drucker-Sync OK", "ok")
-        self.notify(body.replace("\n", " "), "ok")
         if popup:
             messagebox.showinfo(APP_NAME, body)
 
@@ -1787,7 +1771,6 @@ class TDFilamentStudioApp(AppTk):
         *,
         label: str = "Zum Drucker senden",
         with_options: bool | None = None,
-        with_reboot: bool | None = None,
         confirm: bool = True,
         popup_on_ok: bool = True,
     ) -> None:
@@ -1811,23 +1794,18 @@ class TDFilamentStudioApp(AppTk):
             if with_options is None
             else with_options
         )
-        do_reboot = (
-            self.settings.auto_reboot_after_db_push
-            if with_reboot is None
-            else with_reboot
-        )
         if confirm:
-            extra = []
-            if do_options:
-                extra.append("Display-Menü (Options)")
-            if do_reboot:
-                extra.append("Drucker-Neustart")
-            extra_txt = ("\n\nZusätzlich: " + ", ".join(extra)) if extra else ""
+            extra_txt = (
+                "\n\nZusätzlich: Display-Menü (Options)"
+                if do_options
+                else ""
+            )
             if not messagebox.askyesno(
                 APP_NAME,
                 f"Material-Datenbank auf {host} schreiben?{extra_txt}\n\n"
                 "Der K2 nutzt diese Datei beim RFID-Druck. "
-                "Creality Print wird nicht automatisch aktualisiert.",
+                "Creality Print wird nicht automatisch aktualisiert.\n\n"
+                "Danach: Drucker manuell neu starten (Strom aus/an).",
                 default="yes",
             ):
                 self.notify("Upload abgebrochen.", "info")
@@ -1839,14 +1817,11 @@ class TDFilamentStudioApp(AppTk):
                 password,
                 printer,
                 with_options=do_options,
-                with_reboot=do_reboot,
             )
 
         def on_ok(steps: list[str]) -> None:
             self._save_db()
-            self._notify_db_push_result(
-                host, steps, popup=popup_on_ok, reboot_requested=do_reboot
-            )
+            self._notify_db_push_result(host, steps, popup=popup_on_ok)
 
         self._run_ssh_job(label, work, on_ok=on_ok)
 

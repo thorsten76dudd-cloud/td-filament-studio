@@ -76,7 +76,7 @@ class FilamentEditorPanel(ttk.Frame):
                     command=self._save_and_push,
                     style="Secondary.TButton",
                 ),
-                "Lokal speichern und per SSH auf den K2 senden (DB + optional Options/Neustart).",
+                "Lokal speichern und per SSH auf den K2 senden (danach Drucker manuell neu starten).",
             ).pack(side="right")
 
         pad = {"padx": 8, "pady": 2}

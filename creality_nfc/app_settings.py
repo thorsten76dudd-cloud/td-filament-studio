@@ -37,7 +37,7 @@ class AppSettings:
     auto_push_db_to_printer: bool = False
     # Mit DB-Upload auch material_options.json (Display-Menü) aktualisieren.
     auto_push_options_with_db: bool = True
-    # Nach Upload Drucker neu starten (Profile am Touchscreen neu laden).
+    # Veraltet (ab 1.5.44): Neustart nur noch manuell (Strom aus/an).
     auto_reboot_after_db_push: bool = False
     # Bekannte funktionierende Kamera-Snapshot-URL pro Drucker-IP (schnellerer Start).
     camera_snapshot_by_host: dict[str, str] = field(default_factory=dict)
