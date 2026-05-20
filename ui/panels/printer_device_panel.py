@@ -70,7 +70,7 @@ if TYPE_CHECKING:
     from app.main_window import TDFilamentStudioApp
 
 PREVIEW_MIN = (320, 240)
-GCODE_PREVIEW_SCALE = 4.0
+GCODE_PREVIEW_MAX_UPSCALE = 8.0
 
 
 def _fmt_temp(cur, tgt) -> str:
@@ -404,16 +404,18 @@ class PrinterDevicePanel(ttk.Frame):
 
             host = self._gcode_preview_host
             host.update_idletasks()
-            w = max(280, host.winfo_width())
-            h = max(200, host.winfo_height())
+            w = max(320, host.winfo_width())
+            h = max(240, host.winfo_height())
             img = self._preview_pil.copy()
+            if img.mode not in ("RGB", "RGBA"):
+                img = img.convert("RGB")
             resample = getattr(Image, "Resampling", Image).LANCZOS
             iw, ih = img.size
             if iw > 0 and ih > 0:
-                scale = min(GCODE_PREVIEW_SCALE, w / iw, h / ih)
+                scale = min(GCODE_PREVIEW_MAX_UPSCALE, w / iw, h / ih)
                 nw = max(1, int(iw * scale))
                 nh = max(1, int(ih * scale))
-                if scale > 1.0 or nw < w or nh < h:
+                if nw != iw or nh != ih:
                     img = img.resize((nw, nh), resample)
             self._photo = ImageTk.PhotoImage(img)
             self.gcode_preview_label.config(image=self._photo, text="")
@@ -1394,6 +1396,10 @@ class PrinterDevicePanel(ttk.Frame):
         if self._gcode_sig(files) == self._gcode_sig(self._gcode_files):
             return
         self._gcode_files = files
+        try:
+            yview = self.file_list.yview()
+        except tk.TclError:
+            yview = (0.0, 1.0)
         sel = self.file_list.curselection()
         self.file_list.delete(0, tk.END)
         for f in files:
@@ -1413,6 +1419,10 @@ class PrinterDevicePanel(ttk.Frame):
             self.file_list.insert(tk.END, label)
         if sel and sel[0] < len(files):
             self.file_list.selection_set(sel[0])
+        try:
+            self.file_list.yview_moveto(yview[0])
+        except tk.TclError:
+            pass
 
     def _selected_gcode_entry(self) -> dict | None:
         sel = self.file_list.curselection()
@@ -1452,9 +1462,10 @@ class PrinterDevicePanel(ttk.Frame):
                 f.get("path") or ""
             ) == (entry.get("path") or ""):
                 try:
+                    yview = self.file_list.yview()
                     self.file_list.selection_clear(0, tk.END)
                     self.file_list.selection_set(i)
-                    self.file_list.see(i)
+                    self.file_list.yview_moveto(yview[0])
                 except tk.TclError:
                     pass
                 self._last_gcode_entry = f

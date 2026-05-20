@@ -190,9 +190,48 @@ def fetch_camera_snapshot(
     return fetch_image_urls(urls, timeout=timeout)
 
 
+def _image_pixel_count(data: bytes) -> int:
+    try:
+        import io
+
+        from PIL import Image
+
+        with Image.open(io.BytesIO(data)) as im:
+            w, h = im.size
+            return max(1, w * h)
+    except Exception:
+        return len(data)
+
+
 def fetch_image_urls(urls: list[str], timeout: float = 4.0) -> tuple[bytes, str] | None:
+    """Lädt Thumbnails parallel und wählt die größte Auflösung (schärfere Vorschau)."""
+    if not urls:
+        return None
+    if len(urls) == 1:
+        return fetch_image_url(urls[0], timeout=timeout)
+
+    from concurrent.futures import ThreadPoolExecutor, as_completed
+
+    per_url = max(0.55, timeout / len(urls))
+    best: tuple[bytes, str] | None = None
+    best_px = 0
+    with ThreadPoolExecutor(max_workers=min(6, len(urls))) as pool:
+        futures = {pool.submit(fetch_image_url, u, per_url): u for u in urls}
+        for fut in as_completed(futures, timeout=timeout + 0.25):
+            try:
+                hit = fut.result()
+            except Exception:
+                continue
+            if not hit:
+                continue
+            px = _image_pixel_count(hit[0])
+            if px > best_px:
+                best_px = px
+                best = hit
+    if best:
+        return best
     for url in urls:
-        shot = fetch_image_url(url, timeout=timeout)
+        shot = fetch_image_url(url, timeout=per_url)
         if shot:
             return shot
     return None

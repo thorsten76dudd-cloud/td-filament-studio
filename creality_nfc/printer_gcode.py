@@ -266,6 +266,20 @@ def parse_gcode_files(state: dict[str, Any]) -> list[dict[str, Any]]:
     return files
 
 
+def _thumbnail_url_size_hint(url: str) -> int:
+    """Größere Zahl = vermutlich höhere Auflösung (für Sortierung)."""
+    import re
+
+    m = re.search(r"(\d{2,4})\s*[x×]\s*(\d{2,4})", url, re.I)
+    if m:
+        return int(m.group(1)) * int(m.group(2))
+    m2 = re.search(r"_(\d{2,4})\.[^/]+$", url)
+    if m2:
+        side = int(m2.group(1))
+        return side * side
+    return 0
+
+
 def thumbnail_urls_for_file(host: str, entry: dict[str, Any]) -> list[str]:
     """Mögliche Thumbnail-URLs (Creality: /downloads/humbnail/…)."""
     host = normalize_host(host)
@@ -300,4 +314,5 @@ def thumbnail_urls_for_file(host: str, entry: dict[str, Any]) -> list[str]:
             add(f"http://{host}:80/downloads/humbnail/{quote(base, safe='')}.png")
             add(f"http://{host}:80/downloads/thumbnail/{quote(name, safe='')}")
 
+    urls.sort(key=_thumbnail_url_size_hint, reverse=True)
     return urls

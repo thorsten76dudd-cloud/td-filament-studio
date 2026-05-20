@@ -14,6 +14,11 @@ K2_CFS_PRINTERS: tuple[str, ...] = (
 
 DEFAULT_PRINTER = "K2 Pro"
 
+# Creality material_database.json → printerIntName (RFID-Tag / Profil)
+CREALITY_PRINTER_INT_TO_MODEL: dict[str, str] = {
+    "F008": "K2 Pro",
+}
+
 # Nur diese Modelle in Dropdowns (Drucker verwalten, RFID-Tab, …)
 PRINTER_OPTIONS = K2_CFS_PRINTERS
 
@@ -23,6 +28,19 @@ SUPPORTED_PRINTERS_SHORT = (
 )
 
 SKIP_DATA_JSON = frozenset({"printer_settings.json", "app_settings.json", "spools.json"})
+
+
+def printer_int_to_display(code: str) -> str:
+    """Interner Creality-Code (z. B. F008) → lesbares Modell (K2 Pro)."""
+    s = (code or "").strip().upper()
+    if not s:
+        return DEFAULT_PRINTER
+    hit = CREALITY_PRINTER_INT_TO_MODEL.get(s)
+    if hit:
+        return hit
+    if s in PRINTER_OPTIONS:
+        return s
+    return normalize_printer_model(code)
 
 
 def normalize_printer_model(label: str) -> str:
@@ -59,4 +77,6 @@ __all__ = [
     "ensure_data_dir",
     "is_supported_printer",
     "normalize_printer_model",
+    "printer_int_to_display",
+    "CREALITY_PRINTER_INT_TO_MODEL",
 ]

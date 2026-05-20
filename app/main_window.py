@@ -20,6 +20,7 @@ from app.constants import (
     SKIP_DATA_JSON,
     SUPPORTED_PRINTERS_SHORT,
     normalize_printer_model,
+    printer_int_to_display,
 )
 from creality_nfc.app_settings import DEFAULT_SETTINGS_PATH, AppSettings
 from creality_nfc.config import (
@@ -67,7 +68,7 @@ from creality_nfc.smartcard_service import (
     start_scard_elevated,
 )
 from creality_nfc.spool_inventory import Spool, SpoolInventory
-from creality_nfc.spool_profile import resolve_filament_profile
+from creality_nfc.spool_profile import format_spool_label, resolve_filament_profile
 from creality_nfc.cfs_adopt import CfsSlotInfo, match_profile_id
 from creality_nfc.cfs_spool_link import bind_slot, find_spool_for_deduct, find_spool_for_slot, slot_label
 from creality_nfc.cfs_feed import find_loaded_slot_index
@@ -1543,6 +1544,11 @@ class TDFilamentStudioApp(AppTk):
     def _refresh_profile_list(self) -> None:
         if not hasattr(self, "_profile_tree"):
             return
+        try:
+            yview = self._profile_tree.yview()
+        except tk.TclError:
+            yview = (0.0, 1.0)
+        sel = list(self._profile_tree.selection())
         q = self._db_list_search_var.get().strip().lower()
         self._profile_tree.delete(*self._profile_tree.get_children())
         shown = 0
@@ -1568,6 +1574,13 @@ class TDFilamentStudioApp(AppTk):
         else:
             self._profile_list_title.config(text=f"Alle {total} Material-Profile in der Datenbank")
         self._update_profile_tree_headings()
+        restore = [i for i in sel if self._profile_tree.exists(i)]
+        if restore:
+            self._profile_tree.selection_set(restore)
+        try:
+            self._profile_tree.yview_moveto(yview[0])
+        except tk.TclError:
+            pass
 
     def _profile_from_tree_selection(self) -> FilamentProfile | None:
         sel = self._profile_tree.selection()
@@ -2034,9 +2047,9 @@ class TDFilamentStudioApp(AppTk):
         sp.brand = profile.brand
         sp.material_name = profile.name
         sp.filament_id = profile.filament_id
-        sp.printer = self.printer_var.get().strip()
+        sp.printer = printer_int_to_display(self.printer_var.get().strip())
         if not sp.label or sp.label in ("Neue Spule", "Spule"):
-            sp.label = f"{profile.brand} — {profile.name}".strip(" —") or profile.name
+            sp.label = format_spool_label(profile.brand, profile.name)[:80]
 
     def _sync_spool_after_tag(
         self,
@@ -2068,13 +2081,13 @@ class TDFilamentStudioApp(AppTk):
 
         sp = Spool(
             id=SpoolInventory.new_id(),
-            label=f"{profile.brand} — {profile.name}"[:80],
+            label=format_spool_label(profile.brand, profile.name)[:80],
             brand=profile.brand,
             material_name=profile.name,
             filament_id=profile.filament_id,
             color_hex=self.color_hex,
             weight=self.weight_var.get(),
-            printer=self.printer_var.get().strip(),
+            printer=printer_int_to_display(self.printer_var.get().strip()),
             serial=serial,
             tag_uid=uid,
         )
@@ -2087,15 +2100,25 @@ class TDFilamentStudioApp(AppTk):
     def spool_from_form(self) -> Spool:
         profile = self._selected_profile()
         uid = self.uid_label.cget("text").strip()
+        if profile:
+            label = format_spool_label(profile.brand, profile.name)[:80]
+            brand = profile.brand
+            material = profile.name
+            fid = profile.filament_id
+        else:
+            label = "Neue Spule"
+            brand = self.brand_var.get()
+            material = self.material_var.get()
+            fid = ""
         return Spool(
             id=self._active_spool_id or SpoolInventory.new_id(),
-            label=profile.name if profile else "Neue Spule",
-            brand=profile.brand if profile else self.brand_var.get(),
-            material_name=profile.name if profile else self.material_var.get(),
-            filament_id=profile.filament_id if profile else "",
+            label=label,
+            brand=brand,
+            material_name=material,
+            filament_id=fid,
             color_hex=self.color_hex,
             weight=self.weight_var.get(),
-            printer=self.printer_var.get().strip(),
+            printer=printer_int_to_display(self.printer_var.get().strip()),
             serial=self.serial_var.get().strip() or "000001",
             tag_uid="" if uid == "—" else uid,
         )
@@ -3833,7 +3856,7 @@ class TDFilamentStudioApp(AppTk):
                 "Keine Release-Infos von GitHub.\n\n"
                 f"Repo: {GITHUB_RELEASES_REPO}\n"
                 f"{GITHUB_URL}/releases\n\n"
-                "Nach dem Upload: Release mit Tag (z. B. v1.5.31) anlegen "
+                "Nach dem Upload: Release mit Tag (z. B. v1.5.52-stable) anlegen "
                 "und Setup-EXE als Asset anhängen.",
                 "warn",
             )

@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import json
+import re
 import uuid
 from dataclasses import asdict, dataclass, field
 from datetime import datetime, timezone
@@ -27,6 +28,22 @@ except ImportError:
 
 def _now() -> str:
     return datetime.now(timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ")
+
+
+def parse_cfs_slot_index(text: str) -> int | None:
+    """CFS-S1, CFS_S4, Slot 1A … → Index 0–3 (1A–1D)."""
+    t = (text or "").strip().upper()
+    if not t:
+        return None
+    m = re.search(r"CFS[-_\s]*S?\s*([1-4])\b", t, re.I)
+    if m:
+        n = int(m.group(1))
+        if 1 <= n <= 4:
+            return n - 1
+    for i, lab in enumerate(SLOT_LABELS):
+        if re.search(rf"\b{re.escape(lab)}\b", t):
+            return i
+    return None
 
 
 def usage_entry(*, grams: int, note: str = "", remaining_after: int | None = None) -> dict:
@@ -125,17 +142,35 @@ class Spool:
         parts = [self.label or self.material_name or "Spule"]
         if self.remaining_g is not None:
             parts.append(f"({self.remaining_g}g)")
-        if self.cfs_slot is not None and 0 <= self.cfs_slot <= 3:
-            parts.append(f"CFS {SLOT_LABELS[self.cfs_slot]}")
+        slot = self.effective_cfs_slot()
+        if slot is not None:
+            parts.append(f"CFS {SLOT_LABELS[slot]}")
         if self.all_tag_uids():
             n = len(self.all_tag_uids())
             parts.append("RFID" if n == 1 else f"RFID×{n}")
         return " ".join(parts)
 
+    def effective_cfs_slot(self) -> int | None:
+        """Gesetzter CFS-Slot oder aus Bemerkung (z. B. CFS-S3)."""
+        if self.cfs_slot is not None and 0 <= int(self.cfs_slot) <= 3:
+            return int(self.cfs_slot)
+        return parse_cfs_slot_index(self.notes)
+
+    def sync_cfs_slot_from_notes(self) -> bool:
+        """Bemerkung CFS-S1… → cfs_slot; True wenn Feld gesetzt wurde."""
+        if self.cfs_slot is not None and 0 <= int(self.cfs_slot) <= 3:
+            return False
+        idx = parse_cfs_slot_index(self.notes)
+        if idx is None:
+            return False
+        self.cfs_slot = idx
+        return True
+
     def cfs_slot_label(self) -> str:
-        if self.cfs_slot is None or not (0 <= self.cfs_slot <= 3):
+        idx = self.effective_cfs_slot()
+        if idx is None:
             return ""
-        return SLOT_LABELS[self.cfs_slot]
+        return SLOT_LABELS[idx]
 
 
 class SpoolInventory:
@@ -152,6 +187,7 @@ class SpoolInventory:
             raw = json.loads(self.path.read_text(encoding="utf-8"))
             known = {f.name for f in Spool.__dataclass_fields__.values()}  # type: ignore[attr-defined]
             rows: list[Spool] = []
+            migrated = False
             for row in raw.get("spools", []):
                 filtered = {k: v for k, v in row.items() if k in known}
                 if "usage_log" not in filtered or not isinstance(filtered.get("usage_log"), list):
@@ -165,8 +201,23 @@ class SpoolInventory:
                     ]
                 if filtered.get("color_hex"):
                     filtered["color_hex"] = normalize_hex(str(filtered["color_hex"]))
-                rows.append(Spool(**filtered))
+                try:
+                    from app.constants import printer_int_to_display
+
+                    if filtered.get("printer"):
+                        filtered["printer"] = printer_int_to_display(str(filtered["printer"]))
+                except ImportError:
+                    pass
+                sp = Spool(**filtered)
+                if sp.sync_cfs_slot_from_notes():
+                    migrated = True
+                rows.append(sp)
             self.spools = rows
+            if migrated:
+                try:
+                    self.save()
+                except OSError:
+                    pass
         except Exception:
             self.spools = []
 
@@ -179,12 +230,14 @@ class SpoolInventory:
         )
 
     def add(self, spool: Spool) -> Spool:
+        spool.sync_cfs_slot_from_notes()
         self._clear_slot_conflict(spool)
         self.spools.append(spool)
         self.save()
         return spool
 
     def update(self, spool: Spool) -> None:
+        spool.sync_cfs_slot_from_notes()
         self._clear_slot_conflict(spool)
         for i, s in enumerate(self.spools):
             if s.id == spool.id:
@@ -222,7 +275,7 @@ class SpoolInventory:
 
     def find_by_cfs_slot(self, slot_index: int) -> Spool | None:
         for s in self.spools:
-            if s.cfs_slot == slot_index:
+            if s.effective_cfs_slot() == slot_index:
                 return s
         return None
 
@@ -231,4 +284,12 @@ class SpoolInventory:
         return uuid.uuid4().hex[:12]
 
     def sorted_spools(self) -> list[Spool]:
-        return sorted(self.spools, key=lambda s: s.label.lower())
+        """CFS-Slots 1A–1D zuerst (im Einsatz), danach alphabetisch nach Bezeichnung."""
+
+        def sort_key(s: Spool) -> tuple:
+            slot = s.effective_cfs_slot()
+            if slot is not None:
+                return (0, slot, "")
+            return (1, 0, (s.label or s.material_name or "").lower())
+
+        return sorted(self.spools, key=sort_key)

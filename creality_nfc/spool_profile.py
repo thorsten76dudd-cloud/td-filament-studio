@@ -2,8 +2,92 @@
 
 from __future__ import annotations
 
+import json
+from typing import Any
+
+from creality_nfc.color_util import creality_color_to_hex
+from creality_nfc.db_store import find_item
 from creality_nfc.materials import FilamentProfile, normalize_filament_id
 from creality_nfc.spool_inventory import Spool
+
+try:
+    from ui.color_swatch import normalize_hex
+except ImportError:
+
+    def normalize_hex(color: str) -> str:  # pragma: no cover
+        h = str(color or "").strip().lstrip("#").upper()
+        h = "".join(c for c in h if c in "0123456789ABCDEF")
+        if len(h) >= 6:
+            return h[-6:]
+        return "FFFFFF"
+
+
+def _kv_from_item(item: dict) -> dict[str, Any]:
+    raw = item.get("kvParam") or item.get("engine_data") or {}
+    if isinstance(raw, dict):
+        return raw
+    if isinstance(raw, str) and raw.strip():
+        try:
+            parsed = json.loads(raw)
+            if isinstance(parsed, dict):
+                return parsed
+        except json.JSONDecodeError:
+            pass
+    return {}
+
+
+def profile_color_from_db(data: dict | None, profile: FilamentProfile) -> str:
+    """Profilfarbe aus kvParam (default_filament_colour), falls in der DB vorhanden."""
+    if not data:
+        return ""
+    item = find_item(
+        data,
+        profile.filament_id,
+        brand=profile.brand,
+        name=profile.name,
+    )
+    if not item:
+        return ""
+    kv = _kv_from_item(item)
+    raw = kv.get("default_filament_colour") or kv.get("filament_colour") or ""
+    if isinstance(raw, (list, tuple)) and raw:
+        raw = raw[0]
+    hx = creality_color_to_hex(str(raw))
+    return normalize_hex(hx.lstrip("#")) if hx else ""
+
+
+def format_spool_label(brand: str, name: str) -> str:
+    """Einheitliche Bezeichnung wie nach RFID-Sync: „Marke — Material“."""
+    b = (brand or "").strip()
+    n = (name or "").strip()
+    if b and n:
+        return f"{b} — {n}"
+    return n or b or "Spule"
+
+
+def spool_fields_from_profile(
+    profile: FilamentProfile,
+    data: dict | None = None,
+    *,
+    current_label: str = "",
+) -> dict[str, str]:
+    """Felder für Spulen-Formular aus Material-DB-Profil."""
+    try:
+        from app.constants import printer_int_to_display
+    except ImportError:
+        printer_int_to_display = lambda x: (x or "").strip() or "K2 Pro"  # pragma: no cover
+
+    fid = normalize_filament_id(profile.filament_id) or profile.filament_id
+    label = format_spool_label(profile.brand, profile.name)
+    color = profile_color_from_db(data, profile)
+    return {
+        "label": label[:80],
+        "brand": profile.brand,
+        "material_name": profile.name,
+        "filament_id": fid,
+        "color_hex": color,
+        "printer": printer_int_to_display(profile.printer),
+    }
 
 
 def resolve_filament_profile(

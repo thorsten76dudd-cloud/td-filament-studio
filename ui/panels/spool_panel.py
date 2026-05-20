@@ -5,14 +5,19 @@ from __future__ import annotations
 import tkinter as tk
 import tkinter.font as tkfont
 from pathlib import Path
-from tkinter import filedialog, ttk
-from typing import TYPE_CHECKING
+from tkinter import colorchooser, filedialog, ttk
+from typing import TYPE_CHECKING, Callable
 
+from app.constants import printer_int_to_display
 from creality_nfc.cfs_adopt import SLOT_LABELS
-from creality_nfc.spool_inventory import Spool, SpoolInventory
+from creality_nfc.materials import FilamentProfile
+from creality_nfc.spool_inventory import Spool, SpoolInventory, parse_cfs_slot_index
+from creality_nfc.spool_profile import spool_fields_from_profile
 from creality_nfc.spool_usage import deduct_grams, is_low_filament, weight_class_to_grams
 from creality_nfc.tag_io import WEIGHT_CODES
+from ui.color_presets_menu import show_color_presets
 from ui.color_swatch import apply_preview_label, make_swatch_photo, normalize_hex
+from ui.profile_pick_dialog import ask_filament_profile
 from ui.components import scrollable_tab
 from ui.dialog_theme import prepare_toplevel
 from ui.theme import BG_SUBTLE, CARD, ERR, F_BODY, F_SECTION, TEXT, WARN
@@ -32,6 +37,8 @@ class SpoolEditPanel(ttk.LabelFrame):
         self._tag_uid = ""
         self._extra_tag_uids: list[str] = []
         self._usage_log: list[dict] = []
+        self._profiles_fn: Callable[[], list[FilamentProfile]] | None = None
+        self._db_data_fn: Callable[[], dict | None] | None = None
         pad = {"padx": 8, "pady": 3}
 
         self.label_var = tk.StringVar()
@@ -64,6 +71,19 @@ class SpoolEditPanel(ttk.LabelFrame):
             ttk.Label(form, text=text, style="Muted.TLabel").pack(anchor="w", **pad)
             ttk.Entry(form, textvariable=var).pack(fill="x", **pad)
 
+        db_row = ttk.Frame(form)
+        db_row.pack(fill="x", padx=8, pady=(4, 2))
+        self._btn_from_db = tip(
+            ttk.Button(
+                db_row,
+                text="Aus Material-DB übernehmen…",
+                command=self._apply_from_material_db,
+                style="Accent.TButton",
+            ),
+            "Marke, Material, Filament-ID und Profilfarbe aus der Material-Datenbank laden.",
+        )
+        self._btn_from_db.pack(side="left")
+
         ttk.Label(form, text="Farbe", style="Muted.TLabel").pack(anchor="w", **pad)
         color_row = ttk.Frame(form)
         color_row.pack(fill="x", padx=8, pady=(0, 3))
@@ -76,9 +96,22 @@ class SpoolEditPanel(ttk.LabelFrame):
             bg="#FFFFFF",
             text="",
         )
-        self._color_preview.pack(side="left", padx=(0, 8))
-        ttk.Entry(color_row, textvariable=self.color_var).pack(side="left", fill="x", expand=True)
+        self._color_preview.pack(side="left", padx=(0, 6))
+        ttk.Entry(color_row, textvariable=self.color_var, width=10).pack(side="left")
         self.color_var.trace_add("write", lambda *_: self._update_color_preview())
+        self._btn_color_pick = tip(
+            ttk.Button(color_row, text="Farbe…", command=self._pick_color_dialog, style="Secondary.TButton"),
+            "Windows-Farbauswahl (wie im RFID-Tab).",
+        )
+        self._btn_color_pick.pack(side="left", padx=(6, 0))
+        self._btn_color_presets = tip(
+            ttk.Button(color_row, text="Presets", command=self._show_color_presets, style="Secondary.TButton"),
+            "Standard-Filamentfarben (Schwarz, Weiß, Creality Blau …).",
+        )
+        self._btn_color_presets.pack(side="left", padx=(4, 0))
+        ttk.Label(form, text="Hex ohne # — oder Farbe… / Presets", style="Muted.TLabel").pack(
+            anchor="w", padx=8, pady=(0, 4)
+        )
         self._update_color_preview()
 
         ttk.Label(form, text="Gewichtsklasse", style="Muted.TLabel").pack(anchor="w", **pad)
@@ -161,6 +194,14 @@ class SpoolEditPanel(ttk.LabelFrame):
     def set_save_handler(self, handler) -> None:
         self._save_cb = handler
 
+    def set_material_db_access(
+        self,
+        profiles_fn: Callable[[], list[FilamentProfile]],
+        db_data_fn: Callable[[], dict | None],
+    ) -> None:
+        self._profiles_fn = profiles_fn
+        self._db_data_fn = db_data_fn
+
     def _save_click(self) -> None:
         sp = self.build_spool()
         if sp and self._save_cb:
@@ -197,6 +238,60 @@ class SpoolEditPanel(ttk.LabelFrame):
 
     def _update_color_preview(self) -> None:
         apply_preview_label(self._color_preview, self.color_var.get())
+
+    def _apply_color_hex(self, hex_code: str) -> None:
+        self.color_var.set(normalize_hex(hex_code))
+        self._update_color_preview()
+
+    def _pick_color_dialog(self) -> None:
+        current = normalize_hex(self.color_var.get())
+        _, hex_color = colorchooser.askcolor(
+            parent=self.winfo_toplevel(),
+            color="#" + current,
+            title="Filamentfarbe",
+        )
+        if hex_color:
+            self._apply_color_hex(hex_color.lstrip("#"))
+
+    def _show_color_presets(self) -> None:
+        show_color_presets(self, self._btn_color_presets, self._apply_color_hex)
+
+    def _apply_from_material_db(self) -> None:
+        if not self._profiles_fn:
+            notify(self, "Material-DB nicht verbunden.", "error")
+            return
+        profiles = list(self._profiles_fn() or [])
+        if not profiles:
+            notify(
+                self,
+                "Keine Profile geladen — Tab „Material-DB“ → „Vom Drucker (SSH)“.",
+                "warn",
+            )
+            return
+        picked = ask_filament_profile(self, profiles)
+        if not picked:
+            return
+        data = self._db_data_fn() if self._db_data_fn else None
+        fields = spool_fields_from_profile(
+            picked,
+            data,
+            current_label=self.label_var.get(),
+        )
+        self.brand_var.set(fields["brand"])
+        self.material_var.set(fields["material_name"])
+        self.fid_var.set(fields["filament_id"])
+        if fields.get("label"):
+            self.label_var.set(fields["label"])
+        if fields.get("printer"):
+            self.printer_var.set(fields["printer"])
+        if fields.get("color_hex"):
+            self.color_var.set(fields["color_hex"])
+        self._update_color_preview()
+        notify(
+            self,
+            f"Übernommen: {picked.brand} — {picked.name} (ID {picked.filament_id})",
+            "ok",
+        )
 
     def _listed_tag_uids(self) -> list[str]:
         out: list[str] = []
@@ -304,7 +399,7 @@ class SpoolEditPanel(ttk.LabelFrame):
         self.fid_var.set(sp.filament_id)
         self.color_var.set(sp.color_hex)
         self.weight_var.set(sp.weight or "1 KG")
-        self.printer_var.set(sp.printer)
+        self.printer_var.set(printer_int_to_display(sp.printer))
         self.serial_var.set(sp.serial)
         self.remaining_var.set("" if sp.remaining_g is None else str(sp.remaining_g))
         self.notes_var.set(sp.notes)
@@ -326,6 +421,9 @@ class SpoolEditPanel(ttk.LabelFrame):
                 notify(self, "Restgewicht muss eine Zahl sein.", "warn")
                 return None
         color = self.color_var.get().strip().lstrip("#").upper()[:6] or "FFFFFF"
+        cfs_slot = self._parse_cfs_slot()
+        if cfs_slot is None:
+            cfs_slot = parse_cfs_slot_index(self.notes_var.get())
         return Spool(
             id=self._spool_id,
             label=self.label_var.get().strip() or "Unbenannt",
@@ -334,13 +432,13 @@ class SpoolEditPanel(ttk.LabelFrame):
             filament_id=fid.zfill(5)[-5:] if fid else "",
             color_hex=color,
             weight=self.weight_var.get(),
-            printer=self.printer_var.get().strip(),
+            printer=printer_int_to_display(self.printer_var.get().strip()),
             serial=self.serial_var.get().strip() or "000001",
             remaining_g=remaining,
             tag_uid=self._tag_uid,
             extra_tag_uids=list(self._extra_tag_uids),
             notes=self.notes_var.get().strip(),
-            cfs_slot=self._parse_cfs_slot(),
+            cfs_slot=cfs_slot,
             usage_log=list(self._usage_log),
         )
 
@@ -364,6 +462,15 @@ class SpoolManagerPanel(ttk.Frame):
             ttk.Button(top, text="Aus RFID-Tab übernehmen", command=self._from_current),
             "Aktuelle Daten aus dem RFID-Tab als neue Spule übernehmen.",
         ).pack(side="left", padx=6)
+        tip(
+            ttk.Button(
+                top,
+                text="Aus Material-DB…",
+                command=self._from_material_db_toolbar,
+                style="Secondary.TButton",
+            ),
+            "Profil aus Material-DB in die bearbeitete Spule übernehmen.",
+        ).pack(side="left", padx=2)
         tip(
             ttk.Button(top, text="Duplizieren", command=self._duplicate_selected, style="Secondary.TButton"),
             "Ausgewählte Spule als Kopie anlegen.",
@@ -460,6 +567,10 @@ class SpoolManagerPanel(ttk.Frame):
         self.edit_panel = SpoolEditPanel(right)
         self.edit_panel.pack(fill="both", expand=True, padx=(8, 0))
         self.edit_panel.set_save_handler(self._persist_spool)
+        self.edit_panel.set_material_db_access(
+            lambda: self.app.profiles,
+            lambda: self.app.db_data,
+        )
 
         ttk.Label(
             self,
@@ -645,6 +756,9 @@ class SpoolManagerPanel(ttk.Frame):
     def _from_current(self) -> None:
         self.edit_panel.load_spool(self.app.spool_from_form())
         self.tree.selection_remove(self.tree.selection())
+
+    def _from_material_db_toolbar(self) -> None:
+        self.edit_panel._apply_from_material_db()
 
     def _deduct_apply(self) -> None:
         sp = self._selected()

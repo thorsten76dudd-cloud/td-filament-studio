@@ -1,4 +1,4 @@
-"""Eingebetteter Filament-Editor (Tab Material-Datenbank)."""
+"""Eingebetteter Filament-Editor (Tab Filament-Profil)."""
 
 from __future__ import annotations
 
@@ -12,7 +12,9 @@ from creality_nfc.config import MATERIAL_DB_PRINTER_ONLY
 from creality_nfc.db_lock import is_item_locked, set_item_locked
 from creality_nfc.db_store import add_or_update_item, find_item, new_filament_item
 from creality_nfc.materials import FilamentProfile
+from ui.components import scrollable_tab, section
 from ui.dialog_theme import theme_dialog
+from ui.theme import ACCENT, BG, CARD, MUTED, TEXT, apply_text_area_style
 from ui.tooltip import tip
 from ui.messaging import notify
 
@@ -58,32 +60,11 @@ class FilamentEditorPanel(ttk.Frame):
         self._template_item: dict | None = None
         self._print_vars: dict[str, tk.StringVar] = {}
         self._base_entries: list[tk.Widget] = []
+        self._readonly_value_labels: dict[str, tk.Label] = {}
         self._type_combo: ttk.Combobox | None = None
         self._lock_cb: ttk.Checkbutton | None = None
         self._print_entries: list[tk.Widget] = []
 
-        hdr = ttk.Frame(self)
-        hdr.pack(fill="x", padx=4, pady=(4, 0))
-        title_txt = "Profil (nur Lesen)" if self._readonly else "Filament bearbeiten"
-        self._title = ttk.Label(hdr, text=title_txt, font=("Segoe UI", 11, "bold"))
-        self._title.pack(side="left")
-        if not self._readonly:
-            tip(
-                ttk.Button(hdr, text="Zurücksetzen", command=self._clear_form, style="Secondary.TButton"),
-                "Alle Felder leeren (neues Profil vorbereiten).",
-            ).pack(side="right", padx=4)
-            tip(
-                ttk.Button(hdr, text="In Datenbank speichern", command=self._save, style="Accent.TButton"),
-                "Nur lokal (k2_pro.json). Der Drucker wird nicht überschrieben.",
-            ).pack(side="right", padx=(0, 4))
-        else:
-            ttk.Label(
-                hdr,
-                text="Nur Ansicht — Änderungen in Creality Print / am Drucker",
-                style="Muted.TLabel",
-            ).pack(side="right", padx=(8, 4))
-
-        pad = {"padx": 8, "pady": 2}
         self.fid_var = tk.StringVar()
         self.brand_var = tk.StringVar(value="Generic")
         self.name_var = tk.StringVar()
@@ -92,11 +73,148 @@ class FilamentEditorPanel(ttk.Frame):
         self.max_var = tk.StringVar(value="220")
         self.lock_var = tk.BooleanVar(value=False)
 
-        nb = ttk.Notebook(self)
-        nb.pack(fill="both", expand=True, padx=4, pady=6)
+        self._build_header()
+        self.nb = ttk.Notebook(self)
+        self.nb.pack(fill="both", expand=True, padx=8, pady=(4, 8))
 
-        tab_base = ttk.Frame(nb)
-        nb.add(tab_base, text="  Basis  ")
+        if self._readonly:
+            self._build_readonly_tabs()
+        else:
+            self._build_editable_tabs()
+
+        self._clear_form()
+
+    def _build_header(self) -> None:
+        hdr = ttk.Frame(self)
+        hdr.pack(fill="x", padx=8, pady=(8, 4))
+        title_txt = "Profil — nur Anzeige" if self._readonly else "Filament bearbeiten"
+        self._title = ttk.Label(hdr, text=title_txt, font=("Segoe UI", 12, "bold"))
+        self._title.pack(side="left")
+        if self._readonly:
+            ttk.Label(
+                hdr,
+                text="Änderungen in Creality Print / am Drucker",
+                style="Muted.TLabel",
+            ).pack(side="right", padx=(12, 0))
+        else:
+            tip(
+                ttk.Button(hdr, text="Zurücksetzen", command=self._clear_form, style="Secondary.TButton"),
+                "Alle Felder leeren (neues Profil vorbereiten).",
+            ).pack(side="right", padx=4)
+            tip(
+                ttk.Button(hdr, text="In Datenbank speichern", command=self._save, style="Accent.TButton"),
+                "Nur lokal (k2_pro.json). Der Drucker wird nicht überschrieben.",
+            ).pack(side="right", padx=(0, 4))
+
+        if self._readonly:
+            self._summary_host = tk.Frame(self, bg=CARD, highlightbackground=MUTED, highlightthickness=1)
+            self._summary_host.pack(fill="x", padx=8, pady=(0, 6))
+            inner = tk.Frame(self._summary_host, bg=CARD, padx=14, pady=12)
+            inner.pack(fill="x")
+            self._summary_name = tk.Label(
+                inner,
+                text="—",
+                bg=CARD,
+                fg=TEXT,
+                font=("Segoe UI", 14, "bold"),
+                anchor="w",
+            )
+            self._summary_name.pack(anchor="w")
+            self._summary_sub = tk.Label(
+                inner,
+                text="Marke · ID · Typ",
+                bg=CARD,
+                fg=MUTED,
+                font=("Segoe UI", 10),
+                anchor="w",
+            )
+            self._summary_sub.pack(anchor="w", pady=(4, 0))
+            self._summary_temp = tk.Label(
+                inner,
+                text="",
+                bg=CARD,
+                fg=ACCENT,
+                font=("Segoe UI", 10),
+                anchor="w",
+            )
+            self._summary_temp.pack(anchor="w", pady=(6, 0))
+
+    def _build_readonly_tabs(self) -> None:
+        tab_base = ttk.Frame(self.nb)
+        self.nb.add(tab_base, text="  Übersicht  ")
+        grid_host = section(tab_base, "Stammdaten")
+        grid_host.pack(fill="x", padx=4, pady=6)
+        for col in range(4):
+            grid_host.columnconfigure(col, weight=1 if col % 2 == 1 else 0)
+        self._readonly_value_labels.clear()
+        fields = (
+            ("fid", "Material-ID"),
+            ("brand", "Marke"),
+            ("name", "Name"),
+            ("type", "Typ"),
+            ("min", "Min °C"),
+            ("max", "Max °C"),
+        )
+        for row, (key, label) in enumerate(fields):
+            r = row // 2
+            c = (row % 2) * 2
+            ttk.Label(grid_host, text=label, style="Muted.TLabel").grid(
+                row=r, column=c, sticky="w", padx=(8, 4), pady=6
+            )
+            val = tk.Label(
+                grid_host,
+                text="—",
+                bg=BG,
+                fg=TEXT,
+                font=("Segoe UI", 10),
+                anchor="w",
+            )
+            val.grid(row=r, column=c + 1, sticky="ew", padx=(0, 16), pady=6)
+            self._readonly_value_labels[key] = val
+
+        tab_print = ttk.Frame(self.nb)
+        self.nb.add(tab_print, text="  Druckparameter  ")
+        scroll_frame = ttk.Frame(tab_print)
+        scroll_frame.pack(fill="both", expand=True, padx=4, pady=4)
+        _canvas, scroll_inner = scrollable_tab(scroll_frame)
+        print_sec = section(scroll_inner, "Temperaturen & Flow")
+        print_sec.pack(fill="x", padx=2, pady=4)
+        print_sec.columnconfigure(1, weight=1)
+        print_sec.columnconfigure(3, weight=1)
+        for i, (key, label) in enumerate(PRINT_FIELDS):
+            r = i // 2
+            col_base = (i % 2) * 2
+            ttk.Label(print_sec, text=label, style="Muted.TLabel").grid(
+                row=r, column=col_base, sticky="w", padx=(8, 4), pady=5
+            )
+            var = tk.StringVar()
+            self._print_vars[key] = var
+            val_lbl = tk.Label(
+                print_sec,
+                text="—",
+                bg=BG,
+                fg=TEXT,
+                font=("Segoe UI", 10),
+                anchor="w",
+            )
+            val_lbl.grid(row=r, column=col_base + 1, sticky="ew", padx=(0, 12), pady=5)
+            self._readonly_value_labels[f"print_{key}"] = val_lbl
+
+        tab_json = ttk.Frame(self.nb)
+        self.nb.add(tab_json, text="  JSON (kvParam)  ")
+        ttk.Label(
+            tab_json,
+            text="Rohdaten vom Drucker — Erklärungen im Tab „Hilfe“ → JSON kvParam.",
+            style="Muted.TLabel",
+        ).pack(anchor="w", padx=10, pady=(8, 4))
+        self.param_text = scrolledtext.ScrolledText(tab_json, height=14, font=("Consolas", 10))
+        self.param_text.pack(fill="both", expand=True, padx=10, pady=(0, 10))
+        apply_text_area_style(self.param_text)
+
+    def _build_editable_tabs(self) -> None:
+        pad = {"padx": 8, "pady": 2}
+        tab_base = ttk.Frame(self.nb)
+        self.nb.add(tab_base, text="  Basis  ")
         ttk.Label(tab_base, text="ID (5 Ziffern)").pack(anchor="w", **pad)
         e_fid = ttk.Entry(tab_base, textvariable=self.fid_var)
         e_fid.pack(fill="x", **pad)
@@ -129,16 +247,16 @@ class FilamentEditorPanel(ttk.Frame):
             text="Vor Cloud/Drucker-Update schützen (eigene Einstellungen behalten)",
             variable=self.lock_var,
         )
-        if not self._readonly:
-            self._lock_cb.pack(anchor="w", **pad)
+        self._lock_cb.pack(anchor="w", **pad)
 
-        tab_print = ttk.Frame(nb)
-        nb.add(tab_print, text="  Druckparameter  ")
-        scroll = ttk.Frame(tab_print)
-        scroll.pack(fill="both", expand=True)
+        tab_print = ttk.Frame(self.nb)
+        self.nb.add(tab_print, text="  Druckparameter  ")
+        scroll_outer = ttk.Frame(tab_print)
+        scroll_outer.pack(fill="both", expand=True)
+        _canvas, scroll = scrollable_tab(scroll_outer)
         for key, label in PRINT_FIELDS:
             rowp = ttk.Frame(scroll)
-            rowp.pack(fill="x", **pad)
+            rowp.pack(fill="x", padx=8, pady=3)
             ttk.Label(rowp, text=label, width=22).pack(side="left")
             var = tk.StringVar()
             self._print_vars[key] = var
@@ -146,8 +264,8 @@ class FilamentEditorPanel(ttk.Frame):
             pe.pack(side="left", fill="x", expand=True)
             self._print_entries.append(pe)
 
-        tab_json = ttk.Frame(nb)
-        nb.add(tab_json, text="  JSON (kvParam)  ")
+        tab_json = ttk.Frame(self.nb)
+        self.nb.add(tab_json, text="  JSON (kvParam)  ")
         ttk.Label(
             tab_json,
             text="Vollständiges kvParam — Erklärungen im Tab „Hilfe“ → JSON kvParam.",
@@ -155,29 +273,47 @@ class FilamentEditorPanel(ttk.Frame):
         ).pack(anchor="w", **pad)
         self.param_text = scrolledtext.ScrolledText(tab_json, height=12, font=("Consolas", 9))
         self.param_text.pack(fill="both", expand=True, padx=8, pady=4)
+        apply_text_area_style(self.param_text)
 
-        self._clear_form()
-        self._apply_readonly_widgets()
-
-    def _apply_readonly_widgets(self) -> None:
+    def _update_readonly_display(self) -> None:
         if not self._readonly:
             return
-        for w in self._base_entries:
-            if isinstance(w, ttk.Entry):
-                w.configure(state="disabled")
-        for w in self._print_entries:
-            if isinstance(w, ttk.Entry):
-                w.configure(state="disabled")
-        if self._type_combo is not None:
-            self._type_combo.configure(state="disabled")
-        self.param_text.configure(state="disabled")
+        name = self.name_var.get().strip() or "—"
+        brand = self.brand_var.get().strip() or "—"
+        fid = self.fid_var.get().strip() or "—"
+        mtype = self.type_var.get().strip() or "—"
+        self._summary_name.config(text=name if name != "—" else brand)
+        self._summary_sub.config(text=f"{brand}  ·  ID {fid}  ·  {mtype}")
+        min_t = self.min_var.get().strip()
+        max_t = self.max_var.get().strip()
+        if min_t or max_t:
+            self._summary_temp.config(text=f"Temperaturbereich: {min_t} – {max_t} °C")
+        else:
+            self._summary_temp.config(text="")
+        mapping = {
+            "fid": fid,
+            "brand": brand,
+            "name": name,
+            "type": mtype,
+            "min": f"{min_t} °C" if min_t else "—",
+            "max": f"{max_t} °C" if max_t else "—",
+        }
+        for key, text in mapping.items():
+            lbl = self._readonly_value_labels.get(key)
+            if lbl is not None:
+                lbl.config(text=text or "—")
+        for key, var in self._print_vars.items():
+            lbl = self._readonly_value_labels.get(f"print_{key}")
+            if lbl is not None:
+                val = var.get().strip()
+                lbl.config(text=val if val else "—")
 
     def set_db_data(self, db_data: dict) -> None:
         self.db_data = db_data
 
     def load_new(self, template_item: dict | None = None) -> None:
         if self._readonly:
-            self._title.config(text="Profil (nur Lesen)")
+            self._title.config(text="Profil — nur Anzeige")
             self._template_item = template_item
             self._existing_item = None
             self._apply_item(template_item)
@@ -188,8 +324,10 @@ class FilamentEditorPanel(ttk.Frame):
         self._apply_item(template_item)
 
     def load_edit(self, profile: FilamentProfile) -> None:
-        prefix = "Ansehen:" if self._readonly else "Bearbeiten:"
-        self._title.config(text=f"{prefix} {profile.brand} — {profile.name}")
+        if self._readonly:
+            self._title.config(text=f"Ansehen: {profile.brand} — {profile.name}")
+        else:
+            self._title.config(text=f"Bearbeiten: {profile.brand} — {profile.name}")
         self._template_item = None
         self._existing_item = find_item(
             self.db_data,
@@ -225,7 +363,21 @@ class FilamentEditorPanel(ttk.Frame):
         self.param_text.insert("1.0", json.dumps(kv, indent=2, ensure_ascii=False))
         if self._readonly:
             self.param_text.configure(state="disabled")
-            self._apply_readonly_widgets()
+            self._update_readonly_display()
+
+    def _apply_readonly_widgets(self) -> None:
+        if not self._readonly:
+            return
+        for w in self._base_entries:
+            if isinstance(w, ttk.Entry):
+                w.configure(state="disabled")
+        for w in self._print_entries:
+            if isinstance(w, ttk.Entry):
+                w.configure(state="disabled")
+        if self._type_combo is not None:
+            self._type_combo.configure(state="disabled")
+        if self._lock_cb is not None:
+            self._lock_cb.state(["disabled"])
 
     def _clear_form(self) -> None:
         self.load_new(None)
@@ -293,4 +445,3 @@ class FilamentEditorPanel(ttk.Frame):
             name=self.name_var.get().strip(),
         )
         return updated
-

@@ -311,6 +311,12 @@ class ModelLibraryPanel(ttk.Frame):
                 self.folder_tree.item(iid, open=True)
 
     def _reload_files(self) -> None:
+        try:
+            yview = self.files_tree.yview()
+        except tk.TclError:
+            yview = (0.0, 1.0)
+        sel = list(self.files_tree.selection())
+        focus = self.files_tree.focus()
         self.files_tree.delete(*self.files_tree.get_children())
         path = self.library.folder_breadcrumb(self._current_folder_id)
         self._files_title.config(text="Dateien")
@@ -335,6 +341,15 @@ class ModelLibraryPanel(ttk.Frame):
                 values=(mark, e.display_name, e.file_ext.lstrip(".").upper(), storage),
                 tags=tags,
             )
+        restore = [i for i in sel if self.files_tree.exists(i)]
+        if restore:
+            self.files_tree.selection_set(restore)
+            focus_id = focus if focus in restore else restore[0]
+            self.files_tree.focus(focus_id)
+        try:
+            self.files_tree.yview_moveto(yview[0])
+        except tk.TclError:
+            pass
 
     def _on_folder_select(self, _event=None) -> None:
         sel = self.folder_tree.selection()

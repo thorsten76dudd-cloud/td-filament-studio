@@ -2,10 +2,10 @@
 # Creates latest stable release and removes the previous stable release tag.
 
 param(
-    [string]$Version = "1.5.48",
-    [string]$Tag = "v1.5.48-stable",
+    [string]$Version = "1.5.52",
+    [string]$Tag = "v1.5.52-stable",
     [string]$Repo = "thorsten76dudd-cloud/td-filament-studio",
-    [string]$RemoveTag = "v1.5.47-stable",
+    [string]$RemoveTag = "v1.5.48-stable",
     [switch]$DeleteAllOldReleases
 )
 
@@ -31,11 +31,18 @@ if (-not (Test-Path $Setup)) {
 $notes = @(
     "## TD Filament Studio $Version",
     "",
-    "* Material-DB nur vom Drucker (SSH) - kein Cloud/Datei/Merge, kein lokales DB-Speichern",
-    "* Filament-Profil nur Lesen; RFID-Tags und Meine Spulen unveraendert",
-    "* Werkreset: leere DB, keine Beispiel-Drucker",
+    "### Meine Spulen",
+    "* Profil aus Material-DB uebernehmen (Marke, Material, ID, Farbe)",
+    "* Farbe per Windows-Dialog oder Presets (nicht nur Hex)",
+    "* Bezeichnung einheitlich: Marke - Material; Drucker K2 Pro statt F008",
+    "* Liste: CFS 1A-1D oben (auch Bemerkung CFS-S1), Rest alphabetisch",
     "",
-    "Setup ausfuehren. Material-Datenbank: Vom Drucker (SSH) (IP + Root-SSH)."
+    "### UI",
+    "* Filament-Profil nur Lesen (Daten vom Drucker)",
+    "* Material-DB nur per SSH vom Drucker",
+    "* G-Code-Vorschau schaerfer; Dateilisten behalten Scrollposition",
+    "",
+    "Setup ausfuehren. Material-DB: Tab Material-DB - Vom Drucker (SSH)."
 ) -join [Environment]::NewLine
 Set-Content -Path $NotesFile -Value $notes -Encoding UTF8
 
@@ -49,7 +56,7 @@ function Test-GhRelease([string]$ReleaseTag) {
 }
 
 if ($DeleteAllOldReleases) {
-    $releases = gh release list --repo $Repo --limit 100 --json tagName -q '.[].tagName' 2>$null
+    $releases = gh release list --repo $Repo --limit 100 --json tagName -q ".[].tagName" 2>$null
     if ($releases) {
         foreach ($t in $releases) {
             if ($t -eq $Tag) { continue }

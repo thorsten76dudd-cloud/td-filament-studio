@@ -191,6 +191,9 @@ Deine Projekte von Printables & Co.: STL/3MF, PDF-Anleitungen, Bilder — nicht 
 Tab: Meine Spulen
 -----------------
 Lokales Inventar (data/spools.json): Liste links, Bearbeitung rechts.
+• „Aus Material-DB…“ — Profil wählen (Bezeichnung immer „Marke — Material“, Drucker z. B. K2 Pro statt F008)
+• Liste: CFS 1A–1D oben (Slot-Feld oder Bemerkung CFS-S1…), danach alphabetisch
+• Farbe: „Farbe…“ (Windows-Farbtabelle) oder „Presets“ — nicht nur Hex eintippen
 • Doppelklick oder „→ RFID-Tab“ — Spule für Tag-Schreiben übernehmen (wichtig:
   Filament-ID in der Spule hilft; danach „Tag schreiben“)
 • CFS-Slot (1A–1D) — nur für Druck/Abzug, nicht Pflicht zum Tag-Beschreiben am PC
@@ -331,7 +334,7 @@ GITHUB_RELEASES_REPO). Gibt es eine neuere Version als installiert, erscheint ei
 „Im Browser öffnen“ lädt die Release-Seite oder den direkten Download (Setup-EXE, falls
 als Release-Asset hochgeladen).
 
-Auf GitHub pro Version ein Release anlegen, Tag z. B. v1.5.31, Asset:
+Auf GitHub pro Version ein Release anlegen, Tag z. B. v1.5.52-stable, Asset:
 installer_output/TD-Filament-Studio-Setup.exe (oder dist/TD Filament Studio.exe).
 
 
@@ -408,8 +411,11 @@ Lokales Inventar (data/spools.json): Liste links, Bearbeitung rechts.
             """Tab: Meine Spulen
 -----------------
 Lokales Inventar (data/spools.json): Liste links, Bearbeitung rechts (scrollbar).
-• „Neu / Leeren“ und „Speichern“ unten rechts im Panel — nur für Spulen, nicht für die Drucker-Material-DB
-• Doppelklick oder „→ RFID-Tab“ — Spule für Tag-Schreiben übernehmen
+• „Aus Material-DB…“ — Profil übernehmen (Bezeichnung „Marke — Material“, Drucker K2 Pro statt F008)
+• Liste: CFS 1A–1D oben (auch aus Bemerkung CFS-S1… erkannt), Rest alphabetisch
+• Farbe: „Farbe…“ oder „Presets“ — nicht nur Hex-Code
+• „Neu / Leeren“ und „Speichern“ — nur Spulen, nicht die Drucker-Material-DB
+• Doppelklick oder „→ RFID-Tab“ — Spule für Tag-Schreiben
 • CFS-Slot (1A–1D), RFID-Chips, Restgewicht, Verbrauch abziehen, Verlauf""",
         )
         .replace(

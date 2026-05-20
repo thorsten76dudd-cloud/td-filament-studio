@@ -29,7 +29,7 @@ def find_spool_for_slot(
 ) -> Spool | None:
     """Passende Spule: expliziter CFS-Slot, Tag-UID, Filament-ID, Name."""
     for sp in inventory.spools:
-        if sp.cfs_slot == slot.index:
+        if sp.effective_cfs_slot() == slot.index:
             return sp
     rfid = (slot.rfid_id or "").strip()
     if rfid:
@@ -53,9 +53,10 @@ def find_spool_for_slot(
 
 
 def _spool_allowed_for_slot(sp: Spool, slot_index: int) -> bool:
-    if sp.cfs_slot is None:
+    eff = sp.effective_cfs_slot()
+    if eff is None:
         return True
-    return sp.cfs_slot == slot_index
+    return eff == slot_index
 
 
 def find_spool_for_deduct(

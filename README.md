@@ -8,10 +8,12 @@ Windows-App für **Creality K2 mit CFS**: RFID-Tags programmieren (MIFARE Classi
 
 Basiert auf dem offenen Creality-Tag-Format ([DnG-Crafts/K2-RFID](https://github.com/DnG-Crafts/K2-RFID)).
 
+**Aktuelle Version:** [v1.5.52-stable](https://github.com/thorsten76dudd-cloud/td-filament-studio/releases/latest) — Installer unter *Releases*.
+
 ## Funktionen
 
 - **RFID**: Tags lesen/schreiben, Stapelmodus, Verifikation, Tag-Export (JSON), Farbe aus Foto
-- **Material-DB**: Creality Cloud, Import vom Drucker (SSH), Profil-Editor, DB-Schutz vor Überschreibung
+- **Material-DB**: Import vom Drucker (SSH), Profil-Anzeige; Spulen mit Material-DB verknüpfen
 - **Meine Spulen**: Inventar, CFS-Slot-Zuordnung, Restgewicht & Verbrauchshistorie
 - **Drucker-Tab**: Live-CFS mit Spulen-Link, G-Code, Druck steuern (WebSocket :9999)
 - **Modell-Bibliothek**: Ordner, Suche, Creality/3D-Viewer öffnen
