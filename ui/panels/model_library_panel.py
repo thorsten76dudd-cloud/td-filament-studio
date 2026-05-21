@@ -6,6 +6,7 @@ import os
 import shutil
 import subprocess
 import sys
+import zipfile
 import tkinter as tk
 from pathlib import Path
 from tkinter import filedialog, messagebox, ttk
@@ -13,6 +14,11 @@ from typing import TYPE_CHECKING
 
 from app.paths import DATA_DIR
 from creality_nfc.config import APP_NAME
+from creality_nfc.data_backup import (
+    backup_model_library,
+    default_model_library_backup_name,
+    restore_model_library,
+)
 from creality_nfc.windows_mesh_open import open_mesh_choose_viewer, open_mesh_with_default_app
 from creality_nfc.model_library import (
     ARCHIVE_EXT,
@@ -51,7 +57,11 @@ class ModelLibraryPanel(ttk.Frame):
         top.pack(fill="x", padx=8, pady=8)
         tip(
             ttk.Button(top, text="Datei importieren…", command=self._import_copy, style="Accent.TButton"),
-            "STL, 3MF, PDF, Bilder, ZIP … in die Bibliothek kopieren.",
+            "Dateien oder ganze Ordner vom PC hierher ziehen (Unterordner werden übernommen).",
+        ).pack(side="left", padx=(0, 6))
+        tip(
+            ttk.Button(top, text="Ordner importieren…", command=self._import_folder_copy, style="Secondary.TButton"),
+            "Ganzen Ordner vom PC (mit Unterordnern) in die Bibliothek kopieren.",
         ).pack(side="left", padx=(0, 6))
         tip(
             ttk.Button(top, text="Verknüpfung…", command=self._import_link, style="Secondary.TButton"),
@@ -70,8 +80,16 @@ class ModelLibraryPanel(ttk.Frame):
             "Ausgewählte Datei(en) oder Ordner (links, Strg+Klick) in einen anderen Ordner verschieben.",
         ).pack(side="left", padx=(0, 6))
         tip(
+            ttk.Button(top, text="Bibliothek sichern…", command=self._backup_library, style="Secondary.TButton"),
+            "Gesamte Modell-Bibliothek als ZIP (Ordner, Dateien, Metadaten).",
+        ).pack(side="right", padx=(6, 0))
+        tip(
+            ttk.Button(top, text="Bibliothek laden…", command=self._restore_library, style="Secondary.TButton"),
+            "Bibliothek aus einer ZIP-Backup-Datei wiederherstellen (überschreibt die aktuelle).",
+        ).pack(side="right", padx=(6, 0))
+        tip(
             ttk.Button(top, text="Speichern unter…", command=self._export_file, style="Accent.TButton"),
-            "Datei(en) exportieren: einzeln wählen, Strg+Klick für mehrere, oder nur Ordner links — dann alle Dateien im Ordner.",
+            "Export: Dateien wählen, oder Ordner links (Strg+Klick) / nur Ordner markieren — inkl. Unterordner mit Struktur.",
         ).pack(side="right", padx=(6, 0))
         tip(
             ttk.Button(top, text="Im Explorer öffnen", command=self._open_in_explorer, style="Secondary.TButton"),
@@ -266,7 +284,7 @@ class ModelLibraryPanel(ttk.Frame):
 
         ttk.Label(
             self,
-            text="Export: Datei wählen oder nur Ordner — Speichern unter… | Strg+Klick = mehrere | Verschieben: Datei oder Ordner links auf Zielordner ziehen.",
+            text="Speichern unter: Dateien oder Ordner links (Strg+Klick) — mit Unterordnern | Verschieben: auf Zielordner ziehen.",
             style="Muted.TLabel",
             wraplength=920,
         ).pack(anchor="w", padx=12, pady=(0, 8))
@@ -329,15 +347,9 @@ class ModelLibraryPanel(ttk.Frame):
         self._files_title.config(text="Dateien")
         self._files_path_lbl.config(text=path)
         self._update_folder_path_label()
-        query = self._search_var.get().strip().lower()
-        only_open = self._filter_done_var.get()
         for e in self.library.entries_in_folder(self._current_folder_id):
-            if only_open and e.done:
+            if not self._entry_matches_file_filter(e):
                 continue
-            if query:
-                hay = f"{e.display_name} {e.notes} {e.source_url} {e.file_ext}".lower()
-                if query not in hay:
-                    continue
             storage = "Kopie" if e.storage == "copy" else "Link"
             mark = "✓" if e.done else ""
             tags = ("file_done",) if e.done else ("file_open",)
@@ -381,28 +393,51 @@ class ModelLibraryPanel(ttk.Frame):
                 entries.append(entry)
         return entries
 
-    def _visible_entries_in_folder(self) -> list[ModelEntry]:
-        """Dateien in der Mitte (aktueller Ordner, Suche, Erledigt-Filter)."""
+    def _entry_matches_file_filter(self, entry: ModelEntry) -> bool:
+        if self._filter_done_var.get() and entry.done:
+            return False
         query = self._search_var.get().strip().lower()
-        only_open = self._filter_done_var.get()
-        visible: list[ModelEntry] = []
-        for entry in self.library.entries_in_folder(self._current_folder_id):
-            if only_open and entry.done:
-                continue
-            if query:
-                hay = f"{entry.display_name} {entry.notes} {entry.source_url} {entry.file_ext}".lower()
-                if query not in hay:
-                    continue
-            visible.append(entry)
-        return visible
+        if not query:
+            return True
+        hay = f"{entry.display_name} {entry.notes} {entry.source_url} {entry.file_ext}".lower()
+        return query in hay
 
-    def _entries_for_export(self) -> tuple[list[ModelEntry], bool]:
-        """Export-Liste und ob der ganze Ordner (ohne Datei-Klick) gemeint ist."""
-        selected = self._selected_entries()
-        if selected:
-            return selected, False
-        visible = self._visible_entries_in_folder()
-        return visible, True
+    def _entries_for_export(self) -> tuple[list[tuple[ModelEntry, Path]], str]:
+        """
+        Export-Plan: (Datei, relativer Unterordner im Ziel).
+        Leerer Path = direkt ins Zielverzeichnis.
+        """
+        file_sel = self._selected_entries()
+        if file_sel:
+            return [(e, Path()) for e in file_sel], f"{len(file_sel)} Datei(en)"
+
+        folder_ids = self._selected_movable_folder_ids()
+        if folder_ids:
+            items = []
+            names: list[str] = []
+            for fid in folder_ids:
+                folder = self.library.folder_by_id(fid)
+                if not folder:
+                    continue
+                names.append(folder.name)
+                base = Path(folder.name)
+                for entry in self.library.entries_in_folder_recursive(fid):
+                    if not self._entry_matches_file_filter(entry):
+                        continue
+                    inner = self.library.entry_relative_subpath(fid, entry)
+                    items.append((entry, base / inner if inner.parts else base))
+            label = ", ".join(names[:3])
+            if len(names) > 3:
+                label += f" … (+{len(names) - 3})"
+            return items, f"Ordner {label}"
+
+        items = []
+        for entry in self.library.entries_in_folder_recursive(self._current_folder_id):
+            if not self._entry_matches_file_filter(entry):
+                continue
+            rel = self.library.entry_relative_subpath(self._current_folder_id, entry)
+            items.append((entry, rel))
+        return items, self.library.folder_breadcrumb(self._current_folder_id)
 
     def _selected_entry(self) -> ModelEntry | None:
         entries = self._selected_entries()
@@ -431,35 +466,37 @@ class ModelLibraryPanel(ttk.Frame):
         self._path_var.set("")
         self._done_var.set(False)
 
-    def _collect_importable_paths(self, paths: list[Path]) -> list[Path]:
-        allowed = ALLOWED_EXT | ARCHIVE_EXT
-        out: list[Path] = []
-        for raw in paths:
-            p = Path(raw)
-            if p.is_file():
-                if p.suffix.lower() in allowed:
-                    out.append(p)
-            elif p.is_dir():
-                for child in sorted(p.rglob("*")):
-                    if child.is_file() and child.suffix.lower() in allowed:
-                        out.append(child)
-        return out
+    def _resolve_drop_path(self, raw: Path) -> Path:
+        try:
+            return raw.resolve()
+        except OSError:
+            return raw
+
+    def _import_one_file(self, path: Path, target_folder_id: str) -> int:
+        ext = path.suffix.lower()
+        if ext == ".zip":
+            return len(self.library.import_zip(path, target_folder_id))
+        self.library.import_file(path, target_folder_id)
+        return 1
 
     def _import_paths(self, paths: list[Path], folder_id: str | None = None) -> int:
         target = folder_id or self._current_folder_id
-        items = self._collect_importable_paths(paths)
-        if not items:
-            return 0
         n = 0
-        for path in items:
+        for raw in paths:
+            p = self._resolve_drop_path(raw)
+            if not p.exists():
+                notify(self, f"Nicht gefunden: {raw}", "warn")
+                continue
             try:
-                if path.suffix.lower() == ".zip":
-                    n += len(self.library.import_zip(path, target))
-                else:
-                    self.library.import_file(path, target)
-                    n += 1
+                if p.is_dir():
+                    n += self.library.import_directory(p, target)
+                elif p.is_file():
+                    allowed = ALLOWED_EXT | ARCHIVE_EXT
+                    if p.suffix.lower() not in allowed:
+                        continue
+                    n += self._import_one_file(p, target)
             except (OSError, ValueError) as exc:
-                notify(self, f"{path.name}: {exc}", "error")
+                notify(self, f"{p.name}: {exc}", "error")
         if n:
             self._reload_folders()
             self._reload_files()
@@ -476,9 +513,16 @@ class ModelLibraryPanel(ttk.Frame):
             self,
             self.app.tab_models,
             self._body_pane,
+            self._left_split,
             self.folder_tree,
             self.files_tree,
         ]
+        try:
+            top = self.winfo_toplevel()
+            if top not in widgets:
+                widgets.append(top)
+        except tk.TclError:
+            pass
         for widget in widgets:
             try:
                 widget.drop_target_register(DND_FILES)
@@ -497,7 +541,21 @@ class ModelLibraryPanel(ttk.Frame):
         else:
             notify(
                 self,
-                "Keine unterstützten Dateien (STL, 3MF, ZIP, PDF, Bilder …).",
+                "Keine unterstützten Dateien oder Ordner (STL, 3MF, ZIP, PDF, Bilder …).",
+                "warn",
+            )
+
+    def _import_folder_copy(self) -> None:
+        path = filedialog.askdirectory(parent=self, title="Ordner importieren")
+        if not path:
+            return
+        n = self._import_paths([Path(path)])
+        if n:
+            notify(self, f"{n} Datei(en) aus Ordner importiert.", "ok")
+        else:
+            notify(
+                self,
+                "Im Ordner keine unterstützten Dateien gefunden.",
                 "warn",
             )
 
@@ -1003,6 +1061,61 @@ class ModelLibraryPanel(ttk.Frame):
         self.files_tree.selection_set(entry.id)
         notify(self, "Gespeichert.", "ok")
 
+    def _backup_library(self) -> None:
+        self.library.save()
+        dest = filedialog.asksaveasfilename(
+            parent=self,
+            title="Modell-Bibliothek sichern",
+            defaultextension=".zip",
+            initialfile=default_model_library_backup_name(),
+            filetypes=[("ZIP-Backup", "*.zip")],
+        )
+        if not dest:
+            return
+        try:
+            n = backup_model_library(self.library.root, Path(dest))
+            notify(
+                self,
+                f"Bibliothek gesichert ({n} Dateien):\n{dest}",
+                "ok",
+            )
+        except OSError as exc:
+            notify(self, f"Backup fehlgeschlagen:\n{exc}", "error")
+
+    def _restore_library(self) -> None:
+        def do_restore() -> None:
+            src = filedialog.askopenfilename(
+                parent=self,
+                title="Modell-Bibliothek laden",
+                filetypes=[("ZIP-Backup", "*.zip"), ("Alle", "*.*")],
+            )
+            if not src:
+                return
+            try:
+                self.library.save()
+                n = restore_model_library(Path(src), self.library.root)
+                self.library.load()
+                self._current_folder_id = "root"
+                self._reload_folders()
+                self.folder_tree.selection_set("root")
+                self._reload_files()
+                self._clear_details()
+                notify(
+                    self,
+                    f"Bibliothek wiederhergestellt ({n} Dateien).\n\n{src}",
+                    "ok",
+                )
+            except (OSError, zipfile.BadZipFile, ValueError) as exc:
+                notify(self, f"Wiederherstellen fehlgeschlagen:\n{exc}", "error")
+
+        confirm(
+            self,
+            "Aktuelle Modell-Bibliothek durch das ZIP-Backup ersetzen?\n\n"
+            "Tipp: Vorher „Bibliothek sichern…“.\n\n"
+            "Fortfahren?",
+            do_restore,
+        )
+
     def _export_dest_name(self, entry: ModelEntry, src: Path) -> str:
         ext = (entry.file_ext or src.suffix or ".stl").lower()
         if not ext.startswith("."):
@@ -1026,17 +1139,17 @@ class ModelLibraryPanel(ttk.Frame):
         return alt
 
     def _export_file(self) -> None:
-        entries, whole_folder = self._entries_for_export()
-        if not entries:
+        items, label = self._entries_for_export()
+        if not items:
             notify(
                 self,
-                "Keine Dateien zum Exportieren (Ordner leer oder Filter ausblenden).",
+                "Keine Dateien zum Exportieren (Ordner leer oder Filter „Nur offen“ ausblenden).",
                 "warn",
             )
             return
 
-        if len(entries) == 1:
-            entry = entries[0]
+        if len(items) == 1 and not items[0][1].parts:
+            entry = items[0][0]
             src = entry.resolved_path(self.library.root)
             if not src:
                 notify(self, "Datei nicht gefunden (Pfad prüfen).", "warn")
@@ -1062,24 +1175,21 @@ class ModelLibraryPanel(ttk.Frame):
                 notify(self, str(exc), "error")
             return
 
-        folder_hint = self.library.folder_breadcrumb(self._current_folder_id)
-        title = (
-            f"Ordner „{folder_hint}“ — {len(entries)} Dateien exportieren"
-            if whole_folder
-            else f"{len(entries)} Dateien exportieren — Zielordner wählen"
-        )
+        title = f"„{label}“ — {len(items)} Dateien exportieren (Ordnerstruktur)"
         dest_dir = filedialog.askdirectory(parent=self, title=title)
         if not dest_dir:
             return
-        folder = Path(dest_dir)
+        base = Path(dest_dir)
         ok = 0
         failed: list[str] = []
-        for entry in entries:
+        for entry, rel in items:
             src = entry.resolved_path(self.library.root)
             if not src:
                 failed.append(entry.display_name)
                 continue
-            dest = self._unique_dest_path(folder, self._export_dest_name(entry, src), entry.id)
+            target_dir = base / rel if rel.parts else base
+            target_dir.mkdir(parents=True, exist_ok=True)
+            dest = self._unique_dest_path(target_dir, self._export_dest_name(entry, src), entry.id)
             try:
                 shutil.copy2(src, dest)
                 ok += 1

@@ -70,6 +70,55 @@ def default_backup_name() -> str:
     return f"spooltag_backup_{datetime.now().strftime('%Y%m%d_%H%M')}.zip"
 
 
+def default_model_library_backup_name() -> str:
+    return f"modell_bibliothek_{datetime.now().strftime('%Y%m%d_%H%M')}.zip"
+
+
+def _model_library_arcname(library_root: Path, file_path: Path) -> str:
+    return file_path.relative_to(library_root).as_posix()
+
+
+def _model_library_target_path(library_root: Path, zip_name: str) -> Path | None:
+    name = zip_name.replace("\\", "/").lstrip("/")
+    if name.endswith("/"):
+        return None
+    parts = Path(name).parts
+    if parts and parts[0] == "model_library":
+        rel = Path(*parts[1:])
+    else:
+        rel = Path(*parts)
+    if not rel.parts or ".." in rel.parts:
+        return None
+    return library_root / rel
+
+
+def backup_model_library(library_root: Path, dest_zip: Path) -> int:
+    """Komplette Modell-Bibliothek (index.json, files/, folders/) als ZIP."""
+    library_root.mkdir(parents=True, exist_ok=True)
+    count = 0
+    with zipfile.ZipFile(dest_zip, "w", zipfile.ZIP_DEFLATED) as zf:
+        for path in library_root.rglob("*"):
+            if path.is_file():
+                zf.write(path, _model_library_arcname(library_root, path))
+                count += 1
+    return count
+
+
+def restore_model_library(zip_path: Path, library_root: Path) -> int:
+    """Bibliothek aus ZIP zurückspielen (überschreibt vorhandene Dateien)."""
+    library_root.mkdir(parents=True, exist_ok=True)
+    count = 0
+    with zipfile.ZipFile(zip_path, "r") as zf:
+        for name in zf.namelist():
+            target = _model_library_target_path(library_root, name)
+            if not target:
+                continue
+            target.parent.mkdir(parents=True, exist_ok=True)
+            target.write_bytes(zf.read(name))
+            count += 1
+    return count
+
+
 _EMPTY_MATERIAL_DB = json.dumps({"result": {"list": [], "count": 0}}, ensure_ascii=False) + "\n"
 
 

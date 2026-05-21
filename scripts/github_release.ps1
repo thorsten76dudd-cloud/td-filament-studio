@@ -2,10 +2,10 @@
 # Creates latest stable release and removes the previous stable release tag.
 
 param(
-    [string]$Version = "1.5.68",
-    [string]$Tag = "v1.5.68-stable",
+    [string]$Version = "1.5.69",
+    [string]$Tag = "v1.5.69-stable",
     [string]$Repo = "thorsten76dudd-cloud/td-filament-studio",
-    [string]$RemoveTag = "v1.5.67-stable",
+    [string]$RemoveTag = "v1.5.68-stable",
     [switch]$DeleteAllOldReleases
 )
 
@@ -32,12 +32,12 @@ $notes = @(
     "## TD Filament Studio $Version",
     "",
     "### Modell-Bibliothek",
-    "* Mehrere Ordner verschieben (Strg+Klick, Drag oder Dialog)",
-    "* PDF/TXT/Bilder mit Oeffnen oder Doppelklick (Standardprogramm)",
-    "* Mehrere Dateien per Drag verschieben",
+    "* PC-Ordner importieren (Drag oder Ordner importieren)",
+    "* Speichern unter: ganze Ordner inkl. Unterordner",
+    "* Bibliothek sichern / laden (ZIP-Backup)",
     "",
-    "### Aus 1.5.67",
-    "* Thingiverse thing:7356949; 3D anzeigen (1.5.66)",
+    "### Aus 1.5.68",
+    "* Ordner verschieben; PDF/TXT oeffnen; Thingiverse (1.5.67)",
     "",
     "Setup ausfuehren (ueberschreibt alte Installation)."
 ) -join [Environment]::NewLine

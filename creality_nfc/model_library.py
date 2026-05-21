@@ -145,6 +145,27 @@ class ModelLibrary:
             key=lambda e: e.display_name.lower(),
         )
 
+    def entries_in_folder_recursive(self, folder_id: str) -> list[ModelEntry]:
+        allowed = {folder_id} | self.subfolder_ids(folder_id)
+        return sorted(
+            [e for e in self.entries if e.folder_id in allowed],
+            key=lambda e: (e.folder_id, e.display_name.lower()),
+        )
+
+    def entry_relative_subpath(self, root_folder_id: str, entry: ModelEntry) -> Path:
+        """Unterordner-Pfad von root_folder_id bis zum Ordner der Datei (ohne Dateiname)."""
+        chain = self.ancestor_ids(entry.folder_id)
+        try:
+            idx = chain.index(root_folder_id)
+        except ValueError:
+            return Path()
+        parts: list[str] = []
+        for fid in chain[idx + 1 :]:
+            folder = self.folder_by_id(fid)
+            if folder:
+                parts.append(folder.name)
+        return Path(*parts) if parts else Path()
+
     def ancestor_ids(self, folder_id: str) -> list[str]:
         chain: list[str] = []
         fid: str | None = folder_id
@@ -363,6 +384,31 @@ class ModelLibrary:
         self.entries.append(entry)
         self.save()
         return entry
+
+    def import_directory(self, src_dir: Path, parent_folder_id: str) -> int:
+        """PC-Ordner importieren: Unterordner mit Quellname + innere Struktur beibehalten."""
+        src = src_dir.resolve()
+        if not src.is_dir():
+            return 0
+        allowed = ALLOWED_EXT | ARCHIVE_EXT
+        root_id = self.get_or_create_subfolder(parent_folder_id, src.name)
+        imported = 0
+        for child in sorted(src.rglob("*")):
+            if not child.is_file():
+                continue
+            ext = child.suffix.lower()
+            if ext not in allowed:
+                continue
+            target_folder = root_id
+            rel = child.relative_to(src)
+            for part in rel.parent.parts:
+                target_folder = self.get_or_create_subfolder(target_folder, part)
+            if ext in ARCHIVE_EXT:
+                imported += len(self.import_zip(child, target_folder))
+            else:
+                self.import_file(child, target_folder)
+                imported += 1
+        return imported
 
     def link_file(self, src: Path, folder_id: str, *, notes: str = "", source_url: str = "") -> ModelEntry:
         ext = src.suffix.lower()
