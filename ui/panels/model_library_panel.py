@@ -250,8 +250,8 @@ class ModelLibraryPanel(ttk.Frame):
             "STL/3MF in Creality Print (Windows-Standard-App für diese Dateitypen).",
         ).pack(side="left", padx=(0, 6))
         tip(
-            ttk.Button(left_btns, text="3D-Viewer wählen…", command=self._open_in_3d_viewer, style="Secondary.TButton"),
-            "STL/3MF in der Liste anklicken, dann „Öffnen mit“ (3D Viewer / Paint 3D).",
+            ttk.Button(left_btns, text="3D anzeigen…", command=self._open_in_3d_viewer, style="Secondary.TButton"),
+            "STL/3MF anklicken: 3D Viewer direkt, sonst Menü „Öffnen mit“.",
         ).pack(side="left")
         tip(
             ttk.Button(meta_btns, text="Details speichern", command=self._save_meta, style="Accent.TButton"),
@@ -1039,25 +1039,32 @@ class ModelLibraryPanel(ttk.Frame):
             notify(self, f"Creality / Standard-App konnte nicht gestartet werden:\n{err}", "error")
 
     def _open_in_3d_viewer(self) -> None:
+        from creality_nfc.windows_mesh_open import open_microsoft_store_3d_viewer
+
         path = self._selected_mesh_path()
         if not path:
             return
-        ok, hint = open_mesh_choose_viewer(path)
+        ok, hint, mode = open_mesh_choose_viewer(path)
         parent = self.winfo_toplevel()
         if ok:
-            messagebox.showinfo(
-                APP_NAME,
-                hint or "„Öffnen mit“-Dialog geöffnet.",
-                parent=parent,
-            )
-            notify(self, hint or "3D-Viewer / Öffnen mit", "ok")
-        else:
-            messagebox.showerror(
-                APP_NAME,
-                hint or "3D-Viewer konnte nicht gestartet werden.",
-                parent=parent,
-            )
-            notify(self, hint or "3D-Viewer konnte nicht gestartet werden.", "error")
+            notify(self, hint, "ok")
+            return
+        if mode == "store" and messagebox.askyesno(
+            APP_NAME,
+            f"{hint}\n\nMicrosoft Store öffnen („3D Viewer“ installieren)?",
+            parent=parent,
+        ):
+            if open_microsoft_store_3d_viewer():
+                notify(self, "Microsoft Store geöffnet — „3D Viewer“ installieren.", "info")
+            else:
+                notify(self, "Store konnte nicht geöffnet werden.", "warn")
+            return
+        messagebox.showerror(
+            APP_NAME,
+            f"{hint}\n\nAlternativ: „In Creality öffnen“ (Creality Print).",
+            parent=parent,
+        )
+        notify(self, hint, "error")
 
     def _open_in_explorer(self) -> None:
         entry = self._selected_entry()

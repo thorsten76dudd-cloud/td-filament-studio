@@ -2,10 +2,10 @@
 # Creates latest stable release and removes the previous stable release tag.
 
 param(
-    [string]$Version = "1.5.65",
-    [string]$Tag = "v1.5.65-stable",
+    [string]$Version = "1.5.66",
+    [string]$Tag = "v1.5.66-stable",
     [string]$Repo = "thorsten76dudd-cloud/td-filament-studio",
-    [string]$RemoveTag = "v1.5.64-stable",
+    [string]$RemoveTag = "v1.5.65-stable",
     [switch]$DeleteAllOldReleases
 )
 
@@ -31,11 +31,12 @@ if (-not (Test-Path $Setup)) {
 $notes = @(
     "## TD Filament Studio $Version",
     "",
-    "### Fix: 3D-Viewer waehlen (Modell-Bibliothek)",
-    "* Datei in der Liste anklicken; Oeffnen-mit-Dialog; klare Hinweise",
+    "### Fix: 3D anzeigen (Modell-Bibliothek)",
+    "* 3D Viewer direkt wenn installiert; sonst echtes Oeffnen-mit-Menue",
+    "* Kein blockierender Hinweis-Dialog mehr",
     "",
-    "### Aus 1.5.64",
-    "* Ordner-Export; In-App-Update (1.5.63)",
+    "### Aus 1.5.65",
+    "* Ordner-Export; 3D-Viewer Hinweise (1.5.64)",
     "",
     "Setup ausfuehren (ueberschreibt alte Installation)."
 ) -join [Environment]::NewLine
