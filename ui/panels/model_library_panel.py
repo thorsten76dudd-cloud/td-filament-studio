@@ -8,11 +8,12 @@ import subprocess
 import sys
 import tkinter as tk
 from pathlib import Path
-from tkinter import filedialog, ttk
+from tkinter import filedialog, messagebox, ttk
 from typing import TYPE_CHECKING
 
 from app.paths import DATA_DIR
-from creality_nfc.windows_mesh_open import open_mesh_in_system_viewer, open_mesh_with_default_app
+from creality_nfc.config import APP_NAME
+from creality_nfc.windows_mesh_open import open_mesh_choose_viewer, open_mesh_with_default_app
 from creality_nfc.model_library import (
     ARCHIVE_EXT,
     ALLOWED_EXT,
@@ -250,7 +251,7 @@ class ModelLibraryPanel(ttk.Frame):
         ).pack(side="left", padx=(0, 6))
         tip(
             ttk.Button(left_btns, text="3D-Viewer wählen…", command=self._open_in_3d_viewer, style="Secondary.TButton"),
-            "Windows 3D Viewer / Paint 3D — falls nicht installiert: „Öffnen mit“-Dialog.",
+            "STL/3MF in der Liste anklicken, dann „Öffnen mit“ (3D Viewer / Paint 3D).",
         ).pack(side="left")
         tip(
             ttk.Button(meta_btns, text="Details speichern", command=self._save_meta, style="Accent.TButton"),
@@ -355,6 +356,7 @@ class ModelLibraryPanel(ttk.Frame):
         sel = self.folder_tree.selection()
         if sel:
             self._current_folder_id = sel[0]
+            self._last_file_entry_id = None
             self._reload_files()
 
     def _selected_entry_ids(self) -> list[str]:
@@ -980,17 +982,51 @@ class ModelLibraryPanel(ttk.Frame):
         elif failed:
             notify(self, "Export fehlgeschlagen:\n" + "\n".join(failed[:8]), "error")
 
+    def _entry_for_single_file_action(self) -> ModelEntry | None:
+        """Genau eine Datei für Viewer / Creality — Klick in der Dateiliste nötig."""
+        selected = self._selected_entries()
+        if len(selected) > 1:
+            messagebox.showwarning(
+                APP_NAME,
+                "Bitte nur eine Datei auswählen (nicht mehrere mit Strg+Klick).",
+                parent=self.winfo_toplevel(),
+            )
+            return None
+        if len(selected) == 1:
+            return selected[0]
+        focus = self.files_tree.focus()
+        if focus and self.files_tree.exists(focus):
+            entry = self.library.get_entry(focus)
+            if entry:
+                return entry
+        messagebox.showwarning(
+            APP_NAME,
+            "Bitte zuerst eine STL- oder 3MF-Datei in der mittleren Liste anklicken.\n\n"
+            "(Nur den Ordner links markieren reicht nicht.)",
+            parent=self.winfo_toplevel(),
+        )
+        return None
+
     def _selected_mesh_path(self) -> Path | None:
-        entry = self._selected_entry()
+        entry = self._entry_for_single_file_action()
         if not entry:
-            notify(self, "Bitte zuerst eine Datei auswählen.", "warn")
             return None
         path = entry.resolved_path(self.library.root)
         if not path or not path.is_file():
-            notify(self, "Datei nicht gefunden.", "warn")
+            messagebox.showwarning(
+                APP_NAME,
+                "Datei nicht gefunden.\n\n"
+                f"Eintrag: {entry.display_name}\n"
+                "Pfad in den Details prüfen oder Datei erneut importieren.",
+                parent=self.winfo_toplevel(),
+            )
             return None
         if path.suffix.lower() not in {".stl", ".3mf"}:
-            notify(self, "Nur STL- und 3MF-Dateien können in einem 3D-Programm geöffnet werden.", "warn")
+            messagebox.showwarning(
+                APP_NAME,
+                "Nur STL- und 3MF-Dateien können in einem 3D-Programm geöffnet werden.",
+                parent=self.winfo_toplevel(),
+            )
             return None
         return path
 
@@ -1006,11 +1042,21 @@ class ModelLibraryPanel(ttk.Frame):
         path = self._selected_mesh_path()
         if not path:
             return
-        ok, hint = open_mesh_in_system_viewer(path)
+        ok, hint = open_mesh_choose_viewer(path)
+        parent = self.winfo_toplevel()
         if ok:
-            if hint:
-                notify(self, hint, "info")
+            messagebox.showinfo(
+                APP_NAME,
+                hint or "„Öffnen mit“-Dialog geöffnet.",
+                parent=parent,
+            )
+            notify(self, hint or "3D-Viewer / Öffnen mit", "ok")
         else:
+            messagebox.showerror(
+                APP_NAME,
+                hint or "3D-Viewer konnte nicht gestartet werden.",
+                parent=parent,
+            )
             notify(self, hint or "3D-Viewer konnte nicht gestartet werden.", "error")
 
     def _open_in_explorer(self) -> None:

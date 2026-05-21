@@ -2,10 +2,10 @@
 # Creates latest stable release and removes the previous stable release tag.
 
 param(
-    [string]$Version = "1.5.64",
-    [string]$Tag = "v1.5.64-stable",
+    [string]$Version = "1.5.65",
+    [string]$Tag = "v1.5.65-stable",
     [string]$Repo = "thorsten76dudd-cloud/td-filament-studio",
-    [string]$RemoveTag = "v1.5.63-stable",
+    [string]$RemoveTag = "v1.5.64-stable",
     [switch]$DeleteAllOldReleases
 )
 
@@ -31,11 +31,11 @@ if (-not (Test-Path $Setup)) {
 $notes = @(
     "## TD Filament Studio $Version",
     "",
-    "### Modell-Bibliothek",
-    "* Speichern unter mit nur Ordner links: alle Dateien im Ordner exportieren",
+    "### Fix: 3D-Viewer waehlen (Modell-Bibliothek)",
+    "* Datei in der Liste anklicken; Oeffnen-mit-Dialog; klare Hinweise",
     "",
-    "### Aus 1.5.63",
-    "* In-App-Update Installer-Fix; Creality-Autostart (1.5.62)",
+    "### Aus 1.5.64",
+    "* Ordner-Export; In-App-Update (1.5.63)",
     "",
     "Setup ausfuehren (ueberschreibt alte Installation)."
 ) -join [Environment]::NewLine
