@@ -69,7 +69,7 @@ class ModelLibraryPanel(ttk.Frame):
         ).pack(side="left", padx=(0, 6))
         tip(
             ttk.Button(top, text="Speichern unter…", command=self._export_file, style="Accent.TButton"),
-            "Ausgewählte Datei(en) exportieren (mehrere: Strg+Klick, dann Zielordner wählen).",
+            "Datei(en) exportieren: einzeln wählen, Strg+Klick für mehrere, oder nur Ordner links — dann alle Dateien im Ordner.",
         ).pack(side="right", padx=(6, 0))
         tip(
             ttk.Button(top, text="Im Explorer öffnen", command=self._open_in_explorer, style="Secondary.TButton"),
@@ -259,7 +259,7 @@ class ModelLibraryPanel(ttk.Frame):
 
         ttk.Label(
             self,
-            text="Strg+Klick = mehrere Dateien. Export: Speichern unter… | Verschieben: auf Ordner ziehen.",
+            text="Export: Datei wählen oder nur Ordner — Speichern unter… | Strg+Klick = mehrere | Verschieben: auf Ordner ziehen.",
             style="Muted.TLabel",
             wraplength=920,
         ).pack(anchor="w", padx=12, pady=(0, 8))
@@ -372,6 +372,29 @@ class ModelLibraryPanel(ttk.Frame):
             if entry:
                 entries.append(entry)
         return entries
+
+    def _visible_entries_in_folder(self) -> list[ModelEntry]:
+        """Dateien in der Mitte (aktueller Ordner, Suche, Erledigt-Filter)."""
+        query = self._search_var.get().strip().lower()
+        only_open = self._filter_done_var.get()
+        visible: list[ModelEntry] = []
+        for entry in self.library.entries_in_folder(self._current_folder_id):
+            if only_open and entry.done:
+                continue
+            if query:
+                hay = f"{entry.display_name} {entry.notes} {entry.source_url} {entry.file_ext}".lower()
+                if query not in hay:
+                    continue
+            visible.append(entry)
+        return visible
+
+    def _entries_for_export(self) -> tuple[list[ModelEntry], bool]:
+        """Export-Liste und ob der ganze Ordner (ohne Datei-Klick) gemeint ist."""
+        selected = self._selected_entries()
+        if selected:
+            return selected, False
+        visible = self._visible_entries_in_folder()
+        return visible, True
 
     def _selected_entry(self) -> ModelEntry | None:
         entries = self._selected_entries()
@@ -890,9 +913,13 @@ class ModelLibraryPanel(ttk.Frame):
         return alt
 
     def _export_file(self) -> None:
-        entries = self._selected_entries()
+        entries, whole_folder = self._entries_for_export()
         if not entries:
-            notify(self, "Bitte eine oder mehrere Dateien auswählen.", "warn")
+            notify(
+                self,
+                "Keine Dateien zum Exportieren (Ordner leer oder Filter ausblenden).",
+                "warn",
+            )
             return
 
         if len(entries) == 1:
@@ -922,10 +949,13 @@ class ModelLibraryPanel(ttk.Frame):
                 notify(self, str(exc), "error")
             return
 
-        dest_dir = filedialog.askdirectory(
-            parent=self,
-            title=f"{len(entries)} Dateien exportieren — Zielordner wählen",
+        folder_hint = self.library.folder_breadcrumb(self._current_folder_id)
+        title = (
+            f"Ordner „{folder_hint}“ — {len(entries)} Dateien exportieren"
+            if whole_folder
+            else f"{len(entries)} Dateien exportieren — Zielordner wählen"
         )
+        dest_dir = filedialog.askdirectory(parent=self, title=title)
         if not dest_dir:
             return
         folder = Path(dest_dir)

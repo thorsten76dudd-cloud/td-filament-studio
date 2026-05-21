@@ -189,7 +189,7 @@ Deine Projekte von Printables & Co.: STL/3MF, PDF-Anleitungen, Bilder — nicht 
 • Erledigt ✓ — Spalte „✓“ anklicken oder Haken in Details (grün = fertig/gedruckt, bleibt gespeichert)
 • Details — Name, Quelle-URL, Bemerkung
 • Suche / Nur offen — Dateiliste filtern
-• Speichern unter… — eine Datei: Speicherdialog; mehrere (Strg+Klick): Zielordner wählen
+• Speichern unter… — eine Datei: Speicherdialog; mehrere (Strg+Klick) oder nur Ordner links: Zielordner wählen
 • Im Explorer öffnen — Datei oder Ordner anzeigen
 
 
