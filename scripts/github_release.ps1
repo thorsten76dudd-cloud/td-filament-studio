@@ -2,10 +2,10 @@
 # Creates latest stable release and removes the previous stable release tag.
 
 param(
-    [string]$Version = "1.5.66",
-    [string]$Tag = "v1.5.66-stable",
+    [string]$Version = "1.5.67",
+    [string]$Tag = "v1.5.67-stable",
     [string]$Repo = "thorsten76dudd-cloud/td-filament-studio",
-    [string]$RemoveTag = "v1.5.65-stable",
+    [string]$RemoveTag = "v1.5.66-stable",
     [switch]$DeleteAllOldReleases
 )
 
@@ -31,12 +31,12 @@ if (-not (Test-Path $Setup)) {
 $notes = @(
     "## TD Filament Studio $Version",
     "",
-    "### Fix: 3D anzeigen (Modell-Bibliothek)",
-    "* 3D Viewer direkt wenn installiert; sonst echtes Oeffnen-mit-Menue",
-    "* Kein blockierender Hinweis-Dialog mehr",
+    "### Thingiverse (Tag-Halter)",
+    "* Link auf oeffentliches Modell thing:7356949",
+    "* Tab RFID-Tag / Hilfe aktualisiert",
     "",
-    "### Aus 1.5.65",
-    "* Ordner-Export; 3D-Viewer Hinweise (1.5.64)",
+    "### Aus 1.5.66",
+    "* 3D anzeigen Fix; Ordner-Export (1.5.64)",
     "",
     "Setup ausfuehren (ueberschreibt alte Installation)."
 ) -join [Environment]::NewLine

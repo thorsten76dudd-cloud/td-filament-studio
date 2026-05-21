@@ -12,7 +12,7 @@ from ui.dialog_theme import prepare_toplevel
 from ui.hardware_links import AMAZON_HARDWARE_LINKS
 
 # (Titel, Kurzbeschreibung, URL)
-URL_PLASTIC_TAG_HOLDER_THINGIVERSE = "https://www.thingiverse.com/thing:7356948"
+URL_PLASTIC_TAG_HOLDER_THINGIVERSE = "https://www.thingiverse.com/thing:7356949"
 URL_PLASTIC_SPOOL_HEX = "https://www.printables.com/model/1204576-creality-cfs-rfid-reusable-spool-hex"
 
 TAG_HOLDER_LINKS: tuple[tuple[str, str, str], ...] = (
@@ -84,7 +84,7 @@ class TagHolderLinksDialog(tk.Toplevel):
             text=(
                 "Mitgelieferte STL für 25-mm-MIFARE-Tags an offiziellen Creality-Kunststoffspulen.\n"
                 "5 Teile: Grundkörper + CFS 1A–1D. Pro Spule 2× komplett drucken (links + rechts am Flansch).\n"
-                "Online auch auf Thingiverse (Entwurf/Seite kann sich nach Veröffentlichen ändern)."
+                "Online auf Thingiverse (öffentlich, inkl. Download der STL)."
             ),
             wraplength=540,
             justify="left",

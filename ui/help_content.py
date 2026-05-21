@@ -306,7 +306,7 @@ Tab RFID-Tag → „Tag-Halter STL speichern…“
 Speichert die mitgelieferten STL (Grundkörper + 1A–1D) für 25-mm-MIFARE-Tags
 
 Tag-Halter (Kunststoffspule) auf Thingiverse:
-  https://www.thingiverse.com/thing:7356948
+  https://www.thingiverse.com/thing:7356949
 an offiziellen Creality-Kunststoffspulen (pro Spule 2× komplett drucken).
 
 Tab RFID-Tag → „Tag-Halter (Links)…“ (oder Navigation → Tag-Halter (Links)…)
