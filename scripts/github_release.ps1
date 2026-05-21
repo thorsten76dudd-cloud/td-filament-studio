@@ -2,10 +2,10 @@
 # Creates latest stable release and removes the previous stable release tag.
 
 param(
-    [string]$Version = "1.5.54",
-    [string]$Tag = "v1.5.54-stable",
+    [string]$Version = "1.5.55",
+    [string]$Tag = "v1.5.55-stable",
     [string]$Repo = "thorsten76dudd-cloud/td-filament-studio",
-    [string]$RemoveTag = "v1.5.53-stable",
+    [string]$RemoveTag = "v1.5.54-stable",
     [switch]$DeleteAllOldReleases
 )
 
@@ -31,12 +31,13 @@ if (-not (Test-Path $Setup)) {
 $notes = @(
     "## TD Filament Studio $Version",
     "",
-    "### Fix: Beenden ohne _MEI-Warnung",
-    "* Installer nutzt Ordner-Build statt Einzel-EXE (kein temp _MEI mehr)",
-    "* Sauberes Beenden per os._exit (kein PyInstaller-Warn-Dialog)",
+    "### Fix: Browser schliesst nicht mehr mit",
+    "* Live-Kamera nutzt eigenes Edge/Chrome-Profil (getrennt vom normalen Browser)",
+    "* Beim Kamera-Stopp nur der Kamera-Prozess, nicht dein Edge/Chrome",
+    "* Edge-Kamera-Fallback nur wenn Tab Drucker schon geoeffnet war",
     "",
-    "### Aus 1.5.53",
-    "* Mit Creality Print starten (Waechter + Windows-Autostart)",
+    "### Aus 1.5.54",
+    "* Kein _MEI-Warn-Dialog; Mit Creality Print starten",
     "",
     "Setup ausfuehren (ueberschreibt alte Installation)."
 ) -join [Environment]::NewLine

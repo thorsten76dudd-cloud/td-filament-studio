@@ -130,6 +130,7 @@ class PrinterDevicePanel(ttk.Frame):
         self._cam_prefetch_pending = False
         self._cfs_fetch_pending = False
         self._reconnect_pending = False
+        self._printer_tab_visited = False
         self._last_snap: dict[str, Any] = {}
         self._last_auto_burst = 0.0
         self._live_poll_id: str | None = None
@@ -149,6 +150,7 @@ class PrinterDevicePanel(ttk.Frame):
 
     def on_tab_shown(self) -> None:
         """Tab „Drucker“ aktiv — Verbindung und Live-Updates sicherstellen."""
+        self._printer_tab_visited = True
         if not self._poll_id:
             self._schedule_poll()
         if self._last_cam_jpeg:
@@ -1048,6 +1050,8 @@ class PrinterDevicePanel(ttk.Frame):
 
     def _try_edge_camera_fallback(self) -> None:
         self._cam_fallback_after = None
+        if not self._printer_tab_visited:
+            return
         if self._edge_cam and self._edge_cam.active:
             return
         host = self._conn.host if self._conn else self._host()

@@ -8,15 +8,17 @@ import json
 import os
 import subprocess
 import sys
+import tempfile
 import threading
 import time
 import urllib.error
 import urllib.request
+import uuid
 from dataclasses import dataclass
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
 from typing import Any, Callable
-from urllib.parse import urlparse
+from urllib.parse import parse_qs, urlparse
 
 from creality_nfc.printer_camera import fetch_camera_snapshot, normalize_host, open_url
 
@@ -28,7 +30,7 @@ _VIEWER_HTML = """<!DOCTYPE html>
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<title>K2 Live-Kamera</title>
+<title>__TITLE__</title>
 <style>
   html, body { margin: 0; height: 100%; background: #0f1115; color: #9aa3b2; font-family: "Segoe UI", sans-serif; }
   #wrap { display: flex; flex-direction: column; height: 100%; min-height: 0; }
@@ -140,6 +142,37 @@ def camera_signal_url(host: str) -> str:
     return f"http://{normalize_host(host)}:8000{_SIGNAL_PATH}"
 
 
+VIEWER_TITLE_PREFIX = "TDFilamentStudio K2 Cam"
+
+
+def make_viewer_window_id() -> str:
+    return uuid.uuid4().hex[:10]
+
+
+def make_viewer_title(window_id: str) -> str:
+    return f"{VIEWER_TITLE_PREFIX} {window_id}"
+
+
+def isolated_browser_profile_dir() -> Path:
+    """Eigenes Edge/Chrome-Profil — nicht den normalen Browser des Nutzers anfassen."""
+    root = Path(tempfile.gettempdir()) / "td_filament_studio_edge_cam"
+    root.mkdir(parents=True, exist_ok=True)
+    return root
+
+
+def build_isolated_browser_args(exe: Path, url: str) -> list[str]:
+    profile = isolated_browser_profile_dir()
+    return [
+        str(exe),
+        f"--user-data-dir={profile}",
+        f"--app={url}",
+        "--new-window",
+        "--no-first-run",
+        "--disable-features=Translate",
+        "--disable-infobars",
+    ]
+
+
 class _CameraProxyHandler(BaseHTTPRequestHandler):
     printer_host: str = ""
 
@@ -147,9 +180,15 @@ class _CameraProxyHandler(BaseHTTPRequestHandler):
         pass
 
     def do_GET(self) -> None:
-        path = urlparse(self.path).path
+        parsed = urlparse(self.path)
+        path = parsed.path
         if path in ("/", "/index.html"):
-            html = _VIEWER_HTML.replace("__HOST__", self.printer_host)
+            q = parse_qs(parsed.query)
+            win = (q.get("win") or [""])[0].strip()
+            title = make_viewer_title(win) if win else f"{VIEWER_TITLE_PREFIX} Viewer"
+            html = (
+                _VIEWER_HTML.replace("__HOST__", self.printer_host).replace("__TITLE__", title)
+            )
             body = html.encode("utf-8")
             self.send_response(200)
             self.send_header("Content-Type", "text/html; charset=utf-8")
@@ -258,17 +297,14 @@ def open_camera_app_window(host: str) -> bool:
     except OSError:
         return open_url(camera_page_url(host))
     app_url = url
+    win_id = make_viewer_window_id()
+    app_url = f"{app_url.rstrip('/')}/?win={win_id}"
     if sys.platform == "win32":
         for exe in _edge_chrome_paths():
             if exe.is_file():
                 try:
                     subprocess.Popen(
-                        [
-                            str(exe),
-                            f"--app={app_url}",
-                            "--new-window",
-                            "--disable-features=Translate",
-                        ],
+                        build_isolated_browser_args(exe, app_url),
                         close_fds=True,
                         creationflags=getattr(subprocess, "CREATE_NO_WINDOW", 0),
                     )

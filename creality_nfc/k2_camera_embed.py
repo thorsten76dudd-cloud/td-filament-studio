@@ -11,9 +11,14 @@ import tkinter as tk
 from ctypes import wintypes
 from typing import Any
 
-from creality_nfc.k2_camera_live import K2CameraViewerServer, _edge_chrome_paths
+from creality_nfc.k2_camera_live import (
+    K2CameraViewerServer,
+    _edge_chrome_paths,
+    build_isolated_browser_args,
+    make_viewer_title,
+    make_viewer_window_id,
+)
 
-_CAM_TITLE = "K2 Live-Kamera"
 _WM_SIZE = 0x0005
 _SIZE_RESTORED = 0
 
@@ -26,6 +31,9 @@ class EmbeddedEdgeCamera:
         self._host = printer_host
         self._proc: subprocess.Popen | None = None
         self._browser_hwnd: int | None = None
+        self._browser_pid: int = 0
+        self._window_id = ""
+        self._window_title = ""
         self._running = False
         self._thread: threading.Thread | None = None
         self._url = ""
@@ -45,8 +53,11 @@ class EmbeddedEdgeCamera:
         if self._running:
             self.stop()
         self._running = True
+        self._window_id = make_viewer_window_id()
+        self._window_title = make_viewer_title(self._window_id)
         try:
-            self._url = K2CameraViewerServer().start(self._host)
+            base = K2CameraViewerServer().start(self._host)
+            self._url = f"{base.rstrip('/')}/?win={self._window_id}"
         except OSError:
             self._running = False
             return False
@@ -56,16 +67,11 @@ class EmbeddedEdgeCamera:
                 continue
             try:
                 self._proc = subprocess.Popen(
-                    [
-                        str(exe),
-                        f"--app={self._url}",
-                        "--new-window",
-                        "--disable-features=Translate",
-                        "--disable-infobars",
-                    ],
+                    build_isolated_browser_args(exe, self._url),
                     close_fds=True,
                     creationflags=getattr(subprocess, "CREATE_NO_WINDOW", 0),
                 )
+                self._browser_pid = int(self._proc.pid)
                 launched = True
                 break
             except OSError:
@@ -85,29 +91,9 @@ class EmbeddedEdgeCamera:
             except tk.TclError:
                 pass
             self._resize_after = None
-        hwnd = self._browser_hwnd
         self._browser_hwnd = None
-        if hwnd:
-            try:
-                ctypes.windll.user32.PostMessageW(hwnd, 0x0010, 0, 0)  # WM_CLOSE
-            except Exception:
-                pass
-        if self._proc:
-            try:
-                self._proc.terminate()
-                self._proc.wait(timeout=2)
-            except Exception:
-                try:
-                    self._proc.kill()
-                except Exception:
-                    pass
-            self._proc = None
-        stray = _find_window_by_title(_CAM_TITLE)
-        if stray and stray != hwnd:
-            try:
-                ctypes.windll.user32.PostMessageW(stray, 0x0010, 0, 0)
-            except Exception:
-                pass
+        self._terminate_browser_proc()
+        self._browser_pid = 0
 
     def resize(self) -> None:
         if sys.platform != "win32" or not self._browser_hwnd:
@@ -129,6 +115,30 @@ class EmbeddedEdgeCamera:
             user32.ShowWindow(self._browser_hwnd, 5)
         except Exception:
             pass
+
+    def _terminate_browser_proc(self) -> None:
+        """Nur den von uns gestarteten Browser-Prozess beenden (nicht den normalen Edge/Chrome)."""
+        proc = self._proc
+        self._proc = None
+        if not proc:
+            return
+        pid = int(proc.pid)
+        try:
+            proc.terminate()
+            proc.wait(timeout=2)
+        except Exception:
+            if sys.platform == "win32":
+                flags = getattr(subprocess, "CREATE_NO_WINDOW", 0)
+                subprocess.run(
+                    ["taskkill", "/PID", str(pid), "/T", "/F"],
+                    capture_output=True,
+                    creationflags=flags,
+                )
+            else:
+                try:
+                    proc.kill()
+                except OSError:
+                    pass
 
     def _schedule_resize(self) -> None:
         if self._resize_after:
@@ -160,7 +170,7 @@ class EmbeddedEdgeCamera:
         deadline = time.monotonic() + 12.0
         hwnd: int | None = None
         while self._running and time.monotonic() < deadline:
-            hwnd = _find_window_by_title(_CAM_TITLE)
+            hwnd = _find_browser_window(self._window_title, self._browser_pid)
             if hwnd:
                 break
             time.sleep(0.25)
@@ -209,18 +219,31 @@ def _client_pixels(tk_widget: Any, hwnd: int) -> tuple[int, int]:
     return w, h
 
 
-def _find_window_by_title(title: str) -> int | None:
+def _hwnd_process_id(hwnd: int) -> int:
+    pid = wintypes.DWORD()
+    ctypes.windll.user32.GetWindowThreadProcessId(hwnd, ctypes.byref(pid))
+    return int(pid.value)
+
+
+def _find_browser_window(title: str, browser_pid: int) -> int | None:
+    """Fenster nur vom gestarteten Kamera-Browser (PID), nicht vom normalen Edge/Chrome."""
+    if browser_pid <= 0:
+        return None
     user32 = ctypes.windll.user32
     found: list[int] = []
+    want = title.strip().lower()
 
     @ctypes.WINFUNCTYPE(wintypes.BOOL, wintypes.HWND, wintypes.LPARAM)
     def callback(hwnd: int, _lparam: int) -> bool:
+        if _hwnd_process_id(hwnd) != browser_pid:
+            return True
         if not user32.IsWindowVisible(hwnd):
             return True
         length = user32.GetWindowTextLengthW(hwnd) + 1
         buf = ctypes.create_unicode_buffer(length)
         user32.GetWindowTextW(hwnd, buf, length)
-        if title.lower() in buf.value.lower():
+        got = buf.value.strip().lower()
+        if got == want or want in got:
             found.append(hwnd)
             return False
         return True
