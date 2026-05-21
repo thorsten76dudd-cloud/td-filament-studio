@@ -9,13 +9,18 @@ import sys
 import time
 from pathlib import Path
 
-# Typische Prozessnamen (Creality Print / Creality Slicer / Handy-App am PC)
+# Typische Prozessnamen (Creality Print 5–7, Slicer, Cloud-Client)
 CREALITY_PROCESS_NAMES = (
     "CrealityPrint.exe",
     "Creality Print.exe",
     "CrealitySlicer.exe",
+    "CrealitySlicerNext.exe",
     "Creality.exe",
     "crealityprint.exe",
+    "creality_print.exe",
+    "CrealityPrintClient.exe",
+    "CrealityCloud.exe",
+    "CrealityHelper.exe",
 )
 
 OUR_PROCESS_NAMES = (
@@ -133,9 +138,57 @@ def _any_image_running(blob: str, names: tuple[str, ...]) -> bool:
     return False
 
 
+def _watch_log(message: str) -> None:
+    try:
+        path = _data_dir() / "creality_watch.log"
+        path.parent.mkdir(parents=True, exist_ok=True)
+        stamp = time.strftime("%Y-%m-%d %H:%M:%S")
+        with path.open("a", encoding="utf-8") as fh:
+            fh.write(f"[{stamp}] {message}\n")
+    except OSError:
+        pass
+
+
+def _powershell_bool(command: str) -> bool | None:
+    """True/False per PowerShell; None = Aufruf fehlgeschlagen."""
+    if sys.platform != "win32":
+        return None
+    flags = getattr(subprocess, "CREATE_NO_WINDOW", 0)
+    try:
+        proc = subprocess.run(
+            ["powershell", "-NoProfile", "-ExecutionPolicy", "Bypass", "-Command", command],
+            capture_output=True,
+            text=True,
+            timeout=25,
+            creationflags=flags,
+        )
+        return (proc.stdout or "").strip().lower() == "true"
+    except (OSError, subprocess.SubprocessError):
+        return None
+
+
+def _win_creality_running_powershell() -> bool | None:
+    """Alle Prozesse mit „creality“ im Namen (ohne TD Filament Studio)."""
+    script = (
+        "$p = Get-CimInstance Win32_Process -ErrorAction SilentlyContinue | Where-Object { "
+        "$n = $_.Name; $n -match '(?i)creality' -and $n -notmatch '(?i)filament' }; "
+        "if ($p) { 'true' } else { 'false' }"
+    )
+    return _powershell_bool(script)
+
+
 def is_creality_running() -> bool:
+    ps = _win_creality_running_powershell()
+    if ps is not None:
+        return ps
     blob = _tasklist_blob()
-    return _any_image_running(blob, CREALITY_PROCESS_NAMES)
+    if _any_image_running(blob, CREALITY_PROCESS_NAMES):
+        return True
+    # Fallback: „creality“ irgendwo in der Prozessliste (fremde EXE-Namen)
+    low = blob
+    if "creality" in low and "filament studio" not in low:
+        return True
+    return False
 
 
 def _win_td_studio_gui_running() -> bool:
@@ -219,28 +272,31 @@ def resolve_app_executable() -> Path:
 
 def launch_main_app() -> bool:
     exe = resolve_app_executable()
-    cwd = exe.parent if exe.is_file() else Path.cwd()
+    if not exe.is_file():
+        _watch_log(f"launch_main_app: EXE fehlt ({exe})")
+        return False
+    if sys.platform == "win32":
+        try:
+            import os
+
+            os.startfile(str(exe))  # noqa: S606 — GUI sichtbar starten
+            _watch_log(f"launch_main_app: startfile OK ({exe})")
+            return True
+        except OSError as exc:
+            _watch_log(f"launch_main_app: startfile fehlgeschlagen ({exc})")
+    cwd = exe.parent
     args = [str(exe)]
     if not getattr(sys, "frozen", False) and exe.name.lower().startswith("python"):
         root = Path(__file__).resolve().parents[1]
         args = [str(exe), str(root / "main.py")]
         cwd = root
-    flags = 0
-    if sys.platform == "win32":
-        flags = (
-            subprocess.DETACHED_PROCESS
-            | subprocess.CREATE_NEW_PROCESS_GROUP
-            | getattr(subprocess, "CREATE_NO_WINDOW", 0)
-        )
+    flags = subprocess.DETACHED_PROCESS | subprocess.CREATE_NEW_PROCESS_GROUP
     try:
-        subprocess.Popen(
-            args,
-            cwd=str(cwd),
-            creationflags=flags,
-            close_fds=True,
-        )
+        subprocess.Popen(args, cwd=str(cwd), creationflags=flags, close_fds=True)
+        _watch_log(f"launch_main_app: Popen OK ({exe})")
         return True
-    except OSError:
+    except OSError as exc:
+        _watch_log(f"launch_main_app: Popen fehlgeschlagen ({exc})")
         return False
 
 
@@ -330,8 +386,7 @@ def start_watcher_detached() -> bool:
         args = [str(exe), str(root / "main.py"), "--watch-creality"]
     flags = subprocess.DETACHED_PROCESS | getattr(subprocess, "CREATE_NEW_WINDOW", 0)
     if sys.platform == "win32":
-        flags |= getattr(subprocess, "CREATE_NO_WINDOW", 0)
-        # pythonw für kein Konsolenfenster in Dev
+        flags |= getattr(subprocess, "CREATE_NO_WINDOW", 0) | 0x01000000  # CREATE_BREAKAWAY_FROM_JOB
         if exe.name.lower() == "python.exe":
             pyw = exe.with_name("pythonw.exe")
             if pyw.is_file():
@@ -366,11 +421,16 @@ def run_watch_loop() -> int:
             creality_up = is_creality_running()
             if creality_up:
                 if not launched_for_session and not is_main_app_running():
+                    _watch_log("Creality erkannt — starte TD Filament Studio …")
                     if launch_main_app():
                         launched_for_session = True
+                    else:
+                        _watch_log("Start von TD Filament Studio fehlgeschlagen")
                 elif is_main_app_running():
                     launched_for_session = True
             else:
+                if launched_for_session:
+                    _watch_log("Creality beendet — Warte auf naechsten Start")
                 launched_for_session = False
 
             time.sleep(POLL_INTERVAL_S)

@@ -1458,8 +1458,15 @@ class TDFilamentStudioApp(AppTk):
         from creality_nfc.creality_watch import sync_creality_watch
 
         started, msg = sync_creality_watch(self.settings.launch_with_creality_print)
+        if self.settings.launch_with_creality_print:
+            from creality_nfc.creality_watch import watcher_is_running
+
+            if watcher_is_running():
+                msg = f"{msg} — Wächter aktiv" if msg else "Creality-Wächter aktiv"
+            elif msg and "konnte nicht" not in msg:
+                msg = f"{msg} — Wächter nicht aktiv (Einstellungen erneut speichern)"
         if msg:
-            self._set_status(msg, "ok" if started else "info")
+            self._set_status(msg, "ok" if started or "aktiv" in msg else "warn")
 
     def _save_settings(self) -> None:
         self.settings.save(DEFAULT_SETTINGS_PATH)

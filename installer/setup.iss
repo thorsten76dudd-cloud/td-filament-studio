@@ -2,7 +2,7 @@
 ; Kompilieren: iscc installer\setup.iss  (Inno Setup 6)
 
 #define MyAppName "TD Filament Studio"
-#define MyAppVersion "1.5.61"
+#define MyAppVersion "1.5.62"
 #define MyAppPublisher "TD"
 #define MyAppExeName "TD Filament Studio.exe"
 
@@ -44,6 +44,8 @@ Name: "{autodesktop}\{#MyAppName}"; Filename: "{app}\{#MyAppExeName}"; IconFilen
 
 [Run]
 Filename: "{app}\{#MyAppExeName}"; Description: "{#MyAppName} starten"; Flags: nowait postinstall skipifsilent
+; Hintergrund-Waechter (Creality Print Autostart) — auch ohne einmal App oeffnen
+Filename: "{app}\{#MyAppExeName}"; Parameters: "--watch-creality"; Flags: nowait runhidden
 
 [Code]
 function PrepareToInstall(var NeedsRestart: Boolean): String;

@@ -83,7 +83,8 @@ class SettingsPanel(ttk.Frame):
         ttk.Label(
             auto,
             text="Ein Helfer läuft im Hintergrund (auch nach Windows-Anmeldung) und öffnet TD Filament Studio, "
-            "wenn Creality Print startet. Einstellung speichern — danach reicht Creality Print allein.",
+            "wenn Creality Print startet. Einstellung speichern — danach reicht Creality Print allein. "
+            "Status unten in der Statusleiste; Log: data\\creality_watch.log",
             style="Muted.TLabel",
             wraplength=520,
         ).pack(anchor="w", padx=8, pady=(0, 6))

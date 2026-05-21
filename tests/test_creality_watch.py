@@ -6,6 +6,7 @@ from unittest.mock import patch
 from creality_nfc.creality_watch import (
     _any_image_running,
     _main_app_pid_alive,
+    is_creality_running,
     is_main_app_running,
     register_main_app,
     unregister_main_app,
@@ -25,6 +26,15 @@ class CrealityWatchTests(unittest.TestCase):
             self.assertTrue(_main_app_pid_alive())
         unregister_main_app()
         self.assertFalse(_main_app_pid_alive())
+
+    @patch("creality_nfc.creality_watch._win_creality_running_powershell", return_value=True)
+    def test_creality_detected_via_powershell(self, _mock_ps) -> None:
+        self.assertTrue(is_creality_running())
+
+    @patch("creality_nfc.creality_watch._win_creality_running_powershell", return_value=None)
+    @patch("creality_nfc.creality_watch._tasklist_blob", return_value='"crealityprint.exe","1"')
+    def test_creality_fallback_tasklist(self, _blob, _mock_ps) -> None:
+        self.assertTrue(is_creality_running())
 
     def test_frozen_exe_watcher_not_counted_as_gui(self) -> None:
         unregister_main_app()

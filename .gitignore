@@ -19,6 +19,7 @@ installer_output/
 
 # Persönliche Daten (nicht ins Repo!)
 data/print_monitor.log
+data/creality_watch.log
 data/printers.json
 data/app_settings.json
 data/spools.json
