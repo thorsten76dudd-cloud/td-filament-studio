@@ -69,11 +69,17 @@ def fetch_latest_release_tag() -> str | None:
     return info.tag if info else None
 
 
+def normalize_release_version(tag_or_version: str) -> str:
+    """z. B. v1.5.58-stable → 1.5.58 (für Vergleich mit APP_VERSION)."""
+    v = str(tag_or_version or "").strip().lstrip("vV")
+    return re.sub(r"-.*$", "", v).strip() or v
+
+
 def _parse_release_payload(data: dict) -> ReleaseInfo | None:
     tag = str(data.get("tag_name", "")).strip()
     if not tag:
         return None
-    version = tag.lstrip("vV")
+    version = normalize_release_version(tag)
     html_url = str(data.get("html_url", "")).strip()
     if not html_url and GITHUB_RELEASES_REPO:
         html_url = f"https://github.com/{GITHUB_RELEASES_REPO}/releases/latest"
@@ -122,6 +128,6 @@ def _pick_release_asset(assets: list) -> tuple[str | None, str | None, int | Non
 
 def is_newer(remote: str, local: str) -> bool:
     def parts(v: str) -> list[int]:
-        return [int(x) for x in re.findall(r"\d+", v)[:4]] or [0]
+        return [int(x) for x in re.findall(r"\d+", normalize_release_version(v))[:4]] or [0]
 
     return parts(remote) > parts(local)

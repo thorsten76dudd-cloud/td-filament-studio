@@ -2,10 +2,10 @@
 # Creates latest stable release and removes the previous stable release tag.
 
 param(
-    [string]$Version = "1.5.58",
-    [string]$Tag = "v1.5.58-stable",
+    [string]$Version = "1.5.59",
+    [string]$Tag = "v1.5.59-stable",
     [string]$Repo = "thorsten76dudd-cloud/td-filament-studio",
-    [string]$RemoveTag = "v1.5.57-stable",
+    [string]$RemoveTag = "v1.5.58-stable",
     [switch]$DeleteAllOldReleases
 )
 
@@ -31,16 +31,12 @@ if (-not (Test-Path $Setup)) {
 $notes = @(
     "## TD Filament Studio $Version",
     "",
-    "### Neu: Creality Print G-Code (Stuetzmaterial / Multicolor)",
-    "* Verbrauch und Farben auch aus dem Dateiende (Footer nach END_PRINT)",
-    "* Mehrfarbig: z. B. Modell + blaues Stuetzmaterial getrennt abziehen (1A/1B)",
-    "* 0-g-Filament-Slots werden ignoriert",
+    "### Fix: In-App-Update",
+    "* Setup laden & installieren startet den Download wieder (Bug: sofort abgebrochen)",
+    "* Sichtbarer Update-Dialog, Fortschritt in der Statuszeile (~60 MB)",
     "",
-    "### UI",
-    "* Einstellungen: scrollbar, Speichern-Buttons immer sichtbar",
-    "",
-    "### Aus 1.5.57",
-    "* Auto-Update-Hinweis; GitHub-Download-Anzeige",
+    "### Aus 1.5.58",
+    "* Creality G-Code Footer / Stuetzmaterial; Einstellungen scrollbar",
     "",
     "Setup ausfuehren (ueberschreibt alte Installation)."
 ) -join [Environment]::NewLine

@@ -116,7 +116,9 @@ from ui.app_icon import apply_window_icon, load_header_logo
 from ui.tag_holder_links import TagHolderLinksDialog
 from ui.components import labeled_row, scrollable_tab, section
 from ui.rounded_widgets import rounded_button
+from ui.dialog_theme import prepare_toplevel
 from ui.messaging import confirm
+from ui.theme import BG, ON_HEADER
 from ui.post_print_deduct_dialog import DeductRow, ask_post_print_deductions
 from ui.chip_duplicate_help import (
     CHIP_DUP_INTRO,
@@ -3903,12 +3905,11 @@ class TDFilamentStudioApp(AppTk):
         self._update_prompted_tag = info.tag
         self._set_status(f"Update verfügbar: {info.tag}", "warn")
         self.notify(
-            f"Neue Version auf GitHub: {info.tag}\n"
-            f"Installiert: {APP_VERSION}\n\n"
-            "Es öffnet sich gleich der Update-Dialog.",
+            f"Neue Version: {info.tag} (installiert: {APP_VERSION})\n"
+            "Update-Dialog wird geöffnet …",
             "warn",
         )
-        self.after(400, lambda: self._offer_update_download(info))
+        self.after(200, lambda: self._offer_update_download(info))
 
     def check_updates(self) -> None:
         from tkinter import messagebox
@@ -3933,8 +3934,23 @@ class TDFilamentStudioApp(AppTk):
                 "ok",
             )
 
+    def _focus_app_for_dialog(self) -> None:
+        try:
+            self.lift()
+            self.attributes("-topmost", True)
+            self.after(80, lambda: self.attributes("-topmost", False))
+            self.focus_force()
+        except tk.TclError:
+            pass
+
     def _offer_update_download(self, info: ReleaseInfo) -> None:
-        from tkinter import messagebox
+        if getattr(self, "_update_dialog", None) is not None:
+            try:
+                if self._update_dialog.winfo_exists():
+                    self._update_dialog.lift()
+                    return
+            except tk.TclError:
+                pass
 
         lines = [
             f"Neue Version: {info.tag}",
@@ -3947,70 +3963,157 @@ class TDFilamentStudioApp(AppTk):
         lines.extend(release_stats_lines(info))
         lines.append("")
         if info.download_url and info.download_label:
-            lines.append(f"Datei: {info.download_label}")
+            lines.append(f"Datei: {info.download_label} (~60 MB)")
         lines.append(f"Seite: {info.html_url}")
-        msg = "\n".join(lines)
+        body = "\n".join(lines)
+
+        self._focus_app_for_dialog()
+        dlg = tk.Toplevel(self)
+        self._update_dialog = dlg
+        dlg.title("Update verfügbar")
+        prepare_toplevel(dlg, parent=self, width=520, height=340, modal=True)
+        tk.Label(
+            dlg,
+            text=body,
+            bg=BG,
+            fg=ON_HEADER,
+            justify="left",
+            wraplength=480,
+            padx=16,
+            pady=12,
+        ).pack(fill="both", expand=True)
+
+        def close() -> None:
+            try:
+                dlg.grab_release()
+            except tk.TclError:
+                pass
+            dlg.destroy()
+            self._update_dialog = None
+
+        btn_row = tk.Frame(dlg, bg=BG)
+        btn_row.pack(side="bottom", fill="x", padx=14, pady=12)
+
+        def on_later() -> None:
+            close()
+
+        def on_browser() -> None:
+            close()
+            webbrowser.open(info.download_url or info.html_url)
+
+        def on_install() -> None:
+            close()
+            if self._bg_job_running:
+                messagebox.showwarning(
+                    APP_NAME,
+                    "Ein anderer Hintergrund-Vorgang läuft noch.\n"
+                    "Bitte warten oder „Nach Updates suchen“ später erneut nutzen.",
+                    parent=self,
+                )
+                return
+            self._run_in_app_update(info)
+
+        rounded_button(btn_row, "Später", on_later, variant="secondary", compact=True).pack(
+            side="right", padx=(8, 0)
+        )
         if info.download_url:
-            choice = messagebox.askyesnocancel(
-                "Update verfügbar",
-                msg
-                + "\n\n"
-                "Ja = Setup laden und installieren (App und Helfer werden beendet)\n"
-                "Nein = nur im Browser öffnen\n"
-                "Abbrechen",
-                parent=self,
+            rounded_button(btn_row, "Im Browser", on_browser, variant="secondary", compact=True).pack(
+                side="right", padx=(8, 0)
             )
-            if choice is True:
-                self._run_in_app_update(info)
-            elif choice is False:
-                webbrowser.open(info.download_url or info.html_url)
-            return
-        if messagebox.askyesno(
-            "Update verfügbar",
-            msg + "\n\nIm Browser öffnen?",
-            parent=self,
-        ):
-            webbrowser.open(info.html_url)
+            rounded_button(
+                btn_row,
+                "Setup laden & installieren",
+                on_install,
+                variant="accent",
+                compact=True,
+            ).pack(side="right")
+        else:
+            rounded_button(btn_row, "Im Browser öffnen", on_browser, variant="accent", compact=True).pack(
+                side="right"
+            )
+        dlg.protocol("WM_DELETE_WINDOW", on_later)
 
     def _run_in_app_update(self, info: ReleaseInfo) -> None:
         if not info.download_url:
             webbrowser.open(info.html_url)
             return
-        self._set_status("Update: Setup wird geladen …", "info")
-        self._bg_job_running = True
+        if self._bg_job_running:
+            messagebox.showwarning(
+                APP_NAME,
+                "Ein Vorgang läuft bereits — bitte warten und Update danach erneut starten.",
+                parent=self,
+            )
+            return
+        self._set_status("Update: Setup wird geladen (ca. 60 MB) …", "info")
+        self.notify(
+            "Update-Download gestartet — kann einige Minuten dauern.\n"
+            "Fortschritt in der Statuszeile unten.",
+            "info",
+        )
+        progress_state = {"last_pct": -1}
 
         def work() -> tuple[Path | None, str]:
             from creality_nfc.app_update import default_setup_download_path, download_setup
 
             dest = default_setup_download_path()
+
+            def on_progress(received: int, total: int) -> None:
+                if total <= 0:
+                    text = f"Update: {received // (1024 * 1024)} MB geladen …"
+                else:
+                    pct = min(100, int(received * 100 / total))
+                    if pct == progress_state["last_pct"]:
+                        return
+                    progress_state["last_pct"] = pct
+                    mb = received / (1024 * 1024)
+                    total_mb = total / (1024 * 1024)
+                    text = f"Update: {mb:.0f} / {total_mb:.0f} MB ({pct}%)"
+                self.after(0, lambda t=text: self._set_status(t, "info"))
+
             try:
-                download_setup(info.download_url or "", dest)
+                download_setup(info.download_url or "", dest, on_progress=on_progress)
                 return dest, ""
             except Exception as exc:
+                log_exception("update-download", exc)
                 return None, str(exc)
 
         def on_ok(result: tuple[Path | None, str]) -> None:
-            self._bg_job_running = False
             path, err = result
             if not path:
+                self._set_status("Update-Download fehlgeschlagen", "error")
                 self.notify(f"Download fehlgeschlagen:\n{err}", "error")
+                if messagebox.askyesno(
+                    APP_NAME,
+                    f"Download fehlgeschlagen:\n{err}\n\n"
+                    "Setup-Seite im Browser öffnen?",
+                    parent=self,
+                ):
+                    webbrowser.open(info.download_url or info.html_url)
                 return
-            from tkinter import messagebox
-
+            self._focus_app_for_dialog()
+            self._set_status("Update: Setup bereit — Installation bestätigen", "ok")
             if not messagebox.askokcancel(
                 "Update installieren",
                 f"Setup bereit:\n{path}\n\n"
                 "OK = App und Hintergrund-Helfer beenden, Installer starten.\n"
-                "Abbrechen = nichts ändern.",
+                "Abbrechen = Setup bleibt im Ordner, nichts installieren.",
                 parent=self,
             ):
+                self.notify(f"Setup gespeichert:\n{path}", "info")
                 return
             try:
                 from creality_nfc.app_update import install_downloaded_setup
 
+                self.notify("Installer wird gestartet — App wird beendet …", "ok")
                 install_downloaded_setup(path)
             except Exception as exc:
-                self.notify(f"Installer konnte nicht gestartet werden:\n{exc}", "error")
+                log_exception("update-install", exc)
+                messagebox.showerror(
+                    APP_NAME,
+                    f"Installer konnte nicht gestartet werden:\n{exc}\n\n"
+                    f"Manuell ausführen:\n{path}",
+                    parent=self,
+                )
 
         self._run_bg_job("Update-Download", work, on_ok=on_ok)
 
