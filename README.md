@@ -8,7 +8,7 @@ Windows-App für **Creality K2 mit CFS**: RFID-Tags programmieren (MIFARE Classi
 
 Basiert auf dem offenen Creality-Tag-Format ([DnG-Crafts/K2-RFID](https://github.com/DnG-Crafts/K2-RFID)).
 
-**Aktuelle Version:** [v1.5.53-stable](https://github.com/thorsten76dudd-cloud/td-filament-studio/releases/latest) — Installer unter *Releases*.
+**Aktuelle Version:** [v1.5.54-stable](https://github.com/thorsten76dudd-cloud/td-filament-studio/releases/latest) — Installer unter *Releases*.
 
 ## Funktionen
 
@@ -45,7 +45,7 @@ python main.py
 build_exe.bat
 ```
 
-Ergebnis: `dist\TD Filament Studio.exe` — beim ersten Start wird `data\` neben die EXE kopiert (falls noch nicht vorhanden).
+Ergebnis: `dist\TD Filament Studio\TD Filament Studio.exe` — beim ersten Start wird `data\` neben die EXE kopiert (falls noch nicht vorhanden).
 
 ## Windows-Installer
 

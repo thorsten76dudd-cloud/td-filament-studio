@@ -25,14 +25,14 @@ if errorlevel 1 (
     exit /b 1
 )
 
-if not exist "dist\TD Filament Studio.exe" (
-    echo EXE nicht gefunden: dist\TD Filament Studio.exe
+if not exist "dist\TD Filament Studio\TD Filament Studio.exe" (
+    echo EXE nicht gefunden: dist\TD Filament Studio\TD Filament Studio.exe
     exit /b 1
 )
 
 echo.
-echo EXE: dist\TD Filament Studio.exe
-for %%A in ("dist\TD Filament Studio.exe") do echo Groesse: %%~zA Bytes
+echo EXE: dist\TD Filament Studio\TD Filament Studio.exe
+for %%A in ("dist\TD Filament Studio\TD Filament Studio.exe") do echo Groesse: %%~zA Bytes
 echo.
 
 set ISCC=
@@ -50,7 +50,7 @@ if not "%ISCC%"=="" (
     echo.
     echo === Fertig ===
     echo Setup:  installer_output\TD-Filament-Studio-Setup.exe
-    echo Portable: dist\TD Filament Studio.exe
+    echo Portable: dist\TD Filament Studio\TD Filament Studio.exe
 ) else (
     echo [2/2] Inno Setup nicht gefunden — nur portable EXE.
     echo.
@@ -58,7 +58,7 @@ if not "%ISCC%"=="" (
     echo   https://jrsoftware.org/isdl.php
     echo.
     echo === Fertig (nur EXE) ===
-    echo dist\TD Filament Studio.exe
+    echo dist\TD Filament Studio\TD Filament Studio.exe
 )
 
 echo.

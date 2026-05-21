@@ -74,12 +74,16 @@ def shutdown_application(app: Any) -> None:
     time.sleep(0.5 if getattr(sys, "frozen", False) else 0.15)
 
 
-def exit_process_after_frozen_app() -> None:
+def hard_exit_frozen(exit_code: int = 0) -> None:
     """
-    PyInstaller one-file: Temp-Ordner (_MEI…) lässt sich oft nicht löschen
-    (DLLs von NFC/Kamera noch offen) → Warn-Dialog. Hartes Beenden vermeidet das.
+    PyInstaller: normaler Exit löst oft „Failed to remove temporary directory _MEI…“ aus
+    (DLLs von NFC/Kamera/Threads noch offen). os._exit überspringt Bootloader-Cleanup.
     """
     if getattr(sys, "frozen", False):
         import os
 
-        os._exit(0)
+        os._exit(exit_code)
+
+
+def exit_process_after_frozen_app() -> None:
+    hard_exit_frozen(0)

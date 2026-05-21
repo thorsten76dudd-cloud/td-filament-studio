@@ -2,10 +2,10 @@
 # Creates latest stable release and removes the previous stable release tag.
 
 param(
-    [string]$Version = "1.5.53",
-    [string]$Tag = "v1.5.53-stable",
+    [string]$Version = "1.5.54",
+    [string]$Tag = "v1.5.54-stable",
     [string]$Repo = "thorsten76dudd-cloud/td-filament-studio",
-    [string]$RemoveTag = "v1.5.52-stable",
+    [string]$RemoveTag = "v1.5.53-stable",
     [switch]$DeleteAllOldReleases
 )
 
@@ -31,16 +31,14 @@ if (-not (Test-Path $Setup)) {
 $notes = @(
     "## TD Filament Studio $Version",
     "",
-    "### Fix: Mit Creality Print starten",
-    "* Waechter startet TD Filament Studio zuverlaessig, wenn Creality Print laeuft",
-    "* Windows-Autostart fuer den Helfer (Option in Einstellungen speichern)",
+    "### Fix: Beenden ohne _MEI-Warnung",
+    "* Installer nutzt Ordner-Build statt Einzel-EXE (kein temp _MEI mehr)",
+    "* Sauberes Beenden per os._exit (kein PyInstaller-Warn-Dialog)",
     "",
-    "### Aus 1.5.52",
-    "* Spulen: Material-DB, Farbe Dialog/Presets, K2 Pro, CFS 1A-1D oben",
-    "* Filament-Profil nur Lesen; Material-DB per SSH",
-    "* G-Code-Vorschau schaerfer; Dateilisten Scrollposition",
+    "### Aus 1.5.53",
+    "* Mit Creality Print starten (Waechter + Windows-Autostart)",
     "",
-    "Setup ausfuehren. Einstellungen: Mit Creality Print starten aktivieren und speichern."
+    "Setup ausfuehren (ueberschreibt alte Installation)."
 ) -join [Environment]::NewLine
 Set-Content -Path $NotesFile -Value $notes -Encoding UTF8
 

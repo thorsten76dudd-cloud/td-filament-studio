@@ -66,9 +66,9 @@ if errorlevel 1 (
 
 echo.
 
-echo Fertig: dist\TD Filament Studio.exe
+echo Fertig: dist\TD Filament Studio\TD Filament Studio.exe
 
-for %%F in ("dist\TD Filament Studio.exe") do echo Groesse: %%~zF Bytes  —  %%~tF
+for %%F in ("dist\TD Filament Studio\TD Filament Studio.exe") do echo Groesse: %%~zF Bytes  —  %%~tF
 
 pause
 

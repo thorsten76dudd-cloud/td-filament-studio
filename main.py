@@ -42,4 +42,8 @@ def main(argv: list[str] | None = None) -> int:
 
 
 if __name__ == "__main__":
-    sys.exit(main())
+    _code = main()
+    from app.shutdown import hard_exit_frozen
+
+    hard_exit_frozen(int(_code) if _code else 0)
+    raise SystemExit(_code)

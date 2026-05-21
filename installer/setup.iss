@@ -2,7 +2,7 @@
 ; Kompilieren: iscc installer\setup.iss  (Inno Setup 6)
 
 #define MyAppName "TD Filament Studio"
-#define MyAppVersion "1.5.53"
+#define MyAppVersion "1.5.54"
 #define MyAppPublisher "TD"
 #define MyAppExeName "TD Filament Studio.exe"
 
@@ -31,7 +31,7 @@ Name: "german"; MessagesFile: "compiler:Languages\German.isl"
 Name: "desktopicon"; Description: "Verknüpfung auf dem Desktop"; GroupDescription: "Zusätzlich:"; Flags: unchecked
 
 [Files]
-Source: "..\dist\{#MyAppExeName}"; DestDir: "{app}"; Flags: ignoreversion
+Source: "..\dist\TD Filament Studio\*"; DestDir: "{app}"; Flags: ignoreversion recursesubdirs createallsubdirs
 Source: "..\assets\icons\app_icon.ico"; DestDir: "{app}"; Flags: ignoreversion
 Source: "..\data\*"; DestDir: "{app}\data"; Flags: ignoreversion onlyifdoesntexist recursesubdirs createallsubdirs
 

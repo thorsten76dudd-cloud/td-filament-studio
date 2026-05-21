@@ -3,7 +3,7 @@ setlocal
 cd /d "%~dp0"
 
 echo Pruefe dist\TD Filament Studio.exe ...
-if not exist "dist\TD Filament Studio.exe" (
+if not exist "dist\TD Filament Studio\TD Filament Studio.exe" (
     echo.
     echo EXE fehlt — zuerst build_exe.bat ausfuehren.
     pause

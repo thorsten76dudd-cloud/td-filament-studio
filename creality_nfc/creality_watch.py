@@ -209,7 +209,9 @@ def resolve_app_executable() -> Path:
     if getattr(sys, "frozen", False):
         return Path(sys.executable)
     root = Path(__file__).resolve().parents[1]
-    built = root / "dist" / "TD Filament Studio.exe"
+    built = root / "dist" / "TD Filament Studio" / "TD Filament Studio.exe"
+    if not built.is_file():
+        built = root / "dist" / "TD Filament Studio.exe"
     if built.is_file():
         return built
     return Path(sys.executable)
@@ -374,6 +376,10 @@ def run_watch_loop() -> int:
             time.sleep(POLL_INTERVAL_S)
     finally:
         _clear_pid()
+        if getattr(sys, "frozen", False):
+            import os
+
+            os._exit(0)
 
 
 def main(argv: list[str] | None = None) -> int:

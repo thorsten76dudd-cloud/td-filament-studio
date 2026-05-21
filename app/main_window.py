@@ -3897,11 +3897,12 @@ class TDFilamentStudioApp(AppTk):
             self._save_settings()
         except Exception:
             pass
-        from app.shutdown import shutdown_application
+        from app.shutdown import hard_exit_frozen, shutdown_application
         from creality_nfc.creality_watch import unregister_main_app
 
         unregister_main_app()
         shutdown_application(self)
+        hard_exit_frozen(0)
         try:
             self.quit()
         except tk.TclError:
