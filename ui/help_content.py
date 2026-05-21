@@ -185,7 +185,8 @@ Deine Projekte von Printables & Co.: STL/3MF, PDF-Anleitungen, Bilder — nicht 
 • Datei importieren — oder vom Windows-Explorer auf den Tab ziehen (Drag & Drop)
 • Unterstützt: STL, 3MF, PDF, Bilder, TXT …, ZIP (alles darin, mit Ordnern), ganze Ordner
 • Verknüpfung — nur Pfad merken (Datei bleibt z. B. in Downloads)
-• STL/3MF — „In Creality öffnen“ oder „3D anzeigen…“ (3D Viewer direkt oder „Öffnen mit“)
+• STL — eingebaute 3D-Vorschau (drehen/zoomen); „3D extern…“ = Windows 3D Viewer
+• Ordner importieren / Speichern unter mit Unterordnern · Bibliothek sichern/laden (ZIP)
 • Erledigt ✓ — Spalte „✓“ anklicken oder Haken in Details (grün = fertig/gedruckt, bleibt gespeichert)
 • Details — Name, Quelle-URL, Bemerkung
 • Suche / Nur offen — Dateiliste filtern

@@ -70,6 +70,18 @@ def shutdown_application(app: Any) -> None:
     except Exception as exc:
         log.debug("camera viewer stop: %s", exc)
 
+    try:
+        from creality_nfc.stl_preview_server import StlPreviewServer
+
+        with StlPreviewServer._lock:
+            shared = StlPreviewServer._shared
+        if shared:
+            shared.stop()
+            with StlPreviewServer._lock:
+                StlPreviewServer._shared = None
+    except Exception as exc:
+        log.debug("stl preview stop: %s", exc)
+
     gc.collect()
     time.sleep(0.5 if getattr(sys, "frozen", False) else 0.15)
 

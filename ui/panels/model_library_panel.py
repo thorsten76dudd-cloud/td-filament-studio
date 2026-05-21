@@ -30,6 +30,7 @@ from ui.dnd_files import parse_dnd_file_list
 from ui.tk_root import HAS_OS_DND
 from ui.dialog_theme import add_dialog_footer, prepare_toplevel, theme_dialog
 from ui.messaging import confirm, notify
+from ui.stl_preview_widget import StlPreviewWidget
 from ui.theme import ACCENT_SOFT, MUTED, OK
 from ui.tooltip import tip
 
@@ -227,12 +228,26 @@ class ModelLibraryPanel(ttk.Frame):
         right = ttk.Frame(self._body_pane)
         self._body_pane.add(right, weight=1)
         right.columnconfigure(0, weight=1)
-        right.rowconfigure(1, weight=1)
-        ttk.Label(right, text="Details", style="Muted.TLabel").grid(row=0, column=0, sticky="w", pady=(0, 4))
+        right.rowconfigure(0, weight=1)
         self._left_split = left_split
 
-        meta = ttk.LabelFrame(right, text="  Ausgewählte Datei  ", padding=8)
-        meta.grid(row=1, column=0, sticky="nsew")
+        right_split = ttk.Panedwindow(right, orient="vertical")
+        self._right_split = right_split
+        right_split.grid(row=0, column=0, sticky="nsew")
+        preview_wrap = ttk.LabelFrame(right_split, text="  Vorschau  ", padding=6)
+        right_split.add(preview_wrap, weight=3)
+        preview_wrap.columnconfigure(0, weight=1)
+        preview_wrap.rowconfigure(0, weight=1)
+        self._stl_preview = StlPreviewWidget(preview_wrap)
+        self._stl_preview.grid(row=0, column=0, sticky="nsew")
+        preview_wrap.rowconfigure(0, weight=1)
+        preview_wrap.columnconfigure(0, weight=1)
+        self._stl_preview.set_external_handler(self._open_stl_external)
+        preview_wrap.bind("<Configure>", lambda _e: self._stl_preview.fit_to_panel(), add="+")
+        self._right_split.bind("<ButtonRelease-1>", lambda _e: self._stl_preview.fit_to_panel(), add="+")
+
+        meta = ttk.LabelFrame(right_split, text="  Ausgewählte Datei  ", padding=8)
+        right_split.add(meta, weight=2)
         meta.columnconfigure(0, weight=1)
         pad = {"padx": 0, "pady": 3}
         self._name_var = tk.StringVar()
@@ -274,8 +289,8 @@ class ModelLibraryPanel(ttk.Frame):
             "STL/3MF in Creality Print (Windows-Standard-App für diese Dateitypen).",
         ).pack(side="left", padx=(0, 6))
         tip(
-            ttk.Button(left_btns, text="3D anzeigen…", command=self._open_in_3d_viewer, style="Secondary.TButton"),
-            "STL/3MF anklicken: 3D Viewer direkt, sonst Menü „Öffnen mit“.",
+            ttk.Button(left_btns, text="3D extern…", command=self._open_in_3d_viewer, style="Secondary.TButton"),
+            "Windows 3D Viewer / „Öffnen mit“ in separatem Fenster.",
         ).pack(side="left")
         tip(
             ttk.Button(meta_btns, text="Details speichern", command=self._save_meta, style="Accent.TButton"),
@@ -307,6 +322,10 @@ class ModelLibraryPanel(ttk.Frame):
             pass
         try:
             self._left_split.sashpos(0, 180)
+        except tk.TclError:
+            pass
+        try:
+            self._right_split.sashpos(0, 220)
         except tk.TclError:
             pass
 
@@ -458,6 +477,24 @@ class ModelLibraryPanel(ttk.Frame):
         self._notes_var.set(entry.notes)
         path = entry.resolved_path(self.library.root)
         self._path_var.set(str(path) if path else "— Datei nicht gefunden —")
+        self._update_stl_preview(entry, path)
+
+    def _update_stl_preview(self, entry: ModelEntry, path: Path | None) -> None:
+        if not path or not path.is_file():
+            self._stl_preview.clear("Datei nicht gefunden.")
+            return
+        ext = (entry.file_ext or path.suffix).lower()
+        if ext == ".stl":
+            if not self._stl_preview.load_stl(path):
+                pass
+            return
+        if ext == ".3mf":
+            self._stl_preview.clear("3MF: Vorschau nur extern\n(„3D extern…“ oder Creality).")
+            return
+        self._stl_preview.clear("Vorschau nur für STL.\n(PDF/TXT: „Öffnen“)")
+
+    def _open_stl_external(self, path: Path) -> None:
+        self._open_in_3d_viewer_for_path(path)
 
     def _clear_details(self) -> None:
         self._name_var.set("")
@@ -465,6 +502,7 @@ class ModelLibraryPanel(ttk.Frame):
         self._notes_var.set("")
         self._path_var.set("")
         self._done_var.set(False)
+        self._stl_preview.clear()
 
     def _resolve_drop_path(self, raw: Path) -> Path:
         try:
@@ -776,6 +814,12 @@ class ModelLibraryPanel(ttk.Frame):
             self.files_tree.selection_set(row)
             self.files_tree.focus(row)
             self._on_file_select()
+        entry = self._selected_entry()
+        if entry:
+            path = entry.resolved_path(self.library.root)
+            ext = (entry.file_ext or (path.suffix if path else "")).lower()
+            if ext == ".stl":
+                return
         if self._open_selected_file(silent=True):
             return
         self._open_in_explorer()
@@ -1319,12 +1363,9 @@ class ModelLibraryPanel(ttk.Frame):
         if not ok:
             notify(self, f"Creality / Standard-App konnte nicht gestartet werden:\n{err}", "error")
 
-    def _open_in_3d_viewer(self) -> None:
+    def _open_in_3d_viewer_for_path(self, path: Path) -> None:
         from creality_nfc.windows_mesh_open import open_microsoft_store_3d_viewer
 
-        path = self._selected_mesh_path()
-        if not path:
-            return
         ok, hint, mode = open_mesh_choose_viewer(path)
         parent = self.winfo_toplevel()
         if ok:
@@ -1346,6 +1387,12 @@ class ModelLibraryPanel(ttk.Frame):
             parent=parent,
         )
         notify(self, hint, "error")
+
+    def _open_in_3d_viewer(self) -> None:
+        path = self._selected_mesh_path()
+        if not path:
+            return
+        self._open_in_3d_viewer_for_path(path)
 
     def _open_in_explorer(self) -> None:
         entry = self._selected_entry()
