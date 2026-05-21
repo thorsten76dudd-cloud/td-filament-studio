@@ -209,6 +209,28 @@ class ModelLibrary:
         self.save()
         return True
 
+    def folder_move_blocked(self, folder_id: str, new_parent_id: str) -> str | None:
+        """Grund, warum ein Ordner nicht verschoben werden kann — sonst None."""
+        if folder_id == "root":
+            return "Bibliothek kann nicht verschoben werden."
+        if folder_id == new_parent_id:
+            return "Ordner ist bereits hier."
+        if new_parent_id in self.subfolder_ids(folder_id):
+            return "Ziel liegt im zu verschiebenden Ordner."
+        if not self.folder_by_id(folder_id) or not self.folder_by_id(new_parent_id):
+            return "Ordner nicht gefunden."
+        return None
+
+    def move_folder(self, folder_id: str, new_parent_id: str) -> bool:
+        if self.folder_move_blocked(folder_id, new_parent_id):
+            return False
+        folder = self.folder_by_id(folder_id)
+        if not folder:
+            return False
+        folder.parent_id = new_parent_id
+        self.save()
+        return True
+
     def get_or_create_subfolder(self, parent_id: str, name: str) -> str:
         """Unterordner mit Namen anlegen oder vorhandene ID zurückgeben."""
         clean = name.strip() or "Ordner"

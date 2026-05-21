@@ -40,7 +40,8 @@ class ModelLibraryPanel(ttk.Frame):
         self.app = app
         self.library = ModelLibrary(LIBRARY_ROOT)
         self._current_folder_id = "root"
-        self._drag_entry_id: str | None = None
+        self._drag_entry_ids: list[str] = []
+        self._drag_folder_ids: list[str] = []
         self._drag_start_xy: tuple[int, int] | None = None
         self._drag_active = False
         self._drop_highlight: str | None = None
@@ -65,8 +66,8 @@ class ModelLibraryPanel(ttk.Frame):
             "Anzeigename der ausgewählten Datei ändern.",
         ).pack(side="left", padx=(0, 6))
         tip(
-            ttk.Button(top, text="In Ordner verschieben…", command=self._move_file, style="Secondary.TButton"),
-            "Ausgewählte Datei in einen anderen Ordner verschieben.",
+            ttk.Button(top, text="In Ordner verschieben…", command=self._move_to_folder_dialog, style="Secondary.TButton"),
+            "Ausgewählte Datei(en) oder Ordner (links, Strg+Klick) in einen anderen Ordner verschieben.",
         ).pack(side="left", padx=(0, 6))
         tip(
             ttk.Button(top, text="Speichern unter…", command=self._export_file, style="Accent.TButton"),
@@ -127,12 +128,13 @@ class ModelLibraryPanel(ttk.Frame):
         folder_wrap.grid(row=3, column=0, sticky="nsew")
         folder_wrap.columnconfigure(0, weight=1)
         folder_wrap.rowconfigure(0, weight=1)
-        self.folder_tree = ttk.Treeview(folder_wrap, show="tree", height=14)
+        self.folder_tree = ttk.Treeview(folder_wrap, show="tree", height=14, selectmode="extended")
         fsy = ttk.Scrollbar(folder_wrap, orient="vertical", command=self.folder_tree.yview)
         self.folder_tree.configure(yscrollcommand=fsy.set)
         self.folder_tree.grid(row=0, column=0, sticky="nsew")
         fsy.grid(row=0, column=1, sticky="ns")
         self.folder_tree.bind("<<TreeviewSelect>>", self._on_folder_select)
+        self.folder_tree.bind("<ButtonPress-1>", self._on_folder_drag_press, add="+")
         self.folder_tree.tag_configure("drop_target", background=ACCENT_SOFT)
 
         files_col = ttk.Frame(left_split)
@@ -246,6 +248,10 @@ class ModelLibraryPanel(ttk.Frame):
         left_btns = ttk.Frame(meta_btns)
         left_btns.grid(row=0, column=0, sticky="w")
         tip(
+            ttk.Button(left_btns, text="Öffnen", command=self._open_selected_file, style="Secondary.TButton"),
+            "PDF, TXT, Bilder … mit Standardprogramm; STL/3MF im 3D-Viewer.",
+        ).pack(side="left", padx=(0, 6))
+        tip(
             ttk.Button(left_btns, text="In Creality öffnen", command=self._open_in_creality, style="Secondary.TButton"),
             "STL/3MF in Creality Print (Windows-Standard-App für diese Dateitypen).",
         ).pack(side="left", padx=(0, 6))
@@ -260,7 +266,7 @@ class ModelLibraryPanel(ttk.Frame):
 
         ttk.Label(
             self,
-            text="Export: Datei wählen oder nur Ordner — Speichern unter… | Strg+Klick = mehrere | Verschieben: auf Ordner ziehen.",
+            text="Export: Datei wählen oder nur Ordner — Speichern unter… | Strg+Klick = mehrere | Verschieben: Datei oder Ordner links auf Zielordner ziehen.",
             style="Muted.TLabel",
             wraplength=920,
         ).pack(anchor="w", padx=12, pady=(0, 8))
@@ -707,6 +713,13 @@ class ModelLibraryPanel(ttk.Frame):
         if self.files_tree.identify_region(event.x, event.y) == "cell":
             if self.files_tree.identify_column(event.x) == "#1":
                 return
+        row = self.files_tree.identify_row(event.y)
+        if row and self.files_tree.exists(row):
+            self.files_tree.selection_set(row)
+            self.files_tree.focus(row)
+            self._on_file_select()
+        if self._open_selected_file(silent=True):
+            return
         self._open_in_explorer()
 
     def _toggle_done_entry(self, entry_id: str) -> None:
@@ -749,6 +762,26 @@ class ModelLibraryPanel(ttk.Frame):
             self.files_tree.selection_set(entry_id)
             self._on_file_select()
 
+    def _selected_movable_folder_ids(self) -> list[str]:
+        return [fid for fid in self.folder_tree.selection() if fid and fid != "root"]
+
+    def _on_folder_drag_press(self, event) -> None:
+        row = self.folder_tree.identify_row(event.y)
+        if not row or row == "root":
+            self._cancel_drag()
+            return
+        sel = self._selected_movable_folder_ids()
+        if row in sel:
+            folder_ids = sel
+        else:
+            folder_ids = [row]
+        self._drag_folder_ids = folder_ids
+        self._drag_entry_ids = []
+        self._drag_start_xy = (event.x_root, event.y_root)
+        self._drag_active = False
+        self.bind("<B1-Motion>", self._on_drag_motion_global, add="+")
+        self.bind("<ButtonRelease-1>", self._on_drag_release, add="+")
+
     def _on_file_drag_press(self, event) -> None:
         if self.files_tree.identify_region(event.x, event.y) != "cell":
             self._cancel_drag()
@@ -757,7 +790,13 @@ class ModelLibraryPanel(ttk.Frame):
         if not row:
             self._cancel_drag()
             return
-        self._drag_entry_id = row
+        sel = list(self.files_tree.selection())
+        if row in sel:
+            entry_ids = sel
+        else:
+            entry_ids = [row]
+        self._drag_entry_ids = entry_ids
+        self._drag_folder_ids = []
         self._last_file_entry_id = row
         self._drag_start_xy = (event.x_root, event.y_root)
         self._drag_active = False
@@ -765,7 +804,7 @@ class ModelLibraryPanel(ttk.Frame):
         self.bind("<ButtonRelease-1>", self._on_drag_release, add="+")
 
     def _on_drag_motion_global(self, event) -> None:
-        if not self._drag_entry_id or not self._drag_start_xy:
+        if (not self._drag_entry_ids and not self._drag_folder_ids) or not self._drag_start_xy:
             return
         if not self._drag_active:
             dx = abs(event.x_root - self._drag_start_xy[0])
@@ -776,19 +815,24 @@ class ModelLibraryPanel(ttk.Frame):
         self._update_drop_highlight()
 
     def _on_drag_release(self, _event) -> None:
-        entry_id = self._drag_entry_id
+        entry_ids = list(self._drag_entry_ids)
+        folder_ids = list(self._drag_folder_ids)
         was_drag = self._drag_active
-        folder_id = self._drop_highlight or self._folder_at_pointer()
+        target_id = self._drop_highlight or self._folder_at_pointer()
         self._end_drag()
-        if not was_drag or not entry_id:
+        if not was_drag:
             return
-        if folder_id:
-            self._apply_move_to_folder(entry_id, folder_id)
-        else:
+        if not target_id:
             notify(self, "Zum Verschieben auf einen Ordner links loslassen.", "warn")
+            return
+        if folder_ids:
+            self._apply_move_folders(folder_ids, target_id)
+        elif entry_ids:
+            self._apply_move_entries(entry_ids, target_id)
 
     def _cancel_drag(self) -> None:
-        self._drag_entry_id = None
+        self._drag_entry_ids = []
+        self._drag_folder_ids = []
         self._drag_start_xy = None
         self._drag_active = False
 
@@ -828,33 +872,69 @@ class ModelLibraryPanel(ttk.Frame):
             self.folder_tree.item(self._drop_highlight, tags=())
         self._drop_highlight = None
 
-    def _apply_move_to_folder(self, entry_id: str, target_folder_id: str) -> None:
-        entry = self.library.get_entry(entry_id)
-        if not entry:
-            return
-        if entry.folder_id == target_folder_id:
-            return
-        self.library.move_entry(entry_id, target_folder_id)
+    def _finish_move_ui(self, target_folder_id: str, *, focus_entry_ids: list[str] | None = None) -> None:
         self._current_folder_id = target_folder_id
         self._reload_folders()
         self._open_folder_in_tree(target_folder_id)
         if self.folder_tree.exists(target_folder_id):
             self.folder_tree.selection_set(target_folder_id)
         self._reload_files()
-        if self.files_tree.exists(entry_id):
-            self.files_tree.selection_set(entry_id)
-            self._on_file_select()
-        notify(self, f"Verschoben nach: {self.library.folder_breadcrumb(target_folder_id)}", "ok")
+        if focus_entry_ids:
+            restore = [i for i in focus_entry_ids if self.files_tree.exists(i)]
+            if restore:
+                self.files_tree.selection_set(restore)
+                self.files_tree.focus(restore[0])
+                self._on_file_select()
 
-    def _move_file(self) -> None:
-        entry = self._selected_entry()
-        if not entry:
-            notify(self, "Bitte eine Datei auswählen.", "warn")
+    def _apply_move_entries(self, entry_ids: list[str], target_folder_id: str) -> None:
+        moved = 0
+        for entry_id in entry_ids:
+            entry = self.library.get_entry(entry_id)
+            if not entry or entry.folder_id == target_folder_id:
+                continue
+            if self.library.move_entry(entry_id, target_folder_id):
+                moved += 1
+        if not moved:
             return
+        crumb = self.library.folder_breadcrumb(target_folder_id)
+        self._finish_move_ui(target_folder_id, focus_entry_ids=entry_ids)
+        notify(
+            self,
+            f"{moved} Datei(en) verschoben nach: {crumb}",
+            "ok",
+        )
+
+    def _apply_move_folders(self, folder_ids: list[str], target_folder_id: str) -> None:
+        moved = 0
+        skipped: list[str] = []
+        for folder_id in folder_ids:
+            if folder_id == target_folder_id:
+                continue
+            reason = self.library.folder_move_blocked(folder_id, target_folder_id)
+            if reason:
+                folder = self.library.folder_by_id(folder_id)
+                name = folder.name if folder else folder_id
+                skipped.append(f"{name}: {reason}")
+                continue
+            if self.library.move_folder(folder_id, target_folder_id):
+                moved += 1
+        if moved:
+            crumb = self.library.folder_breadcrumb(target_folder_id)
+            self._finish_move_ui(target_folder_id)
+            msg = f"{moved} Ordner verschoben nach: {crumb}"
+            if skipped:
+                msg += "\n\nÜbersprungen:\n" + "\n".join(skipped[:6])
+            notify(self, msg, "ok" if not skipped else "warn")
+        elif skipped:
+            notify(self, "Nicht verschoben:\n" + "\n".join(skipped[:8]), "warn")
+        else:
+            notify(self, "Keine Ordner verschoben.", "warn")
+
+    def _pick_target_folder(self, prompt: str) -> str | None:
         options = self.library.all_folders_for_picker()
         labels = [label for label, _fid in options]
         if not labels:
-            return
+            return None
 
         dlg = tk.Toplevel(self)
         dlg.title("In Ordner verschieben")
@@ -868,16 +948,47 @@ class ModelLibraryPanel(ttk.Frame):
         add_dialog_footer(dlg, on_ok=ok, on_cancel=dlg.destroy, ok_text="Verschieben")
         body = ttk.Frame(dlg)
         body.pack(fill="both", expand=True, padx=14, pady=14)
-        ttk.Label(body, text=f"Zielordner für „{entry.display_name}“:").pack(anchor="w", pady=(0, 8))
+        ttk.Label(body, text=prompt).pack(anchor="w", pady=(0, 8))
         choice = tk.StringVar(value=labels[0])
         combo = ttk.Combobox(body, textvariable=choice, values=labels, state="readonly", width=42)
         combo.pack(fill="x", pady=4)
         dlg.wait_window()
         if not picked:
-            return
+            return None
         label_to_id = {label: fid for label, fid in options}
-        target_id = label_to_id.get(picked[0], "root")
-        self._apply_move_to_folder(entry.id, target_id)
+        return label_to_id.get(picked[0], "root")
+
+    def _move_to_folder_dialog(self) -> None:
+        entries = self._selected_entries()
+        folder_ids = self._selected_movable_folder_ids()
+        if entries:
+            names = ", ".join(e.display_name for e in entries[:3])
+            if len(entries) > 3:
+                names += f" … (+{len(entries) - 3})"
+            prompt = f"Zielordner für {len(entries)} Datei(en) ({names}):"
+            target_id = self._pick_target_folder(prompt)
+            if target_id:
+                self._apply_move_entries([e.id for e in entries], target_id)
+            return
+        if folder_ids:
+            names = []
+            for fid in folder_ids[:4]:
+                folder = self.library.folder_by_id(fid)
+                if folder:
+                    names.append(folder.name)
+            label = ", ".join(names)
+            if len(folder_ids) > 4:
+                label += f" … (+{len(folder_ids) - 4})"
+            prompt = f"Zielordner für {len(folder_ids)} Ordner ({label}):"
+            target_id = self._pick_target_folder(prompt)
+            if target_id:
+                self._apply_move_folders(folder_ids, target_id)
+            return
+        notify(
+            self,
+            "Bitte Datei(en) in der Mitte oder einen oder mehrere Ordner links wählen (Strg+Klick).",
+            "warn",
+        )
 
     def _save_meta(self) -> None:
         entry = self._selected_entry()
@@ -982,10 +1093,12 @@ class ModelLibraryPanel(ttk.Frame):
         elif failed:
             notify(self, "Export fehlgeschlagen:\n" + "\n".join(failed[:8]), "error")
 
-    def _entry_for_single_file_action(self) -> ModelEntry | None:
-        """Genau eine Datei für Viewer / Creality — Klick in der Dateiliste nötig."""
+    def _entry_for_single_file_action(self, *, silent: bool = False) -> ModelEntry | None:
+        """Genau eine Datei für Öffnen / Viewer — Klick in der Dateiliste nötig."""
         selected = self._selected_entries()
         if len(selected) > 1:
+            if silent:
+                return None
             messagebox.showwarning(
                 APP_NAME,
                 "Bitte nur eine Datei auswählen (nicht mehrere mit Strg+Klick).",
@@ -999,13 +1112,71 @@ class ModelLibraryPanel(ttk.Frame):
             entry = self.library.get_entry(focus)
             if entry:
                 return entry
+        if silent:
+            return None
         messagebox.showwarning(
             APP_NAME,
-            "Bitte zuerst eine STL- oder 3MF-Datei in der mittleren Liste anklicken.\n\n"
+            "Bitte zuerst eine Datei in der mittleren Liste anklicken.\n\n"
             "(Nur den Ordner links markieren reicht nicht.)",
             parent=self.winfo_toplevel(),
         )
         return None
+
+    @staticmethod
+    def _open_path_with_system(path: Path) -> tuple[bool, str]:
+        path = path.resolve()
+        try:
+            if sys.platform == "win32":
+                os.startfile(path)  # type: ignore[attr-defined]
+            elif sys.platform == "darwin":
+                subprocess.run(["open", str(path)], check=False)
+            else:
+                subprocess.run(["xdg-open", str(path)], check=False)
+            return True, ""
+        except OSError as exc:
+            return False, str(exc)
+
+    def _open_selected_file(self, *, silent: bool = False) -> bool:
+        """PDF/TXT/Bilder mit Standard-App; STL/3MF im 3D-Viewer. True = geöffnet."""
+        entry = self._entry_for_single_file_action(silent=silent)
+        if not entry:
+            return False
+        path = entry.resolved_path(self.library.root)
+        if not path or not path.is_file():
+            if not silent:
+                notify(self, "Datei nicht gefunden (Pfad prüfen).", "warn")
+            return False
+        ext = path.suffix.lower()
+        if ext in {".stl", ".3mf"}:
+            from creality_nfc.windows_mesh_open import open_microsoft_store_3d_viewer
+
+            ok, hint, mode = open_mesh_choose_viewer(path)
+            if ok:
+                if not silent:
+                    notify(self, hint, "ok")
+                return True
+            if not silent:
+                parent = self.winfo_toplevel()
+                if mode == "store" and messagebox.askyesno(
+                    APP_NAME,
+                    f"{hint}\n\nMicrosoft Store öffnen („3D Viewer“ installieren)?",
+                    parent=parent,
+                ):
+                    if open_microsoft_store_3d_viewer():
+                        notify(self, "Microsoft Store geöffnet — „3D Viewer“ installieren.", "info")
+                    return True
+                messagebox.showerror(APP_NAME, hint, parent=parent)
+            return False
+        if ext in ALLOWED_EXT:
+            ok, err = self._open_path_with_system(path)
+            if ok:
+                return True
+            if not silent:
+                notify(self, f"Konnte nicht öffnen:\n{err}", "error")
+            return False
+        if not silent:
+            notify(self, f"Dateityp {ext} wird nicht unterstützt.", "warn")
+        return False
 
     def _selected_mesh_path(self) -> Path | None:
         entry = self._entry_for_single_file_action()
