@@ -9,8 +9,10 @@ from tkinter import ttk
 from app.bundled_assets import save_bundled_plastic_holder_stls
 from ui.components import scrollable_tab
 from ui.dialog_theme import prepare_toplevel
+from ui.hardware_links import AMAZON_HARDWARE_LINKS
 
 # (Titel, Kurzbeschreibung, URL)
+URL_PLASTIC_TAG_HOLDER_THINGIVERSE = "https://www.thingiverse.com/thing:7356948"
 URL_PLASTIC_SPOOL_HEX = "https://www.printables.com/model/1204576-creality-cfs-rfid-reusable-spool-hex"
 
 TAG_HOLDER_LINKS: tuple[tuple[str, str, str], ...] = (
@@ -81,7 +83,8 @@ class TagHolderLinksDialog(tk.Toplevel):
             featured,
             text=(
                 "Mitgelieferte STL für 25-mm-MIFARE-Tags an offiziellen Creality-Kunststoffspulen.\n"
-                "5 Teile: Deckel, Komponente 1–4. Pro Spule 2× komplett drucken (links + rechts am Flansch)."
+                "5 Teile: Grundkörper + CFS 1A–1D. Pro Spule 2× komplett drucken (links + rechts am Flansch).\n"
+                "Online auch auf Thingiverse (Entwurf/Seite kann sich nach Veröffentlichen ändern)."
             ),
             wraplength=540,
             justify="left",
@@ -93,7 +96,42 @@ class TagHolderLinksDialog(tk.Toplevel):
             text="Alle STL in Ordner speichern…",
             command=self._save_plastic_holder,
             style="Accent.TButton",
+        ).pack(side="left", padx=(0, 8))
+        ttk.Button(
+            btn_row,
+            text="Auf Thingiverse öffnen…",
+            command=lambda: webbrowser.open(URL_PLASTIC_TAG_HOLDER_THINGIVERSE),
+            style="Secondary.TButton",
         ).pack(side="left")
+
+        hw = ttk.LabelFrame(
+            self,
+            text="  Tags & NFC-Reader (Beispiel Amazon)  ",
+            padding=10,
+        )
+        hw.pack(fill="x", padx=12, pady=(0, 8))
+        ttk.Label(
+            hw,
+            text=(
+                "Vom Entwickler verwendet — gleicher Chip-Typ wie in der Hilfe beschrieben. "
+                "Keine Werbung / kein Affiliate-Link."
+            ),
+            wraplength=540,
+            justify="left",
+            style="Muted.TLabel",
+        ).pack(anchor="w", pady=(0, 6))
+        for title, desc, url in AMAZON_HARDWARE_LINKS:
+            row_hw = ttk.Frame(hw)
+            row_hw.pack(fill="x", pady=(0, 4))
+            ttk.Label(row_hw, text=f"{title}: {desc}", wraplength=420, justify="left").pack(
+                side="left", fill="x", expand=True
+            )
+            ttk.Button(
+                row_hw,
+                text="Amazon",
+                command=lambda u=url: webbrowser.open(u),
+                style="Secondary.TButton",
+            ).pack(side="right")
 
         list_host = ttk.Frame(self)
         list_host.pack(fill="both", expand=True, padx=12, pady=(0, 4))
@@ -119,7 +157,7 @@ class TagHolderLinksDialog(tk.Toplevel):
             wraplength=540,
         ).pack(anchor="w", pady=(0, 8))
         ttk.Button(footer, text="Schließen", command=self.destroy).pack(anchor="e")
-        prepare_toplevel(self, parent, width=580, height=560)
+        prepare_toplevel(self, parent, width=600, height=640)
 
     def _save_plastic_holder(self) -> None:
         save_bundled_plastic_holder_stls(self)

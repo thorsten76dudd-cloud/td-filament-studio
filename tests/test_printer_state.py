@@ -3,9 +3,11 @@
 import unittest
 
 from creality_nfc.printer_state import (
+    build_print_phase_notification,
     payload_has_meaningful_refresh,
     payload_has_print_refresh,
     print_job_phase,
+    should_notify_print_phase_change,
     temp_target_spinbox_value,
 )
 
@@ -57,6 +59,41 @@ class PrintJobPhaseTests(unittest.TestCase):
             }
         )
         self.assertEqual(phase, "complete")
+
+
+class PrintPhaseAlertTests(unittest.TestCase):
+    def test_notify_printing_to_paused(self) -> None:
+        self.assertTrue(
+            should_notify_print_phase_change(
+                "printing", "paused", has_job=True, synced=True
+            )
+        )
+
+    def test_no_notify_without_sync(self) -> None:
+        self.assertFalse(
+            should_notify_print_phase_change(
+                "printing", "paused", has_job=True, synced=False
+            )
+        )
+
+    def test_no_notify_idle_without_job(self) -> None:
+        self.assertFalse(
+            should_notify_print_phase_change(
+                "idle", "paused", has_job=False, synced=True
+            )
+        )
+
+    def test_build_paused_message(self) -> None:
+        note = build_print_phase_notification(
+            {"state": 5, "aiPausePrint": 0},
+            "paused",
+            filename="teil.gcode",
+            progress=42,
+        )
+        self.assertIsNotNone(note)
+        assert note is not None
+        self.assertIn("teil.gcode", note["detail"])
+        self.assertEqual(note["level"], "warn")
 
 
 class TempTargetSpinboxTests(unittest.TestCase):

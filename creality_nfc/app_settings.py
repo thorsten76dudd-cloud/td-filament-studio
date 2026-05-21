@@ -26,6 +26,10 @@ class AppSettings:
     low_filament_threshold_g: int = 200
     prompt_deduct_after_print: bool = True
     default_post_print_deduct_g: int = 0
+    # Pause/Fehler am K2: Hinweis in App + optional Windows-Toast.
+    alert_print_pause_error: bool = True
+    alert_print_popup: bool = True
+    alert_print_windows_toast: bool = True
     # G-Code-Dateien, für die der Verbrauchs-Dialog schon erledigt/abgebrochen wurde.
     post_print_deduct_handled: list[str] = field(default_factory=list)
     protect_tag_overwrite: bool = True

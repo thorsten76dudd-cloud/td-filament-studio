@@ -36,6 +36,11 @@ NFC-Reader (am PC)
 • Unter Windows: Geräte-Manager → „Smartcard-Lesegeräte“ (wenn Treiber OK)
 • iPhone/iPad: Tags können damit nicht beschrieben werden (kein Classic-1K-Zugriff)
 
+Beispiel (vom Entwickler gekauft, Amazon.de — kein Werbelink):
+• Reader: Ieron RFID/NFC ACR122U — https://www.amazon.de/dp/B0DSC293JN
+• Tags: YARONGTECH MF1 S50, 25 mm, 10 Stück — https://www.amazon.de/dp/B0BL2YJ5GB
+  (auch unter „Tag-Halter (Links)…“ → Abschnitt Amazon)
+
 Windows (Voraussetzung)
 • Dienst „Smartcard“ (SCardSvr) muss laufen — siehe Abschnitt „Smartcard-Dienst“
 • TD Filament Studio braucht kein Admin für normale Nutzung; nur zum Dienst-Start ggf. UAC
@@ -298,7 +303,10 @@ RFID-Tag an der Spule
 3D-Halter (Download)
 --------------------
 Tab RFID-Tag → „Tag-Halter STL speichern…“
-Speichert die mitgelieferten STL (Deckel + Komponente 1–4) für 25-mm-MIFARE-Tags
+Speichert die mitgelieferten STL (Grundkörper + 1A–1D) für 25-mm-MIFARE-Tags
+
+Tag-Halter (Kunststoffspule) auf Thingiverse:
+  https://www.thingiverse.com/thing:7356948
 an offiziellen Creality-Kunststoffspulen (pro Spule 2× komplett drucken).
 
 Tab RFID-Tag → „Tag-Halter (Links)…“ (oder Navigation → Tag-Halter (Links)…)

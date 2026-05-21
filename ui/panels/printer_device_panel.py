@@ -54,7 +54,9 @@ from creality_nfc.printer_ssh import (
     upload_gcode_to_printer,
 )
 from creality_nfc.printer_state import (
+    build_print_phase_notification,
     print_job_phase,
+    should_notify_print_phase_change,
     temp_target_spinbox_value,
     print_status,
     telemetry_fans,
@@ -103,6 +105,7 @@ class PrinterDevicePanel(ttk.Frame):
         self._gcode_files: list[dict] = []
         self._last_gcode_entry: dict | None = None
         self._last_print_phase: str = "idle"
+        self._print_phase_synced: bool = False
         self._last_print_progress: int = 0
         self._last_print_filename: str = ""
         self._cfs_active_index: int | None = None
@@ -369,6 +372,7 @@ class PrinterDevicePanel(ttk.Frame):
         self._last_full_poll = 0.0
         self._last_telemetry_req = 0.0
         self._was_connected = False
+        self._print_phase_synced = False
         self._conn.start()
         self.conn_var.set(f"Verbinde mit {host}:9999 …")
         self._gcode_polls = 0
@@ -456,6 +460,7 @@ class PrinterDevicePanel(ttk.Frame):
         self.conn_var.set("Getrennt")
         self._gcode_preview_hold = False
         self._was_connected = False
+        self._print_phase_synced = False
         self._gcode_polls = 0
         self._gcode_ssh_tried = False
 
@@ -767,11 +772,50 @@ class PrinterDevicePanel(ttk.Frame):
         except Exception:
             pass
 
+    def _maybe_notify_print_phase(
+        self,
+        prev_phase: str,
+        phase: str,
+        s: dict,
+        *,
+        filename: str,
+        progress: int | None,
+    ) -> None:
+        if not self._print_phase_synced:
+            return
+        has_job = bool(filename.strip() or self._last_print_filename.strip())
+        if not should_notify_print_phase_change(
+            prev_phase, phase, has_job=has_job, synced=True
+        ):
+            return
+        note = build_print_phase_notification(
+            s,
+            phase,
+            filename=filename or self._last_print_filename,
+            progress=progress,
+        )
+        if not note:
+            return
+        self.app.after(
+            0,
+            lambda: self.app.notify_print_job_alert(
+                note["title"], note["detail"], note.get("level", "warn")
+            ),
+        )
+
     def _apply_print_status(self, s: dict) -> None:
         ps = print_status(s)
         phase = print_job_phase(s)
         fname = str(ps.get("file") or "").strip()
         prog = ps.get("progress")
+        prev_phase = self._last_print_phase
+        if not self._print_phase_synced:
+            self._last_print_phase = phase
+            self._print_phase_synced = True
+        else:
+            self._maybe_notify_print_phase(
+                prev_phase, phase, s, filename=fname, progress=prog
+            )
         if phase == "printing":
             self.app._post_print_prompted = False
             if fname and fname != self._last_print_filename:

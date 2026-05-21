@@ -206,7 +206,7 @@ class SetupWizardDialog(tk.Toplevel):
 
                 True,
 
-                "Siehe Hilfe → „Benötigte Hardware & Tags“.",
+                "Siehe Hilfe → „Benötigte Hardware & Tags“ oder „Tag-Halter (Links)…“ (Amazon-Beispiele).",
 
             ),
 

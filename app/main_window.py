@@ -588,12 +588,12 @@ class TDFilamentStudioApp(AppTk):
             (
                 "Tag-Halter STL speichern…",
                 lambda: save_bundled_plastic_holder_stls(self),
-                "RFID-Tag-Halter für Creality-Kunststoffspulen: Deckel + Komponente 1–4 (5 STL) — 2× pro Spule drucken.",
+                "RFID-Tag-Halter für Creality-Kunststoffspulen: Grundkörper + 1A–1D (5 STL) — 2× pro Spule drucken.",
             ),
             (
                 "Tag-Halter (Links)…",
                 self.open_tag_holder_links,
-                "Alle STL/3MF-Halter: Kunststoff, Karton, Universal — Printables & Creality Cloud.",
+                "Halter (Thingiverse), Tags/Reader (Amazon-Beispiele), weitere Links — Printables & Creality Cloud.",
             ),
             (
                 "Drucker wählen…",
@@ -1179,6 +1179,33 @@ class TDFilamentStudioApp(AppTk):
         self.msg_log.see("end")
         self.msg_log.config(state="disabled")
         self._set_status(text.replace("\n", " ")[:72], level)
+
+    def notify_print_job_alert(self, title: str, detail: str, level: str = "warn") -> None:
+        """Pause/Fehler am K2: Status, Protokoll, optional Dialog + Windows-Toast."""
+        if not getattr(self.settings, "alert_print_pause_error", True):
+            return
+        summary = f"{title} — {detail.splitlines()[0]}"
+        self.notify(summary, level)
+        try:
+            self.bell()
+        except tk.TclError:
+            pass
+        try:
+            self.deiconify()
+            self.lift()
+            self.focus_force()
+        except tk.TclError:
+            pass
+        if getattr(self.settings, "alert_print_popup", True):
+            self.show_alert_dialog(detail, level=level, title=title)
+        if getattr(self.settings, "alert_print_windows_toast", True):
+
+            def _toast() -> None:
+                from creality_nfc.windows_toast import show_windows_toast
+
+                show_windows_toast(title, detail.replace("\n", " — "))
+
+            threading.Thread(target=_toast, name="print-toast", daemon=True).start()
 
     def ask_confirm(
         self,

@@ -289,6 +289,116 @@ def print_job_phase(state: dict[str, Any]) -> str:
     return "idle"
 
 
+def print_device_state_code(state: dict[str, Any]) -> int | None:
+    """Rohwert state / deviceState / printState aus der Firmware."""
+    try:
+        return int(_first(state, "state", "deviceState", "printState") or 0)
+    except (TypeError, ValueError):
+        return None
+
+
+def print_error_hint(state: dict[str, Any]) -> str:
+    """Lesbare Zusatzinfo aus WS-Feldern (FR-Code o. Ä.), falls vorhanden."""
+    for key in (
+        "errCode",
+        "errorCode",
+        "printErrCode",
+        "machineErrCode",
+        "errMsg",
+        "errorMsg",
+        "printError",
+        "printErr",
+        "failReason",
+        "pauseReason",
+        "errorMessage",
+    ):
+        raw = state.get(key)
+        if raw is None:
+            continue
+        text = str(raw).strip()
+        if text and text not in ("0", "null", "None"):
+            if key.lower().endswith("code") and not text.upper().startswith("FR"):
+                text = f"Code {text}"
+            return text
+    return ""
+
+
+def format_print_phase_log(state: dict[str, Any], phase: str) -> str:
+    """Zusatz für Monitor-Log: Firmware-State + optionale Fehlerhinweise."""
+    st = print_device_state_code(state)
+    bits: list[str] = [f"fw_state={st if st is not None else '?'}"]
+    if int(state.get("aiPausePrint", 0) or 0) == 1:
+        bits.append("aiPause=1")
+    hint = print_error_hint(state)
+    if hint:
+        bits.append(f"hint={hint!r}")
+    return " ".join(bits)
+
+
+def should_notify_print_phase_change(
+    prev_phase: str,
+    phase: str,
+    *,
+    has_job: bool,
+    synced: bool,
+) -> bool:
+    """True, wenn Nutzer über Pause/Fehler informiert werden soll."""
+    if not synced or prev_phase == phase:
+        return False
+    if phase not in ("paused", "error"):
+        return False
+    if not has_job:
+        return False
+    if phase == "error":
+        return prev_phase != "error"
+    # paused — typisch während des Drucks (auch kurz vor Ende)
+    return prev_phase in ("printing", "paused")
+
+
+def build_print_phase_notification(
+    state: dict[str, Any],
+    phase: str,
+    *,
+    filename: str,
+    progress: int | None,
+) -> dict[str, str] | None:
+    """title, detail, level für UI/Toast."""
+    if phase not in ("paused", "error"):
+        return None
+    fname = (filename or "").strip()
+    short = fname.rsplit("/", 1)[-1].rsplit("\\", 1)[-1] if fname else "Druckjob"
+    pct = f"{progress} %" if progress is not None else "—"
+    st = print_device_state_code(state)
+    st_txt = f"Firmware-State {st}" if st is not None else ""
+    hint = print_error_hint(state)
+    ai = int(state.get("aiPausePrint", 0) or 0) == 1
+
+    if phase == "error":
+        title = "Drucker-Fehler"
+        lines = [
+            f"{short}",
+            f"Fortschritt: {pct}",
+            "Am Touchscreen prüfen (FR-Code / Meldung).",
+        ]
+        if hint:
+            lines.insert(2, hint)
+        if st_txt:
+            lines.append(st_txt)
+        return {"title": title, "detail": "\n".join(lines), "level": "error"}
+
+    title = "Druck pausiert"
+    if ai:
+        reason = "KI-Pause oder manuelle Pause"
+    else:
+        reason = "Pause — oft Filament- oder Störungsmeldung"
+    lines = [f"{short}", f"Fortschritt: {pct}", reason, "Am Display bestätigen oder „Fortsetzen“."]
+    if hint:
+        lines.insert(3, hint)
+    if st_txt:
+        lines.append(st_txt)
+    return {"title": title, "detail": "\n".join(lines), "level": "warn"}
+
+
 def print_status(state: dict[str, Any]) -> dict[str, Any]:
     """Druck-Fortschritt für die Statusleiste."""
     prog = _first(state, "printProgress", "dProgress", "progress")

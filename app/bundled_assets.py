@@ -11,11 +11,11 @@ from app.paths import app_dir
 # RFID-Tag-Halter für offizielle Creality-Kunststoffspulen (5 Teile)
 CHIP_TAG_PLASTIC_HOLDER_DIR = Path("downloads") / "creality-plastic-tag-holder"
 CHIP_TAG_PLASTIC_STL_NAMES: tuple[str, ...] = (
-    "Deckel.stl",
-    "Komponente1.stl",
-    "Komponente2.stl",
-    "Komponente3.stl",
-    "Komponente4.stl",
+    "Grundkörper.stl",
+    "1A.stl",
+    "1B.stl",
+    "1C.stl",
+    "1D.stl",
 )
 
 

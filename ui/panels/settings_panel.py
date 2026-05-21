@@ -113,6 +113,30 @@ class SettingsPanel(ttk.Frame):
             text="Nach Druckende: Verbrauch von CFS-Spule abfragen",
             variable=self.prompt_deduct,
         ).pack(anchor="w", padx=8)
+        self.alert_print = tk.BooleanVar(value=getattr(settings, "alert_print_pause_error", True))
+        self.alert_print_popup = tk.BooleanVar(value=getattr(settings, "alert_print_popup", True))
+        self.alert_print_toast = tk.BooleanVar(value=getattr(settings, "alert_print_windows_toast", True))
+        ttk.Checkbutton(
+            filament,
+            text="Bei Pause oder Fehler am Drucker: Hinweis (Statusleiste + Meldungsprotokoll)",
+            variable=self.alert_print,
+        ).pack(anchor="w", padx=8, pady=(6, 0))
+        ttk.Checkbutton(
+            filament,
+            text="… zusätzlich Dialog-Fenster",
+            variable=self.alert_print_popup,
+        ).pack(anchor="w", padx=24)
+        ttk.Checkbutton(
+            filament,
+            text="… zusätzlich Windows-Benachrichtigung (wenn App im Hintergrund)",
+            variable=self.alert_print_toast,
+        ).pack(anchor="w", padx=24, pady=(0, 4))
+        ttk.Label(
+            filament,
+            text="Gilt nur bei laufendem Druck und aktiver Verbindung zum K2 (Tab Drucker).",
+            style="Muted.TLabel",
+            wraplength=520,
+        ).pack(anchor="w", padx=8, pady=(0, 4))
         self.protect_tag = tk.BooleanVar(value=getattr(settings, "protect_tag_overwrite", True))
         ttk.Checkbutton(
             filament,
@@ -242,6 +266,9 @@ class SettingsPanel(ttk.Frame):
         s.show_setup_on_startup = self.show_setup_startup.get()
         s.low_filament_threshold_g = int(self.low_filament_g.get())
         s.prompt_deduct_after_print = self.prompt_deduct.get()
+        s.alert_print_pause_error = self.alert_print.get()
+        s.alert_print_popup = self.alert_print_popup.get()
+        s.alert_print_windows_toast = self.alert_print_toast.get()
         s.default_post_print_deduct_g = int(self.default_deduct_g.get())
         s.protect_tag_overwrite = self.protect_tag.get()
         s.launch_with_creality_print = self.launch_with_creality.get()

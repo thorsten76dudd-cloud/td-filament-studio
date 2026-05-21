@@ -18,6 +18,7 @@ installer_output/
 *.swp
 
 # Persönliche Daten (nicht ins Repo!)
+data/print_monitor.log
 data/printers.json
 data/app_settings.json
 data/spools.json
