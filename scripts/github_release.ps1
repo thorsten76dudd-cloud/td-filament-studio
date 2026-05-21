@@ -2,10 +2,10 @@
 # Creates latest stable release and removes the previous stable release tag.
 
 param(
-    [string]$Version = "1.5.56",
-    [string]$Tag = "v1.5.56-stable",
+    [string]$Version = "1.5.57",
+    [string]$Tag = "v1.5.57-stable",
     [string]$Repo = "thorsten76dudd-cloud/td-filament-studio",
-    [string]$RemoveTag = "v1.5.55-stable",
+    [string]$RemoveTag = "v1.5.56-stable",
     [switch]$DeleteAllOldReleases
 )
 
@@ -31,12 +31,12 @@ if (-not (Test-Path $Setup)) {
 $notes = @(
     "## TD Filament Studio $Version",
     "",
-    "### Fix: Update-Installer (Code 5 Zugriff verweigert)",
-    "* Setup beendet vorher alle TD Filament Studio Prozesse (auch Creality-Waechter)",
-    "* In-App-Update: Setup laden und installieren (App beendet sich selbst)",
+    "### Neu: Updates & GitHub",
+    "* Automatischer Update-Hinweis beim Start und alle 4 Stunden (Dialog)",
+    "* Einstellungen: GitHub Setup-Download-Zaehler und Release-Info",
     "",
-    "### Aus 1.5.55",
-    "* Browser/Kamera-Fix; kein _MEI-Warn-Dialog; Mit Creality Print starten",
+    "### Aus 1.5.56",
+    "* Update-Installer beendet Helfer; In-App-Update; Browser/Kamera-Fix",
     "",
     "Setup ausfuehren (ueberschreibt alte Installation)."
 ) -join [Environment]::NewLine

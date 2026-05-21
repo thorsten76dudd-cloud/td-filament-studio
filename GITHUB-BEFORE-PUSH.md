@@ -1,6 +1,6 @@
 # GitHub — Kurz-Checkliste
 
-**Aktuelle Version:** `1.5.54` · Release-Tag: `v1.5.54-stable`  
+**Aktuelle Version:** `1.5.57` · Release-Tag: `v1.5.57-stable`  
 **Repo:** `thorsten76dudd-cloud/td-filament-studio`
 
 ## Vor dem Push
@@ -25,4 +25,4 @@ Lädt `installer_output\TD-Filament-Studio-Setup.exe` hoch und setzt **Latest**.
 | `data/printers.json`, `spools.json`, … | Persönlich / Passwörter |
 | `dist/`, `build/`, `installer_output/` | Build-Artefakte |
 
-Details zum aktuellen Stand: [STABLE-v1.5.54.md](STABLE-v1.5.54.md)
+Details zum aktuellen Stand: [STABLE-v1.5.57.md](STABLE-v1.5.57.md)

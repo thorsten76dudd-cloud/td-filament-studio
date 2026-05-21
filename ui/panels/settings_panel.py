@@ -2,11 +2,14 @@
 
 from __future__ import annotations
 
+import threading
 import tkinter as tk
+import webbrowser
 from collections.abc import Callable
 from tkinter import ttk
 
 from creality_nfc.app_settings import DEFAULT_SETTINGS_PATH, AppSettings
+from creality_nfc.config import APP_VERSION, GITHUB_URL
 from creality_nfc.reader import CrealityNfcReader
 from ui.dialog_theme import theme_dialog
 from ui.tooltip import tip
@@ -123,8 +126,43 @@ class SettingsPanel(ttk.Frame):
             wraplength=480,
         ).pack(anchor="w", padx=8, pady=(4, 0))
 
+        updates = ttk.LabelFrame(self, text="Updates & GitHub")
+        updates.pack(fill="x", **frame_pad)
         self.check_updates = tk.BooleanVar(value=settings.check_updates)
-        ttk.Checkbutton(self, text="Beim Start auf Updates prüfen", variable=self.check_updates).pack(anchor="w", padx=12)
+        ttk.Checkbutton(
+            updates,
+            text="Automatisch auf Updates hinweisen (beim Start und alle 4 Stunden)",
+            variable=self.check_updates,
+        ).pack(anchor="w", padx=8)
+        ttk.Label(
+            updates,
+            text="Bei neuer Version erscheint ein Dialog mit Installations-Optionen.",
+            style="Muted.TLabel",
+            wraplength=520,
+        ).pack(anchor="w", padx=8, pady=(0, 6))
+        self._github_stats_var = tk.StringVar(value="GitHub-Statistik: wird geladen …")
+        ttk.Label(
+            updates,
+            textvariable=self._github_stats_var,
+            wraplength=520,
+        ).pack(anchor="w", padx=8)
+        gh_row = ttk.Frame(updates)
+        gh_row.pack(anchor="w", padx=8, pady=(4, 8))
+        tip(
+            ttk.Button(gh_row, text="GitHub-Statistik aktualisieren", command=self._refresh_github_stats),
+            "Lädt Release-Tag und Setup-Download-Zähler von GitHub (API).",
+        ).pack(side="left", padx=(0, 8))
+        tip(
+            ttk.Button(
+                gh_row,
+                text="Releases im Browser",
+                command=lambda: webbrowser.open(f"{GITHUB_URL}/releases"),
+                style="Secondary.TButton",
+            ),
+            "GitHub-Releases-Seite öffnen.",
+        ).pack(side="left")
+        self.after(500, self._refresh_github_stats)
+
         self.show_setup_startup = tk.BooleanVar(value=settings.show_setup_on_startup)
         ttk.Checkbutton(
             self,
@@ -153,6 +191,35 @@ class SettingsPanel(ttk.Frame):
                 ),
                 "Alle lokalen Daten löschen (wie Neuinstallation). Vorher ZIP-Backup empfohlen!",
             ).pack(side="left")
+
+    def _refresh_github_stats(self) -> None:
+        self._github_stats_var.set("GitHub-Statistik: wird geladen …")
+
+        def work() -> None:
+            from creality_nfc.update_check import fetch_latest_release, format_setup_downloads, is_newer
+
+            try:
+                info = fetch_latest_release()
+                if not info:
+                    text = "GitHub: keine Release-Infos erreichbar."
+                else:
+                    newer = is_newer(info.version, APP_VERSION)
+                    hint = " — Update verfügbar!" if newer else ""
+                    dl = format_setup_downloads(
+                        info.setup_download_count,
+                        label=info.download_label,
+                    )
+                    text = (
+                        f"Installiert: {APP_VERSION}{hint}\n"
+                        f"GitHub neuestes Release: {info.tag}\n"
+                        f"{dl}"
+                    )
+            except Exception as exc:
+                text = f"GitHub-Statistik fehlgeschlagen: {exc}"
+
+            self.after(0, lambda: self._github_stats_var.set(text))
+
+        threading.Thread(target=work, name="github-stats", daemon=True).start()
 
     def _save(self) -> None:
         s = self._settings

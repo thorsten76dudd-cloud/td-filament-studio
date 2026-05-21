@@ -22,6 +22,27 @@ class ReleaseInfo:
     html_url: str
     download_url: str | None = None
     download_label: str | None = None
+    setup_download_count: int | None = None
+
+
+def format_setup_downloads(count: int | None, *, label: str | None = None) -> str:
+    """Anzeige-Text für Setup-Downloads vom GitHub-Release."""
+    name = label or "Setup.exe"
+    if count is None:
+        return f"{name}: keine Zahl von GitHub"
+    if count == 0:
+        return (
+            f"{name}: 0 Downloads (GitHub — kann Minuten verzögert sein, "
+            "auch nach eigenem Download)"
+        )
+    return f"{name}: {count} Download{'s' if count != 1 else ''}"
+
+
+def release_stats_lines(info: ReleaseInfo) -> list[str]:
+    """Zusatzzeilen für Update-Dialog / Einstellungen."""
+    lines = [format_setup_downloads(info.setup_download_count, label=info.download_label)]
+    lines.append(f"Release: {info.tag}")
+    return lines
 
 
 def fetch_latest_release() -> ReleaseInfo | None:
@@ -57,7 +78,7 @@ def _parse_release_payload(data: dict) -> ReleaseInfo | None:
     if not html_url and GITHUB_RELEASES_REPO:
         html_url = f"https://github.com/{GITHUB_RELEASES_REPO}/releases/latest"
     name = str(data.get("name", "") or tag).strip()
-    download_url, download_label = _pick_release_asset(data.get("assets") or [])
+    download_url, download_label, setup_download_count = _pick_release_asset(data.get("assets") or [])
     return ReleaseInfo(
         tag=tag,
         version=version,
@@ -65,12 +86,13 @@ def _parse_release_payload(data: dict) -> ReleaseInfo | None:
         html_url=html_url,
         download_url=download_url,
         download_label=download_label,
+        setup_download_count=setup_download_count,
     )
 
 
-def _pick_release_asset(assets: list) -> tuple[str | None, str | None]:
-    """Bevorzugt Setup-EXE, dann portable EXE."""
-    candidates: list[tuple[int, str, str]] = []
+def _pick_release_asset(assets: list) -> tuple[str | None, str | None, int | None]:
+    """Bevorzugt Setup-EXE, dann portable EXE; inkl. download_count von GitHub."""
+    candidates: list[tuple[int, str, str, int]] = []
     for asset in assets:
         if not isinstance(asset, dict):
             continue
@@ -86,12 +108,16 @@ def _pick_release_asset(assets: list) -> tuple[str | None, str | None]:
             score += 10
         if "filament" in low and "studio" in low:
             score += 5
-        candidates.append((score, url, label))
+        try:
+            dl = int(asset.get("download_count", 0))
+        except (TypeError, ValueError):
+            dl = 0
+        candidates.append((score, url, label, dl))
     if not candidates:
-        return None, None
+        return None, None, None
     candidates.sort(key=lambda x: (-x[0], x[2]))
-    _, url, label = candidates[0]
-    return url, label
+    _, url, label, dl = candidates[0]
+    return url, label, dl
 
 
 def is_newer(remote: str, local: str) -> bool:

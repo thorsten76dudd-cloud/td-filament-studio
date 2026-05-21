@@ -97,7 +97,12 @@ from creality_nfc.tag_io import (
     payload_is_empty,
     verify_tag_payload,
 )
-from creality_nfc.update_check import ReleaseInfo, fetch_latest_release, is_newer
+from creality_nfc.update_check import (
+    ReleaseInfo,
+    fetch_latest_release,
+    is_newer,
+    release_stats_lines,
+)
 from printer_connect import load_settings, save_settings
 from printer_manager import PrinterManagerDialog
 from tag_tools import TagToolsDialog
@@ -225,8 +230,10 @@ class TDFilamentStudioApp(AppTk):
         self._load_materials()
         self.after(300, self._initial_nfc_check)
         self.after(600, self._start_monitor)
+        self._update_prompted_tag = ""
+        self._update_check_running = False
         if self.settings.check_updates:
-            self.after(1500, self._check_updates_quiet)
+            self._schedule_automatic_update_check()
         if self.settings.show_setup_on_startup or not self.settings.setup_completed:
             self.after(900, self._maybe_show_setup_wizard)
         self._schedule_reader_poll()
@@ -1212,6 +1219,9 @@ class TDFilamentStudioApp(AppTk):
             self.serial_var.set(f"{self.settings.next_serial:06d}")
         self.notify("Einstellungen gespeichert", "ok")
         self._sync_creality_watcher()
+        if settings.check_updates:
+            self._update_prompted_tag = ""
+            self.after(1000, self._check_updates_quiet)
 
     def _update_color_preview(self) -> None:
         self.color_hex = normalize_hex(self.color_hex)
@@ -3834,16 +3844,71 @@ class TDFilamentStudioApp(AppTk):
             if self.uid_label.cget("text") == "—":
                 self._set_status("Reader einstecken…", "warn")
 
+    def _schedule_automatic_update_check(self) -> None:
+        """Beim Start und alle 4 h: GitHub-Release prüfen."""
+        delay_ms = 4500
+        if self.settings.show_setup_on_startup or not self.settings.setup_completed:
+            delay_ms = 7000
+        self.after(delay_ms, self._check_updates_quiet)
+        self._schedule_periodic_update_checks()
+
+    def _schedule_periodic_update_checks(self) -> None:
+        if not self.settings.check_updates:
+            return
+        self.after(4 * 60 * 60 * 1000, self._periodic_update_check)
+
+    def _periodic_update_check(self) -> None:
+        if not self.settings.check_updates:
+            return
+        self._check_updates_quiet()
+        self._schedule_periodic_update_checks()
+
     def _check_updates_quiet(self) -> None:
-        try:
-            info = fetch_latest_release()
-            if info and is_newer(info.version, APP_VERSION):
-                hint = f"Update: {info.tag}"
-                if info.download_label:
-                    hint += f" — Navigation → Nach Updates suchen"
-                self._set_status(hint, "warn")
-        except Exception:
-            pass
+        if self._update_check_running:
+            return
+        self._update_check_running = True
+
+        def work() -> None:
+            try:
+                info = fetch_latest_release()
+                if info and is_newer(info.version, APP_VERSION):
+
+                    def prompt() -> None:
+                        self._prompt_update_available(info)
+
+                    self.after(0, prompt)
+                elif info:
+                    self.after(
+                        0,
+                        lambda: self._set_status(
+                            f"Version {APP_VERSION} — GitHub {info.tag} aktuell",
+                            "ok",
+                        ),
+                    )
+            except Exception:
+                pass
+            finally:
+
+                def done() -> None:
+                    self._update_check_running = False
+
+                self.after(0, done)
+
+        threading.Thread(target=work, name="update-check", daemon=True).start()
+
+    def _prompt_update_available(self, info: ReleaseInfo) -> None:
+        """Automatischer Hinweis beim Start / periodisch (einmal pro Tag pro Session)."""
+        if self._update_prompted_tag == info.tag:
+            return
+        self._update_prompted_tag = info.tag
+        self._set_status(f"Update verfügbar: {info.tag}", "warn")
+        self.notify(
+            f"Neue Version auf GitHub: {info.tag}\n"
+            f"Installiert: {APP_VERSION}\n\n"
+            "Es öffnet sich gleich der Update-Dialog.",
+            "warn",
+        )
+        self.after(400, lambda: self._offer_update_download(info))
 
     def check_updates(self) -> None:
         from tkinter import messagebox
@@ -3862,8 +3927,9 @@ class TDFilamentStudioApp(AppTk):
         if is_newer(info.version, APP_VERSION):
             self._offer_update_download(info)
         else:
+            extra = "\n".join(release_stats_lines(info))
             self.notify(
-                f"Aktuell ({APP_VERSION}).\nNeuestes GitHub-Release: {info.tag}",
+                f"Aktuell ({APP_VERSION}).\nNeuestes GitHub-Release: {info.tag}\n\n{extra}",
                 "ok",
             )
 
@@ -3878,8 +3944,10 @@ class TDFilamentStudioApp(AppTk):
         if info.name and info.name != info.tag:
             lines.append(info.name)
             lines.append("")
+        lines.extend(release_stats_lines(info))
+        lines.append("")
         if info.download_url and info.download_label:
-            lines.append(f"Download: {info.download_label}")
+            lines.append(f"Datei: {info.download_label}")
         lines.append(f"Seite: {info.html_url}")
         msg = "\n".join(lines)
         if info.download_url:
