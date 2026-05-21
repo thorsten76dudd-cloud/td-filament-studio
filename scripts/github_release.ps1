@@ -2,10 +2,10 @@
 # Creates latest stable release and removes the previous stable release tag.
 
 param(
-    [string]$Version = "1.5.60",
-    [string]$Tag = "v1.5.60-stable",
+    [string]$Version = "1.5.61",
+    [string]$Tag = "v1.5.61-stable",
     [string]$Repo = "thorsten76dudd-cloud/td-filament-studio",
-    [string]$RemoveTag = "v1.5.59-stable",
+    [string]$RemoveTag = "v1.5.60-stable",
     [switch]$DeleteAllOldReleases
 )
 
@@ -31,15 +31,12 @@ if (-not (Test-Path $Setup)) {
 $notes = @(
     "## TD Filament Studio $Version",
     "",
-    "### Neu: Drucker Pause & Fehler",
-    "* Hinweis bei Pause oder Fehler waehrend des Drucks (Dialog, Status, optional Windows-Toast)",
-    "* Einstellungen unter Spulen & CFS",
+    "### Fix: In-App-Update Installation",
+    "* Installer startet nach App-Ende zuverlaessig (CMD-Verzoegerung, Prozess-Trennung)",
+    "* Setup-EXE wird vor Installation geprueft",
     "",
-    "### Tag-Halter & Links",
-    "* Neue STLs Grundkoerper + 1A-1D; Thingiverse und Amazon-Hinweise in der Hilfe",
-    "",
-    "### Aus 1.5.59",
-    "* In-App-Update Download-Fix; G-Code Footer / Stuetzmaterial (1.5.58)",
+    "### Aus 1.5.60",
+    "* Drucker Pause/Fehler; Tag-Halter; Thingiverse/Amazon-Links",
     "",
     "Setup ausfuehren (ueberschreibt alte Installation)."
 ) -join [Environment]::NewLine

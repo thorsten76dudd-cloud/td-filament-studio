@@ -4131,7 +4131,10 @@ class TDFilamentStudioApp(AppTk):
             try:
                 from creality_nfc.app_update import install_downloaded_setup
 
-                self.notify("Installer wird gestartet — App wird beendet …", "ok")
+                self.notify(
+                    "Installer startet in wenigen Sekunden — App wird beendet …",
+                    "ok",
+                )
                 install_downloaded_setup(path)
             except Exception as exc:
                 log_exception("update-install", exc)
