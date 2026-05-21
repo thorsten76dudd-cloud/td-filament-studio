@@ -3882,12 +3882,69 @@ class TDFilamentStudioApp(AppTk):
             lines.append(f"Download: {info.download_label}")
         lines.append(f"Seite: {info.html_url}")
         msg = "\n".join(lines)
+        if info.download_url:
+            choice = messagebox.askyesnocancel(
+                "Update verfügbar",
+                msg
+                + "\n\n"
+                "Ja = Setup laden und installieren (App und Helfer werden beendet)\n"
+                "Nein = nur im Browser öffnen\n"
+                "Abbrechen",
+                parent=self,
+            )
+            if choice is True:
+                self._run_in_app_update(info)
+            elif choice is False:
+                webbrowser.open(info.download_url or info.html_url)
+            return
         if messagebox.askyesno(
             "Update verfügbar",
             msg + "\n\nIm Browser öffnen?",
             parent=self,
         ):
-            webbrowser.open(info.download_url or info.html_url)
+            webbrowser.open(info.html_url)
+
+    def _run_in_app_update(self, info: ReleaseInfo) -> None:
+        if not info.download_url:
+            webbrowser.open(info.html_url)
+            return
+        self._set_status("Update: Setup wird geladen …", "info")
+        self._bg_job_running = True
+
+        def work() -> tuple[Path | None, str]:
+            from creality_nfc.app_update import default_setup_download_path, download_setup
+
+            dest = default_setup_download_path()
+            try:
+                download_setup(info.download_url or "", dest)
+                return dest, ""
+            except Exception as exc:
+                return None, str(exc)
+
+        def on_ok(result: tuple[Path | None, str]) -> None:
+            self._bg_job_running = False
+            path, err = result
+            if not path:
+                self.notify(f"Download fehlgeschlagen:\n{err}", "error")
+                return
+            from tkinter import messagebox
+
+            if not messagebox.askokcancel(
+                "Update installieren",
+                f"Setup bereit:\n{path}\n\n"
+                "OK = App und Hintergrund-Helfer beenden, Installer starten.\n"
+                "Abbrechen = nichts ändern.",
+                parent=self,
+            ):
+                return
+            try:
+                from creality_nfc.app_update import install_downloaded_setup
+
+                install_downloaded_setup(path)
+            except Exception as exc:
+                self.notify(f"Installer konnte nicht gestartet werden:\n{exc}", "error")
+
+        self._run_bg_job("Update-Download", work, on_ok=on_ok)
 
     def _on_close(self) -> None:
         if self._shutdown_done:

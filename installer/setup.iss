@@ -2,7 +2,7 @@
 ; Kompilieren: iscc installer\setup.iss  (Inno Setup 6)
 
 #define MyAppName "TD Filament Studio"
-#define MyAppVersion "1.5.55"
+#define MyAppVersion "1.5.56"
 #define MyAppPublisher "TD"
 #define MyAppExeName "TD Filament Studio.exe"
 
@@ -23,6 +23,9 @@ WizardStyle=modern
 PrivilegesRequired=lowest
 ArchitecturesInstallIn64BitMode=x64compatible
 UninstallDisplayIcon={app}\{#MyAppExeName}
+; EXE freigeben: Haupt-App + Hintergrund-Waechter (--watch-creality)
+CloseApplications=force
+CloseApplicationsFilter={#MyAppExeName}
 
 [Languages]
 Name: "german"; MessagesFile: "compiler:Languages\German.isl"
@@ -41,3 +44,15 @@ Name: "{autodesktop}\{#MyAppName}"; Filename: "{app}\{#MyAppExeName}"; IconFilen
 
 [Run]
 Filename: "{app}\{#MyAppExeName}"; Description: "{#MyAppName} starten"; Flags: nowait postinstall skipifsilent
+
+[Code]
+function PrepareToInstall(var NeedsRestart: Boolean): String;
+var
+  ResultCode: Integer;
+begin
+  { Waechter und Haupt-App beenden, sonst DeleteFile Code 5 }
+  Exec(ExpandConstant('{sys}\taskkill.exe'), '/IM "{#MyAppExeName}" /F /T', '', SW_HIDE,
+    ewWaitUntilTerminated, ResultCode);
+  Sleep(800);
+  Result := '';
+end;

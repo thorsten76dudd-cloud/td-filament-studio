@@ -2,10 +2,10 @@
 # Creates latest stable release and removes the previous stable release tag.
 
 param(
-    [string]$Version = "1.5.55",
-    [string]$Tag = "v1.5.55-stable",
+    [string]$Version = "1.5.56",
+    [string]$Tag = "v1.5.56-stable",
     [string]$Repo = "thorsten76dudd-cloud/td-filament-studio",
-    [string]$RemoveTag = "v1.5.54-stable",
+    [string]$RemoveTag = "v1.5.55-stable",
     [switch]$DeleteAllOldReleases
 )
 
@@ -31,13 +31,12 @@ if (-not (Test-Path $Setup)) {
 $notes = @(
     "## TD Filament Studio $Version",
     "",
-    "### Fix: Browser schliesst nicht mehr mit",
-    "* Live-Kamera nutzt eigenes Edge/Chrome-Profil (getrennt vom normalen Browser)",
-    "* Beim Kamera-Stopp nur der Kamera-Prozess, nicht dein Edge/Chrome",
-    "* Edge-Kamera-Fallback nur wenn Tab Drucker schon geoeffnet war",
+    "### Fix: Update-Installer (Code 5 Zugriff verweigert)",
+    "* Setup beendet vorher alle TD Filament Studio Prozesse (auch Creality-Waechter)",
+    "* In-App-Update: Setup laden und installieren (App beendet sich selbst)",
     "",
-    "### Aus 1.5.54",
-    "* Kein _MEI-Warn-Dialog; Mit Creality Print starten",
+    "### Aus 1.5.55",
+    "* Browser/Kamera-Fix; kein _MEI-Warn-Dialog; Mit Creality Print starten",
     "",
     "Setup ausfuehren (ueberschreibt alte Installation)."
 ) -join [Environment]::NewLine
