@@ -38,10 +38,43 @@ def _pid_alive(pid: int) -> bool:
     return False
 
 
-def _pid_file() -> Path:
+def _data_dir() -> Path:
     from app.paths import DATA_DIR
 
-    return DATA_DIR / "creality_watch.pid"
+    return DATA_DIR
+
+
+def _pid_file() -> Path:
+    return _data_dir() / "creality_watch.pid"
+
+
+def _main_app_pid_file() -> Path:
+    return _data_dir() / "main_app.pid"
+
+
+def register_main_app() -> None:
+    """GUI-Prozess markieren (Wächter darf sich nicht als Haupt-App zählen)."""
+    path = _main_app_pid_file()
+    path.parent.mkdir(parents=True, exist_ok=True)
+    path.write_text(str(os_getpid()), encoding="utf-8")
+
+
+def unregister_main_app() -> None:
+    try:
+        _main_app_pid_file().unlink(missing_ok=True)
+    except OSError:
+        pass
+
+
+def _main_app_pid_alive() -> bool:
+    path = _main_app_pid_file()
+    if not path.is_file():
+        return False
+    try:
+        pid = int(path.read_text(encoding="utf-8").strip())
+    except (OSError, ValueError):
+        return False
+    return _pid_alive(pid)
 
 
 def watcher_is_running() -> bool:
@@ -105,9 +138,43 @@ def is_creality_running() -> bool:
     return _any_image_running(blob, CREALITY_PROCESS_NAMES)
 
 
+def _win_td_studio_gui_running() -> bool:
+    """TD Filament Studio.exe ohne --watch-creality (Wächter zählt nicht)."""
+    if sys.platform != "win32":
+        return False
+    flags = getattr(subprocess, "CREATE_NO_WINDOW", 0)
+    try:
+        proc = subprocess.run(
+            [
+                "powershell",
+                "-NoProfile",
+                "-Command",
+                (
+                    "$p = Get-CimInstance Win32_Process -Filter "
+                    "\"name='TD Filament Studio.exe'\" -ErrorAction SilentlyContinue; "
+                    "($p | Where-Object { $_.CommandLine -notmatch '--watch-creality' }).Count -gt 0"
+                ),
+            ],
+            capture_output=True,
+            text=True,
+            timeout=20,
+            creationflags=flags,
+        )
+        return (proc.stdout or "").strip().lower() == "true"
+    except (OSError, subprocess.SubprocessError):
+        return False
+
+
 def is_main_app_running() -> bool:
+    if _main_app_pid_alive():
+        return True
+    if sys.platform == "win32" and getattr(sys, "frozen", False):
+        return _win_td_studio_gui_running()
     blob = _tasklist_blob()
     if _any_image_running(blob, OUR_PROCESS_NAMES):
+        # Nur Wächter läuft → kein GUI (gleicher EXE-Name)
+        if getattr(sys, "frozen", False):
+            return _win_td_studio_gui_running()
         return True
     if sys.platform != "win32":
         return False
@@ -132,7 +199,7 @@ def is_main_app_running() -> bool:
             creationflags=getattr(subprocess, "CREATE_NO_WINDOW", 0),
         )
         text = (proc.stdout or "").lower()
-        return "main.py" in text and "creality_watch" not in text
+        return "main.py" in text and "creality_watch" not in text and "--watch-creality" not in text
     except (OSError, subprocess.SubprocessError):
         return False
 
@@ -173,6 +240,79 @@ def launch_main_app() -> bool:
         return True
     except OSError:
         return False
+
+
+_AUTOSTART_VALUE_NAME = "TDFilamentStudioCrealityWatch"
+
+
+def _autostart_run_key() -> str:
+    return r"Software\Microsoft\Windows\CurrentVersion\Run"
+
+
+def sync_watcher_autostart(enabled: bool) -> None:
+    """Windows-Anmeldung: Wächter starten, wenn Einstellung aktiv (ohne vorher TD zu öffnen)."""
+    if sys.platform != "win32" or not getattr(sys, "frozen", False):
+        return
+    import winreg
+
+    exe = resolve_app_executable()
+    cmd = f'"{exe}" --watch-creality'
+    try:
+        with winreg.OpenKey(
+            winreg.HKEY_CURRENT_USER,
+            _autostart_run_key(),
+            0,
+            winreg.KEY_SET_VALUE,
+        ) as key:
+            if enabled:
+                winreg.SetValueEx(key, _AUTOSTART_VALUE_NAME, 0, winreg.REG_SZ, cmd)
+            else:
+                try:
+                    winreg.DeleteValue(key, _AUTOSTART_VALUE_NAME)
+                except FileNotFoundError:
+                    pass
+    except OSError:
+        pass
+
+
+def stop_watcher() -> None:
+    path = _pid_file()
+    if not path.is_file():
+        return
+    try:
+        pid = int(path.read_text(encoding="utf-8").strip())
+    except (OSError, ValueError):
+        _clear_pid()
+        return
+    if _pid_alive(pid):
+        if sys.platform == "win32":
+            subprocess.run(
+                ["taskkill", "/PID", str(pid), "/F"],
+                capture_output=True,
+                creationflags=getattr(subprocess, "CREATE_NO_WINDOW", 0),
+            )
+        else:
+            import os
+            import signal
+
+            os.kill(pid, signal.SIGTERM)
+    _clear_pid()
+
+
+def sync_creality_watch(enabled: bool) -> tuple[bool, str]:
+    """
+    Einstellung „Mit Creality Print starten“ anwenden.
+    Returns (watcher_started_or_already, status_message).
+    """
+    sync_watcher_autostart(enabled)
+    if not enabled:
+        stop_watcher()
+        return False, "Creality-Wächter beendet"
+    if watcher_is_running():
+        return False, "Creality-Wächter läuft bereits"
+    if start_watcher_detached():
+        return True, "Creality-Wächter gestartet"
+    return False, "Creality-Wächter konnte nicht gestartet werden"
 
 
 def start_watcher_detached() -> bool:

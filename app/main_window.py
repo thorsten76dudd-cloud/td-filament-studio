@@ -231,6 +231,9 @@ class TDFilamentStudioApp(AppTk):
             self.after(900, self._maybe_show_setup_wizard)
         self._schedule_reader_poll()
         self.after(1200, self._sync_creality_watcher)
+        from creality_nfc.creality_watch import register_main_app
+
+        register_main_app()
 
     # ── UI construction ─────────────────────────────────────────────
 
@@ -1413,16 +1416,11 @@ class TDFilamentStudioApp(AppTk):
         self.settings.save(DEFAULT_SETTINGS_PATH)
 
     def _sync_creality_watcher(self) -> None:
-        from creality_nfc.creality_watch import start_watcher_detached, watcher_is_running
+        from creality_nfc.creality_watch import sync_creality_watch
 
-        if self.settings.launch_with_creality_print:
-            if start_watcher_detached():
-                self._set_status("Creality-Wächter gestartet", "ok")
-        elif watcher_is_running():
-            self._set_status(
-                "Creality-Wächter läuft noch — nach Deaktivieren ggf. PC neu starten",
-                "warn",
-            )
+        started, msg = sync_creality_watch(self.settings.launch_with_creality_print)
+        if msg:
+            self._set_status(msg, "ok" if started else "info")
 
     def _save_settings(self) -> None:
         self.settings.save(DEFAULT_SETTINGS_PATH)
@@ -3900,7 +3898,9 @@ class TDFilamentStudioApp(AppTk):
         except Exception:
             pass
         from app.shutdown import shutdown_application
+        from creality_nfc.creality_watch import unregister_main_app
 
+        unregister_main_app()
         shutdown_application(self)
         try:
             self.quit()

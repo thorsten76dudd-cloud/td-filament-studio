@@ -2,10 +2,10 @@
 # Creates latest stable release and removes the previous stable release tag.
 
 param(
-    [string]$Version = "1.5.52",
-    [string]$Tag = "v1.5.52-stable",
+    [string]$Version = "1.5.53",
+    [string]$Tag = "v1.5.53-stable",
     [string]$Repo = "thorsten76dudd-cloud/td-filament-studio",
-    [string]$RemoveTag = "v1.5.48-stable",
+    [string]$RemoveTag = "v1.5.52-stable",
     [switch]$DeleteAllOldReleases
 )
 
@@ -31,18 +31,16 @@ if (-not (Test-Path $Setup)) {
 $notes = @(
     "## TD Filament Studio $Version",
     "",
-    "### Meine Spulen",
-    "* Profil aus Material-DB uebernehmen (Marke, Material, ID, Farbe)",
-    "* Farbe per Windows-Dialog oder Presets (nicht nur Hex)",
-    "* Bezeichnung einheitlich: Marke - Material; Drucker K2 Pro statt F008",
-    "* Liste: CFS 1A-1D oben (auch Bemerkung CFS-S1), Rest alphabetisch",
+    "### Fix: Mit Creality Print starten",
+    "* Waechter startet TD Filament Studio zuverlaessig, wenn Creality Print laeuft",
+    "* Windows-Autostart fuer den Helfer (Option in Einstellungen speichern)",
     "",
-    "### UI",
-    "* Filament-Profil nur Lesen (Daten vom Drucker)",
-    "* Material-DB nur per SSH vom Drucker",
-    "* G-Code-Vorschau schaerfer; Dateilisten behalten Scrollposition",
+    "### Aus 1.5.52",
+    "* Spulen: Material-DB, Farbe Dialog/Presets, K2 Pro, CFS 1A-1D oben",
+    "* Filament-Profil nur Lesen; Material-DB per SSH",
+    "* G-Code-Vorschau schaerfer; Dateilisten Scrollposition",
     "",
-    "Setup ausfuehren. Material-DB: Tab Material-DB - Vom Drucker (SSH)."
+    "Setup ausfuehren. Einstellungen: Mit Creality Print starten aktivieren und speichern."
 ) -join [Environment]::NewLine
 Set-Content -Path $NotesFile -Value $notes -Encoding UTF8
 
