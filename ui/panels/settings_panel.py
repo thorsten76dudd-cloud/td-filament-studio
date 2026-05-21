@@ -11,6 +11,7 @@ from tkinter import ttk
 from creality_nfc.app_settings import DEFAULT_SETTINGS_PATH, AppSettings
 from creality_nfc.config import APP_VERSION, GITHUB_URL
 from creality_nfc.reader import CrealityNfcReader
+from ui.components import scrollable_tab
 from ui.dialog_theme import theme_dialog
 from ui.tooltip import tip
 
@@ -31,7 +32,35 @@ class SettingsPanel(ttk.Frame):
         self._on_factory_reset = on_factory_reset
         frame_pad = {"padx": 12, "pady": 8}
 
-        auto = ttk.LabelFrame(self, text="Automatik")
+        footer = ttk.Frame(self)
+        footer.pack(side="bottom", fill="x", padx=12, pady=(4, 10))
+        btn_row = ttk.Frame(footer)
+        btn_row.pack(anchor="w")
+        tip(
+            ttk.Button(btn_row, text="Einstellungen speichern", command=self._save, style="Accent.TButton"),
+            "Alle Einstellungen dauerhaft speichern und anwenden.",
+        ).pack(side="left", padx=(0, 8))
+        if on_show_setup:
+            tip(
+                ttk.Button(btn_row, text="Ersteinrichtung…", command=on_show_setup, style="Secondary.TButton"),
+                "Checkliste: Smartcard, Reader, Datenbank.",
+            ).pack(side="left", padx=(0, 8))
+        if on_factory_reset:
+            tip(
+                ttk.Button(
+                    btn_row,
+                    text="Programm zurücksetzen…",
+                    command=on_factory_reset,
+                    style="Secondary.TButton",
+                ),
+                "Alle lokalen Daten löschen (wie Neuinstallation). Vorher ZIP-Backup empfohlen!",
+            ).pack(side="left")
+
+        body = ttk.Frame(self)
+        body.pack(fill="both", expand=True)
+        _canvas, inner = scrollable_tab(body)
+
+        auto = ttk.LabelFrame(inner, text="Automatik")
         auto.pack(fill="x", **frame_pad)
         self.auto_read = tk.BooleanVar(value=settings.auto_read_tag)
         self.auto_write = tk.BooleanVar(value=settings.auto_write_tag)
@@ -59,7 +88,7 @@ class SettingsPanel(ttk.Frame):
             wraplength=520,
         ).pack(anchor="w", padx=8, pady=(0, 6))
 
-        serial = ttk.LabelFrame(self, text="Seriennummer")
+        serial = ttk.LabelFrame(inner, text="Seriennummer")
         serial.pack(fill="x", **frame_pad)
         self.auto_serial = tk.BooleanVar(value=settings.auto_increment_serial)
         ttk.Checkbutton(serial, text="Automatisch hochzählen", variable=self.auto_serial).pack(anchor="w", padx=8)
@@ -69,7 +98,7 @@ class SettingsPanel(ttk.Frame):
         self.fixed_serial = tk.StringVar(value=settings.fixed_serial)
         ttk.Entry(row, textvariable=self.fixed_serial, width=10).pack(side="left", padx=6)
 
-        filament = ttk.LabelFrame(self, text="Spulen & CFS")
+        filament = ttk.LabelFrame(inner, text="Spulen & CFS")
         filament.pack(fill="x", **frame_pad)
         self.low_filament_g = tk.IntVar(value=settings.low_filament_threshold_g)
         fl_row = ttk.Frame(filament)
@@ -97,13 +126,13 @@ class SettingsPanel(ttk.Frame):
         ttk.Spinbox(d_row, from_=0, to=500, textvariable=self.default_deduct_g, width=6).pack(
             side="left", padx=6
         )
-        reader = ttk.LabelFrame(self, text="NFC-Reader")
+        reader = ttk.LabelFrame(inner, text="NFC-Reader")
         reader.pack(fill="x", **frame_pad)
         names = [""] + CrealityNfcReader.list_readers_safe()
         self.reader_var = tk.StringVar(value=settings.preferred_reader)
         ttk.Combobox(reader, textvariable=self.reader_var, values=names).pack(fill="x", padx=8, pady=4)
 
-        db_sync = ttk.LabelFrame(self, text="Material-Datenbank (nur Lesen)")
+        db_sync = ttk.LabelFrame(inner, text="Material-Datenbank (nur Lesen)")
         db_sync.pack(fill="x", **frame_pad)
         ttk.Label(
             db_sync,
@@ -114,7 +143,7 @@ class SettingsPanel(ttk.Frame):
             wraplength=520,
         ).pack(anchor="w", padx=8, pady=(4, 8))
 
-        merge = ttk.LabelFrame(self, text="DB-Merge")
+        merge = ttk.LabelFrame(inner, text="DB-Merge")
         merge.pack(fill="x", **frame_pad)
         self.merge_var = tk.StringVar(value=settings.merge_prefer)
         ttk.Radiobutton(merge, text="Konflikt: lokal behalten", value="local", variable=self.merge_var).pack(anchor="w", padx=8)
@@ -126,7 +155,7 @@ class SettingsPanel(ttk.Frame):
             wraplength=480,
         ).pack(anchor="w", padx=8, pady=(4, 0))
 
-        updates = ttk.LabelFrame(self, text="Updates & GitHub")
+        updates = ttk.LabelFrame(inner, text="Updates & GitHub")
         updates.pack(fill="x", **frame_pad)
         self.check_updates = tk.BooleanVar(value=settings.check_updates)
         ttk.Checkbutton(
@@ -147,7 +176,7 @@ class SettingsPanel(ttk.Frame):
             wraplength=520,
         ).pack(anchor="w", padx=8)
         gh_row = ttk.Frame(updates)
-        gh_row.pack(anchor="w", padx=8, pady=(4, 8))
+        gh_row.pack(anchor="w", padx=8, pady=(4, 10))
         tip(
             ttk.Button(gh_row, text="GitHub-Statistik aktualisieren", command=self._refresh_github_stats),
             "Lädt Release-Tag und Setup-Download-Zähler von GitHub (API).",
@@ -165,32 +194,10 @@ class SettingsPanel(ttk.Frame):
 
         self.show_setup_startup = tk.BooleanVar(value=settings.show_setup_on_startup)
         ttk.Checkbutton(
-            self,
+            inner,
             text="Ersteinrichtung bei jedem Programmstart anzeigen",
             variable=self.show_setup_startup,
-        ).pack(anchor="w", padx=12, pady=(4, 0))
-
-        btn_row = ttk.Frame(self)
-        btn_row.pack(anchor="w", padx=12, pady=16)
-        tip(
-            ttk.Button(btn_row, text="Einstellungen speichern", command=self._save, style="Accent.TButton"),
-            "Alle Einstellungen dauerhaft speichern und anwenden.",
-        ).pack(side="left", padx=(0, 8))
-        if on_show_setup:
-            tip(
-                ttk.Button(btn_row, text="Ersteinrichtung…", command=on_show_setup, style="Secondary.TButton"),
-                "Checkliste: Smartcard, Reader, Datenbank.",
-            ).pack(side="left", padx=(0, 8))
-        if on_factory_reset:
-            tip(
-                ttk.Button(
-                    btn_row,
-                    text="Programm zurücksetzen…",
-                    command=on_factory_reset,
-                    style="Secondary.TButton",
-                ),
-                "Alle lokalen Daten löschen (wie Neuinstallation). Vorher ZIP-Backup empfohlen!",
-            ).pack(side="left")
+        ).pack(anchor="w", padx=12, pady=(4, 12))
 
     def _refresh_github_stats(self) -> None:
         self._github_stats_var.set("GitHub-Statistik: wird geladen …")

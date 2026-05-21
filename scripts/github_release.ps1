@@ -2,10 +2,10 @@
 # Creates latest stable release and removes the previous stable release tag.
 
 param(
-    [string]$Version = "1.5.57",
-    [string]$Tag = "v1.5.57-stable",
+    [string]$Version = "1.5.58",
+    [string]$Tag = "v1.5.58-stable",
     [string]$Repo = "thorsten76dudd-cloud/td-filament-studio",
-    [string]$RemoveTag = "v1.5.56-stable",
+    [string]$RemoveTag = "v1.5.57-stable",
     [switch]$DeleteAllOldReleases
 )
 
@@ -31,12 +31,16 @@ if (-not (Test-Path $Setup)) {
 $notes = @(
     "## TD Filament Studio $Version",
     "",
-    "### Neu: Updates & GitHub",
-    "* Automatischer Update-Hinweis beim Start und alle 4 Stunden (Dialog)",
-    "* Einstellungen: GitHub Setup-Download-Zaehler und Release-Info",
+    "### Neu: Creality Print G-Code (Stuetzmaterial / Multicolor)",
+    "* Verbrauch und Farben auch aus dem Dateiende (Footer nach END_PRINT)",
+    "* Mehrfarbig: z. B. Modell + blaues Stuetzmaterial getrennt abziehen (1A/1B)",
+    "* 0-g-Filament-Slots werden ignoriert",
     "",
-    "### Aus 1.5.56",
-    "* Update-Installer beendet Helfer; In-App-Update; Browser/Kamera-Fix",
+    "### UI",
+    "* Einstellungen: scrollbar, Speichern-Buttons immer sichtbar",
+    "",
+    "### Aus 1.5.57",
+    "* Auto-Update-Hinweis; GitHub-Download-Anzeige",
     "",
     "Setup ausfuehren (ueberschreibt alte Installation)."
 ) -join [Environment]::NewLine

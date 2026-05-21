@@ -374,6 +374,26 @@ _HEADER_COLOR_RE = (
     re.compile(r";?\s*material\s*[=:]\s*([A-Za-z0-9 _+-]+)", re.I),
 )
 
+# Creality Print 7.x: Verbrauch + CONFIG_BLOCK oft erst nach END_PRINT (Dateiende).
+_GCODE_TAIL_BYTES = 400_000
+
+
+def _read_gcode_region(path: Path, *, max_bytes: int, from_end: bool) -> str:
+    try:
+        size = path.stat().st_size
+        with path.open("rb") as f:
+            read_len = min(max_bytes, size)
+            if from_end and size > read_len:
+                f.seek(size - read_len)
+            raw = f.read(read_len)
+        return raw.decode("utf-8", errors="ignore")
+    except OSError:
+        return ""
+
+
+def _active_weight_slots(weights: list[float]) -> int:
+    return sum(1 for w in weights if w is not None and w > 0.01)
+
 
 def _resolve_local_gcode_path(gcode_path: str) -> Path | None:
     raw = gcode_path.strip().replace("\\", "/")
@@ -390,10 +410,10 @@ def _resolve_local_gcode_path(gcode_path: str) -> Path | None:
 
 
 def parse_filament_colors_from_gcode_file(
-    gcode_path: str | Path, *, max_bytes: int = 120_000
+    gcode_path: str | Path, *, max_bytes: int = 120_000, tail_bytes: int = _GCODE_TAIL_BYTES
 ) -> tuple[list[str], list[str]]:
     """
-    Farben/Material aus Slicer-Kommentaren am Dateianfang (Creality/Orca/Prusa).
+    Farben/Material aus Slicer-Kommentaren (Kopf + bei großen Dateien Footer).
     Rückgabe: (farben als #RRGGBB, materialtypen).
     """
     path = Path(gcode_path) if not isinstance(gcode_path, Path) else gcode_path
@@ -402,37 +422,20 @@ def parse_filament_colors_from_gcode_file(
         if resolved is None:
             return [], []
         path = resolved
+
+    head_raw = _read_gcode_region(path, max_bytes=max_bytes, from_end=False)
+    head = _parse_filament_fields_from_text(head_raw, stop_on_motion=True, max_lines=400)
+    tail: tuple[list[str], list[str], list[float]] = ([], [], [])
     try:
-        raw = path.read_bytes()[:max_bytes].decode("utf-8", errors="ignore")
+        file_size = path.stat().st_size
     except OSError:
-        return [], []
-    colors: list[str] = []
-    materials: list[str] = []
-    for line in raw.splitlines()[:400]:
-        if not line.startswith(";"):
-            if line.strip().startswith("G"):
-                break
-            continue
-        for pat in _HEADER_COLOR_RE[:2]:
-            m = pat.search(line)
-            if m:
-                hx = None
-                for g in m.groups():
-                    if not g:
-                        continue
-                    hx = creality_color_to_hex(g)
-                    if hx:
-                        break
-                if hx:
-                    colors.append(hx)
-                break
-        for pat in _HEADER_COLOR_RE[2:]:
-            m_type = pat.search(line)
-            if m_type:
-                mt = m_type.group(1).strip()
-                if mt:
-                    materials.append(mt)
-                break
+        file_size = 0
+    if file_size > max_bytes:
+        tail_raw = _read_gcode_region(path, max_bytes=tail_bytes, from_end=True)
+        tail = _parse_filament_fields_from_text(
+            tail_raw, stop_on_motion=False, max_lines=None
+        )
+    colors, materials, _weights = _merge_filament_field_lists(head, tail)
     return colors, materials
 
 
@@ -442,13 +445,14 @@ _RE_FILAMENT_LIST_LINE = re.compile(
 )
 _RE_FILAMENT_USED_G_LIST = re.compile(
     r"(?:^|;\s*)(?:total\s+)?filament used \[g\]\s*[=:]\s*([\d.,\s]+)\s*$",
-    re.I,
+    re.I | re.M,
 )
 _RE_FILAMENT_USED_G_ORCA = re.compile(
     r"filament_used_g\s*[=:]\s*([\d.,\s]+)",
     re.I,
 )
 _RE_MATERIAL_LIST = re.compile(r";?\s*material\s*[=:]\s*([A-Za-z0-9 _+,-]+)\s*$", re.I)
+_RE_FILAMENT_TYPE_LIST = re.compile(r"filament_type\s*[=:]\s*(.+)$", re.I)
 
 
 def _parse_color_token_list(raw: str) -> list[str]:
@@ -469,33 +473,29 @@ def _parse_float_list(raw: str) -> list[float]:
     return out
 
 
-def parse_filament_specs_from_gcode_file(
-    gcode_path: str | Path, *, max_bytes: int = 200_000
-) -> list[GcodeFilamentSpec]:
+def _parse_filament_fields_from_text(
+    raw: str,
+    *,
+    stop_on_motion: bool,
+    max_lines: int | None = 600,
+) -> tuple[list[str], list[str], list[float]]:
     """
-    Orca/Bambu/Creality: Farben + Gramm pro Filament aus dem Dateikopf.
-    Beispiel: `; filament used [g] = 0.20, 21.83` mit passenden filament_colour-Zeilen.
+    Farben, Materialtypen und Gramm pro Extruder aus Slicer-Kommentaren.
+    stop_on_motion: True am Dateianfang (Abbruch bei erstem G-Befehl).
     """
-    path = Path(gcode_path) if not isinstance(gcode_path, Path) else gcode_path
-    if not path.is_file():
-        resolved = resolve_local_gcode_path(str(gcode_path))
-        if resolved is None:
-            return []
-        path = resolved
-    try:
-        raw = path.read_bytes()[:max_bytes].decode("utf-8", errors="ignore")
-    except OSError:
-        return []
-
     colors: list[str] = []
     materials: list[str] = []
     weights: list[float] = []
     total_g: float | None = None
 
-    for line in raw.splitlines()[:600]:
+    lines = raw.splitlines()
+    if max_lines is not None:
+        lines = lines[:max_lines]
+
+    for line in lines:
         stripped = line.strip()
         if not stripped.startswith(";"):
-            if stripped.startswith("G"):
+            if stop_on_motion and stripped.startswith("G"):
                 break
             continue
         body = stripped.lstrip(";").strip()
@@ -515,9 +515,16 @@ def parse_filament_specs_from_gcode_file(
                     if g and creality_color_to_hex(g):
                         hx = creality_color_to_hex(g)
                         break
-                if hx:
+                if hx and not _RE_FILAMENT_LIST_LINE.search(body):
                     colors.append(hx)
                 break
+
+        m_type = _RE_FILAMENT_TYPE_LIST.search(body)
+        if m_type:
+            parsed_m = [p.strip() for p in re.split(r"[,;]", m_type.group(1)) if p.strip()]
+            if len(parsed_m) > len(materials):
+                materials = parsed_m
+            continue
 
         m_mat = _RE_MATERIAL_LIST.match(body)
         if m_mat:
@@ -546,8 +553,38 @@ def parse_filament_specs_from_gcode_file(
                 weights = plausible
 
     if not weights and total_g is not None:
-        return []
+        return colors, materials, []
+    return colors, materials, weights
 
+
+def _merge_filament_field_lists(
+    head: tuple[list[str], list[str], list[float]],
+    tail: tuple[list[str], list[str], list[float]],
+) -> tuple[list[str], list[str], list[float]]:
+    hc, hm, hw = head
+    tc, tm, tw = tail
+    if _active_weight_slots(tw) > _active_weight_slots(hw):
+        return (
+            tc if len(tc) >= len(hc) else hc,
+            tm if len(tm) >= len(hm) else hm,
+            tw,
+        )
+    if _active_weight_slots(hw) > 0:
+        return hc, hm, hw
+    if _active_weight_slots(tw) > 0:
+        return (
+            tc if tc else hc,
+            tm if tm else hm,
+            tw,
+        )
+    return hc or tc, hm or tm, hw or tw
+
+
+def _filament_specs_from_fields(
+    colors: list[str],
+    materials: list[str],
+    weights: list[float],
+) -> list[GcodeFilamentSpec]:
     n = max(len(colors), len(materials), len(weights), 1)
     specs: list[GcodeFilamentSpec] = []
     for i in range(n):
@@ -562,7 +599,44 @@ def parse_filament_specs_from_gcode_file(
                 weight_g=w,
             )
         )
-    return [s for s in specs if s.weight_g or s.color_hex]
+    out = [s for s in specs if s.weight_g or s.color_hex]
+    if weights:
+        active = [s for s in out if s.weight_g is not None and s.weight_g > 0.01]
+        if active:
+            return active
+    return out
+
+
+def parse_filament_specs_from_gcode_file(
+    gcode_path: str | Path, *, max_bytes: int = 200_000, tail_bytes: int = _GCODE_TAIL_BYTES
+) -> list[GcodeFilamentSpec]:
+    """
+    Orca/Bambu/Creality: Farben + Gramm pro Filament.
+    Kopf (Orca/Prusa) und bei großen Dateien zusätzlich Footer (Creality Print 7.x).
+    """
+    path = Path(gcode_path) if not isinstance(gcode_path, Path) else gcode_path
+    if not path.is_file():
+        resolved = resolve_local_gcode_path(str(gcode_path))
+        if resolved is None:
+            return []
+        path = resolved
+
+    head_raw = _read_gcode_region(path, max_bytes=max_bytes, from_end=False)
+    head = _parse_filament_fields_from_text(head_raw, stop_on_motion=True)
+
+    tail: tuple[list[str], list[str], list[float]] = ([], [], [])
+    try:
+        file_size = path.stat().st_size
+    except OSError:
+        file_size = 0
+    if file_size > max_bytes:
+        tail_raw = _read_gcode_region(path, max_bytes=tail_bytes, from_end=True)
+        tail = _parse_filament_fields_from_text(
+            tail_raw, stop_on_motion=False, max_lines=None
+        )
+
+    colors, materials, weights = _merge_filament_field_lists(head, tail)
+    return _filament_specs_from_fields(colors, materials, weights)
 
 
 def _specs_to_info_fields(specs: list[GcodeFilamentSpec]) -> dict[str, str]:
@@ -900,6 +974,18 @@ _HEADER_FILAMENT_RE = (
 def parse_filament_grams_from_text(raw: str) -> float | None:
     """Slicer-Kommentare (Prusa/Orca/Creality) — bevorzugt Gramm-Zeilen."""
     best: float | None = None
+    for m in _RE_FILAMENT_USED_G_LIST.finditer(raw):
+        vals = _parse_float_list(m.group(1))
+        plausible = [slot_filament_grams(v) for v in vals]
+        plausible = [p for p in plausible if p is not None]
+        if len(plausible) >= 2:
+            total = sum(plausible)
+            if best is None or total > best:
+                best = total
+        elif len(plausible) == 1:
+            g = plausible[0]
+            if best is None or g > best:
+                best = g
     for pat in _HEADER_FILAMENT_RE:
         for m in pat.finditer(raw):
             try:
@@ -916,14 +1002,22 @@ def parse_filament_grams_from_text(raw: str) -> float | None:
     return best
 
 
-def parse_filament_grams_from_file(path: Path, *, max_bytes: int = 120_000) -> float | None:
-    """Slicer-Kommentare am Dateianfang (Prusa/Orca/Creality)."""
+def parse_filament_grams_from_file(
+    path: Path, *, max_bytes: int = 120_000, tail_bytes: int = _GCODE_TAIL_BYTES
+) -> float | None:
+    """Slicer-Kommentare (Kopf + bei großen Dateien Footer)."""
+    head_raw = _read_gcode_region(path, max_bytes=max_bytes, from_end=False)
+    best = parse_filament_grams_from_text(head_raw)
     try:
-        with path.open("rb") as f:
-            raw = f.read(max_bytes).decode("utf-8", errors="ignore")
+        file_size = path.stat().st_size
     except OSError:
-        return None
-    return parse_filament_grams_from_text(raw)
+        file_size = 0
+    if file_size > max_bytes:
+        tail_raw = _read_gcode_region(path, max_bytes=tail_bytes, from_end=True)
+        tail_best = parse_filament_grams_from_text(tail_raw)
+        if tail_best is not None and (best is None or tail_best > best):
+            best = tail_best
+    return best
 
 
 def cache_gcode_from_printer(

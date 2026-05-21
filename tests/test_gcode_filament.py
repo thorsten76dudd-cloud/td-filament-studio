@@ -307,6 +307,39 @@ class GcodeFilamentTests(unittest.TestCase):
         finally:
             path.unlink(missing_ok=True)
 
+    def test_creality_print_footer_dual_filament(self) -> None:
+        """Creality Print 7.x: Verbrauch steht nach END_PRINT am Dateiende."""
+        footer = (
+            "END_PRINT\n"
+            "; filament used [g] = 189.72, 34.47, 0.00\n"
+            "; CONFIG_BLOCK_START\n"
+            "; default_filament_colour = #ff8000;#0000ff;\n"
+            "; filament_colour = #ff8000;#0000ff;#808080\n"
+            "; filament_type = PETG;PETG;PETG\n"
+        )
+        with tempfile.NamedTemporaryFile("wb", suffix=".gcode", delete=False) as f:
+            f.write(b"; HEADER\nG1 X0\n")
+            f.write(b"X" * 250_000)
+            f.write(footer.encode("utf-8"))
+            path = Path(f.name)
+        try:
+            specs = parse_filament_specs_from_gcode_file(path)
+            self.assertEqual(len(specs), 2)
+            self.assertEqual(specs[0].color_hex, "#FF8000")
+            self.assertAlmostEqual(specs[0].weight_g or 0, 189.72, places=2)
+            self.assertEqual(specs[1].color_hex, "#0000FF")
+            self.assertAlmostEqual(specs[1].weight_g or 0, 34.47, places=2)
+            colors, materials = parse_filament_colors_from_gcode_file(path)
+            self.assertEqual(colors[0], "#FF8000")
+            self.assertEqual(colors[1], "#0000FF")
+            self.assertEqual(materials[0], "PETG")
+            total = parse_filament_grams_from_file(path)
+            self.assertIsNotNone(total)
+            assert total is not None
+            self.assertAlmostEqual(total, 224.19, places=1)
+        finally:
+            path.unlink(missing_ok=True)
+
     def test_prefer_slicer_file_over_wrong_printer_metadata(self) -> None:
         state = {
             "cfsConnect": 1,
