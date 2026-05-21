@@ -2,7 +2,7 @@
 ; Kompilieren: iscc installer\setup.iss  (Inno Setup 6)
 
 #define MyAppName "TD Filament Studio"
-#define MyAppVersion "1.5.62"
+#define MyAppVersion "1.5.63"
 #define MyAppPublisher "TD"
 #define MyAppExeName "TD Filament Studio.exe"
 
@@ -53,7 +53,8 @@ var
   ResultCode: Integer;
 begin
   { Waechter und Haupt-App beenden, sonst DeleteFile Code 5 }
-  Exec(ExpandConstant('{sys}\taskkill.exe'), '/IM "{#MyAppExeName}" /F /T', '', SW_HIDE,
+  { Ohne /T: sonst werden Installer-Helfer (wscript) der App mit beendet }
+  Exec(ExpandConstant('{sys}\taskkill.exe'), '/IM "{#MyAppExeName}" /F', '', SW_HIDE,
     ewWaitUntilTerminated, ResultCode);
   Sleep(800);
   Result := '';

@@ -2,10 +2,10 @@
 # Creates latest stable release and removes the previous stable release tag.
 
 param(
-    [string]$Version = "1.5.62",
-    [string]$Tag = "v1.5.62-stable",
+    [string]$Version = "1.5.63",
+    [string]$Tag = "v1.5.63-stable",
     [string]$Repo = "thorsten76dudd-cloud/td-filament-studio",
-    [string]$RemoveTag = "v1.5.61-stable",
+    [string]$RemoveTag = "v1.5.62-stable",
     [switch]$DeleteAllOldReleases
 )
 
@@ -31,15 +31,15 @@ if (-not (Test-Path $Setup)) {
 $notes = @(
     "## TD Filament Studio $Version",
     "",
-    "### Fix: Mit Creality Print starten",
-    "* Creality-Prozesse zuverlaessiger erkennen; App sichtbar starten",
-    "* Waechter startet nach Installation automatisch",
-    "* Log: data\creality_watch.log",
+    "### Fix: In-App-Update Installation",
+    "* Installer startet nach App-Ende (WScript-Helfer, taskkill ohne /T)",
+    "* Setup in LocalAppData\TD Filament Studio\Updates",
+    "* /FORCECLOSEAPPLICATIONS — weniger Inno-Meldungen",
     "",
-    "### Aus 1.5.61",
-    "* In-App-Update Installer-Fix; Drucker-Pause/Fehler (1.5.60)",
+    "### Aus 1.5.62",
+    "* Creality-Autostart; Drucker-Hinweise",
     "",
-    "Setup ausfuehren (ueberschreibt alte Installation)."
+    "Windows kann SmartScreen „Trotzdem ausfuehren“ zeigen (normal ohne Signatur)."
 ) -join [Environment]::NewLine
 Set-Content -Path $NotesFile -Value $notes -Encoding UTF8
 

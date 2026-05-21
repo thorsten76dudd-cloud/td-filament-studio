@@ -4129,8 +4129,10 @@ class TDFilamentStudioApp(AppTk):
             if not messagebox.askokcancel(
                 "Update installieren",
                 f"Setup bereit:\n{path}\n\n"
-                "OK = App und Hintergrund-Helfer beenden, Installer starten.\n"
-                "Abbrechen = Setup bleibt im Ordner, nichts installieren.",
+                "OK = App beendet sich, nach wenigen Sekunden startet der Installer.\n"
+                "Windows kann „Trotzdem ausführen“ / SmartScreen zeigen — bestätigen.\n"
+                "Falls nichts passiert: Datei manuell aus dem Ordner Updates starten.\n\n"
+                "Abbrechen = Setup bleibt gespeichert.",
                 parent=self,
             ):
                 self.notify(f"Setup gespeichert:\n{path}", "info")

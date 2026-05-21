@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+import os
+import shutil
 import subprocess
 import sys
 import tempfile
@@ -12,24 +14,40 @@ from pathlib import Path
 
 _SETUP_NAME = "TD-Filament-Studio-Setup.exe"
 _MIN_SETUP_BYTES = 5_000_000
+_INNO_SETUP_ARGS = "/FORCECLOSEAPPLICATIONS"
 
-# Windows: Installer aus PyInstaller-Job lösen (sonst stirbt er mit os._exit)
 _CREATE_BREAKAWAY_FROM_JOB = 0x01000000
 _DETACHED_PROCESS = 0x00000008
 _CREATE_NO_WINDOW = 0x08000000
 
 
+def _update_log(message: str) -> None:
+    try:
+        base = Path(os.environ.get("LOCALAPPDATA", tempfile.gettempdir())) / "TD Filament Studio" / "data"
+        base.mkdir(parents=True, exist_ok=True)
+        path = base / "update_install.log"
+        stamp = time.strftime("%Y-%m-%d %H:%M:%S")
+        with path.open("a", encoding="utf-8") as fh:
+            fh.write(f"[{stamp}] {message}\n")
+    except OSError:
+        pass
+
+
 def kill_all_app_processes() -> None:
-    """Haupt-App und Creality-Wächter (gleiche EXE) beenden."""
+    """
+    Haupt-App und Wächter beenden.
+    WICHTIG: ohne /T — sonst werden frisch gestartete Installer-Helfer (cmd/wscript) mit beendet.
+    """
     if sys.platform != "win32":
         return
     flags = getattr(subprocess, "CREATE_NO_WINDOW", 0)
-    subprocess.run(
-        ["taskkill", "/IM", "TD Filament Studio.exe", "/F", "/T"],
-        capture_output=True,
-        creationflags=flags,
-    )
-    time.sleep(0.8)
+    for _ in range(2):
+        subprocess.run(
+            ["taskkill", "/IM", "TD Filament Studio.exe", "/F"],
+            capture_output=True,
+            creationflags=flags,
+        )
+        time.sleep(0.5)
 
 
 def download_setup(
@@ -55,7 +73,10 @@ def download_setup(
 
 
 def default_setup_download_path() -> Path:
-    return Path(tempfile.gettempdir()) / "td_filament_studio" / _SETUP_NAME
+    """Stabiler Ordner (nicht nur %TEMP%) — weniger SmartScreen-Probleme."""
+    base = Path(os.environ.get("LOCALAPPDATA", tempfile.gettempdir())) / "TD Filament Studio" / "Updates"
+    base.mkdir(parents=True, exist_ok=True)
+    return base / _SETUP_NAME
 
 
 def validate_setup_exe(setup_path: Path) -> None:
@@ -73,37 +94,57 @@ def validate_setup_exe(setup_path: Path) -> None:
             raise ValueError("Keine gültige Windows-EXE — bitte Setup im Browser erneut laden.")
 
 
+def stage_setup_for_install(setup_path: Path) -> Path:
+    """Setup in Updates-Ordner legen (für Installer + VBS-Helfer)."""
+    dest = default_setup_download_path()
+    setup_path = setup_path.resolve()
+    if setup_path != dest.resolve():
+        shutil.copy2(setup_path, dest)
+    return dest
+
+
+def _shell_execute(file: str, params: str = "", *, show: int = 1) -> None:
+    import ctypes
+
+    ret = ctypes.windll.shell32.ShellExecuteW(None, "open", file, params or None, None, show)
+    if ret <= 32:
+        raise OSError(f"ShellExecute fehlgeschlagen (Code {ret})")
+
+
 def _schedule_windows_installer(setup_path: Path) -> None:
     """
-    Installer per eigenem CMD starten (überlebt App-Ende / PyInstaller os._exit).
-    Kurze Verzögerung, damit taskkill die EXE freigibt.
+    Installer per WScript starten — eigener Prozess, überlebt taskkill/os._exit.
     """
     setup_path = setup_path.resolve()
-    cmd_path = setup_path.parent / "_td_install_update.cmd"
-    cmd_path.write_text(
-        "@echo off\r\n"
-        "ping -n 3 127.0.0.1 >nul\r\n"
-        f'start "" "{setup_path}"\r\n'
-        'del "%~f0" 2>nul\r\n',
+    vbs_path = setup_path.parent / "_td_run_setup.vbs"
+    run_cmd = f'"{setup_path}" {_INNO_SETUP_ARGS}'.replace('"', '""')
+    vbs_path.write_text(
+        "WScript.Sleep 4000\n"
+        "Set sh = CreateObject(\"WScript.Shell\")\n"
+        f'sh.Run "{run_cmd}", 1, False\n',
         encoding="utf-8",
     )
+    _update_log(f"VBS-Launcher geschrieben: {vbs_path}")
     flags = _DETACHED_PROCESS | _CREATE_NO_WINDOW | _CREATE_BREAKAWAY_FROM_JOB
     subprocess.Popen(
-        ["cmd.exe", "/c", str(cmd_path)],
+        ["wscript.exe", "//B", str(vbs_path)],
         close_fds=True,
         creationflags=flags,
     )
+    _update_log("wscript.exe gestartet (Installer in ~4 s)")
 
 
 def install_downloaded_setup(setup_path: Path) -> None:
     """Installer starten und diesen Prozess sofort beenden (kein Datei-Lock)."""
-    setup_path = setup_path.resolve()
-    validate_setup_exe(setup_path)
+    staged = stage_setup_for_install(setup_path)
+    validate_setup_exe(staged)
+    _update_log(f"install_downloaded_setup: {staged}")
     if sys.platform == "win32":
-        _schedule_windows_installer(setup_path)
+        _schedule_windows_installer(staged)
+        time.sleep(1.2)
         kill_all_app_processes()
     else:
-        subprocess.Popen([str(setup_path)], close_fds=True)
+        subprocess.Popen([str(staged)], close_fds=True)
     from app.shutdown import hard_exit_frozen
 
     hard_exit_frozen(0)
