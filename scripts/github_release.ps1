@@ -2,10 +2,10 @@
 # Creates latest stable release and removes the previous stable release tag.
 
 param(
-    [string]$Version = "1.5.71",
-    [string]$Tag = "v1.5.71-stable",
+    [string]$Version = "1.5.72",
+    [string]$Tag = "v1.5.72-stable",
     [string]$Repo = "thorsten76dudd-cloud/td-filament-studio",
-    [string]$RemoveTag = "v1.5.70-stable",
+    [string]$RemoveTag = "v1.5.71-stable",
     [switch]$DeleteAllOldReleases
 )
 
@@ -31,12 +31,12 @@ if (-not (Test-Path $Setup)) {
 $notes = @(
     "## TD Filament Studio $Version",
     "",
-    "### Filament-Verbrauch nach Druck",
-    "* Dialog erscheint wieder zuverlaessig (Druckende-Erkennung, Peak-Fortschritt, 99 %)",
-    "* Abbrechen blockiert nicht mehr den naechsten Dialog fuer dieselbe Datei",
+    "### Material-DB vom Drucker (SSH)",
+    "* Nach „Vom Drucker (SSH)“ wird die DB lokal gespeichert (data/*.json)",
+    "* Beim Programmstart automatisch wieder geladen — kein erneutes SSH noetig",
     "",
-    "### Enthalten ab 1.5.70",
-    "* STL 3D-Vorschau, Bibliothek Import/Export/Backup, Ordner verschieben",
+    "### Enthalten ab 1.5.71",
+    "* Filament-Verbrauch-Dialog nach Druck; STL-Vorschau, Bibliothek",
     "",
     "Setup ausfuehren (ueberschreibt alte Installation)."
 ) -join [Environment]::NewLine

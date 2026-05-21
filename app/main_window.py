@@ -866,8 +866,9 @@ class TDFilamentStudioApp(AppTk):
         if MATERIAL_DB_PRINTER_ONLY:
             intro = (
                 "Die Profil-Liste kommt nur aus „Vom Drucker (SSH)“ — keine Cloud, "
-                "keine Datei, kein Merge. Tab „Filament-Profil“ zeigt nur an "
-                "(kein Speichern). Druckparameter änderst du in Creality Print."
+                "keine Datei, kein Merge. Nach dem Laden wird sie lokal zwischengespeichert "
+                "und beim nächsten Start wieder geladen. Tab „Filament-Profil“ nur Lesen. "
+                "Druckparameter änderst du in Creality Print."
             )
         else:
             intro = (
@@ -1541,10 +1542,10 @@ class TDFilamentStudioApp(AppTk):
 
     def _apply_database(self, data: dict, source: str) -> None:
         path = db_path_for_printer(DATA_DIR, self.printer_var.get().strip())
-        if not MATERIAL_DB_PRINTER_ONLY:
-            save_database(path, data)
+        DATA_DIR.mkdir(parents=True, exist_ok=True)
+        save_database(path, data)
         self.db_data = data
-        self.db_path = path if not MATERIAL_DB_PRINTER_ONLY else None
+        self.db_path = path
         self.profiles = profiles_from_db(data)
         self._demo_mode = False
         self._db_source = source
@@ -1821,7 +1822,11 @@ class TDFilamentStudioApp(AppTk):
         def on_ok(data: dict) -> None:
             if MATERIAL_DB_PRINTER_ONLY:
                 self._apply_database(data, "printer")
-                msg = f"{len(self.profiles)} Material-Profile vom Drucker geladen (lokal ersetzt)."
+                cache = self.db_path.name if self.db_path else "data/"
+                msg = (
+                    f"{len(self.profiles)} Material-Profile vom Drucker geladen.\n"
+                    f"Lokal gespeichert: {cache} (beim nächsten Start automatisch)."
+                )
             elif self.db_data and self.db_data.get("result", {}).get("list"):
                 merged = merge_databases(self.db_data, data, prefer="cloud")
                 added, updated, total, skipped = merge_stats(self.db_data, data)
