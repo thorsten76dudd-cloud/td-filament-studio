@@ -54,6 +54,32 @@ class PostPrintTriggerTests(unittest.TestCase):
       )
     )
 
+  def test_printing_to_idle_progress_reset_peak(self) -> None:
+    """Firmware setzt Fortschritt auf 0 — Peak während des Drucks zählt."""
+    self.assertTrue(
+      PrinterDevicePanel.should_trigger_post_print_deduct(
+        "printing",
+        "idle",
+        progress=0,
+        last_progress=80,
+        peak_progress=100,
+        filename="job.gcode",
+        last_filename="job.gcode",
+      )
+    )
+
+  def test_printing_to_idle_at_99(self) -> None:
+    self.assertTrue(
+      PrinterDevicePanel.should_trigger_post_print_deduct(
+        "printing",
+        "idle",
+        progress=99,
+        last_progress=99,
+        filename="job.gcode",
+        last_filename="job.gcode",
+      )
+    )
+
 
 if __name__ == "__main__":
   unittest.main()

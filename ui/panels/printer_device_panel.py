@@ -107,6 +107,7 @@ class PrinterDevicePanel(ttk.Frame):
         self._last_print_phase: str = "idle"
         self._print_phase_synced: bool = False
         self._last_print_progress: int = 0
+        self._peak_print_progress: int = 0
         self._last_print_filename: str = ""
         self._cfs_active_index: int | None = None
         self._last_print_cfs_slot: int | None = None
@@ -741,6 +742,7 @@ class PrinterDevicePanel(ttk.Frame):
         *,
         progress: int | None,
         last_progress: int,
+        peak_progress: int = 0,
         filename: str,
         last_filename: str,
     ) -> bool:
@@ -751,7 +753,8 @@ class PrinterDevicePanel(ttk.Frame):
             return True
         if prev_phase in ("printing", "paused") and phase == "idle":
             prog = progress if progress is not None else last_progress
-            if prog >= 100 and (filename.strip() or last_filename.strip()):
+            peak = max(last_progress, peak_progress, prog if prog is not None else 0)
+            if peak >= 99 and (filename.strip() or last_filename.strip()):
                 return True
         return False
 
@@ -769,8 +772,11 @@ class PrinterDevicePanel(ttk.Frame):
                 snap,
                 manual=manual,
             )
-        except Exception:
-            pass
+        except Exception as exc:
+            try:
+                self.app.notify(f"Filament-Abzug konnte nicht starten: {exc}", "warn")
+            except Exception:
+                pass
 
     def _maybe_notify_print_phase(
         self,
@@ -820,16 +826,22 @@ class PrinterDevicePanel(ttk.Frame):
             self.app._post_print_prompted = False
             if fname and fname != self._last_print_filename:
                 self.app._post_print_deduct_file = ""
+                self._peak_print_progress = 0
             loaded_now = find_loaded_slot_index(s)
             if loaded_now is not None:
                 self._last_print_cfs_slot = loaded_now
             elif self._cfs_active_index is not None:
                 self._last_print_cfs_slot = self._cfs_active_index
+        if phase in ("printing", "paused") and prog is not None:
+            self._peak_print_progress = max(
+                self._peak_print_progress, max(0, min(100, int(prog)))
+            )
         if self.should_trigger_post_print_deduct(
             self._last_print_phase,
             phase,
             progress=prog,
             last_progress=self._last_print_progress,
+            peak_progress=self._peak_print_progress,
             filename=fname,
             last_filename=self._last_print_filename,
         ):

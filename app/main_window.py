@@ -2336,8 +2336,6 @@ class TDFilamentStudioApp(AppTk):
                 return
             if self._post_print_prompted:
                 return
-            if fname and fname == self._post_print_deduct_file:
-                return
 
         def _prepare_then_ask() -> None:
             state = dict(printer_state or {})
@@ -2509,6 +2507,47 @@ class TDFilamentStudioApp(AppTk):
                     "warn",
                 )
 
+        if not dialog_rows and slot_hint is not None and 0 <= slot_hint <= 3:
+            from creality_nfc.gcode_filament import total_job_filament_grams
+
+            sp = find_spool_for_deduct(
+                self.inventory,
+                cfs_slots,
+                slot_hint,
+                gcode_map[1] if gcode_map else None,
+                gcode_path=filename,
+            )
+            est = total_job_filament_grams(
+                state,
+                filename,
+                file_entry=file_entry,
+                local_path=local_gcode,
+            )
+            default_g = int(est[0]) if est else 0
+            if default_g <= 0:
+                default_g = self.settings.default_post_print_deduct_g or 50
+            if sp is not None:
+                cfs_name = ""
+                if slot_hint < len(cfs_slots):
+                    sl = cfs_slots[slot_hint]
+                    cfs_name = f"{sl.vendor} {sl.name}".strip() or sl.material_type or ""
+                spec = gcode_map[1] if gcode_map else None
+                dialog_rows.append(
+                    DeductRow(
+                        spool_id=sp.id,
+                        slot_label=slot_label(slot_hint),
+                        spool_label=sp.label,
+                        cfs_filament=cfs_name,
+                        color_hex=spec.color_hex if spec else None,
+                        material=(
+                            (spec.material_type if spec else None)
+                            or material_hint_from_gcode_path(filename)
+                        ),
+                        default_grams=default_g,
+                        source=est[1] if est else "Schätzung",
+                    )
+                )
+
         if not dialog_rows:
             parts = [
                 "Kein automatischer Abzug möglich.",
@@ -2529,9 +2568,6 @@ class TDFilamentStudioApp(AppTk):
                 )
             self.notify("\n".join(parts), "warn")
             return
-        if fname:
-            self._post_print_deduct_file = fname
-        self._post_print_prompted = True
 
         def _remember_deduct_handled() -> None:
             if not fname:
@@ -2541,13 +2577,14 @@ class TDFilamentStudioApp(AppTk):
             self._post_print_deduct_file = fname
 
         def _ask() -> None:
+            self._post_print_prompted = True
             deductions = ask_post_print_deductions(
                 self, filename=filename, rows=dialog_rows
             )
             self._post_print_prompted = False
-            _remember_deduct_handled()
             if not deductions:
                 return
+            _remember_deduct_handled()
             thr = self.settings.low_filament_threshold_g
             low_msgs: list[str] = []
             for spool_id, grams in deductions:
