@@ -32,11 +32,11 @@ $notes = @(
     "## TD Filament Studio $Version",
     "",
     "### Material-DB vom Drucker (SSH)",
-    "* Nach „Vom Drucker (SSH)“ wird die DB lokal gespeichert (data/*.json)",
-    "* Beim Programmstart automatisch wieder geladen — kein erneutes SSH noetig",
+    "* Nach Vom Drucker (SSH) wird die DB lokal gespeichert (data/*.json)",
+    "* Beim Programmstart automatisch wieder geladen, kein erneutes SSH noetig",
     "",
     "### Enthalten ab 1.5.71",
-    "* Filament-Verbrauch-Dialog nach Druck; STL-Vorschau, Bibliothek",
+    "* Filament-Verbrauch-Dialog nach Druck, STL-Vorschau, Bibliothek",
     "",
     "Setup ausfuehren (ueberschreibt alte Installation)."
 ) -join [Environment]::NewLine
