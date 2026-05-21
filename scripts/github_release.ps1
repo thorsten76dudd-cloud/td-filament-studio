@@ -34,7 +34,7 @@ $notes = @(
     "### Fix: In-App-Update Installation",
     "* Installer startet nach App-Ende (WScript-Helfer, taskkill ohne /T)",
     "* Setup in LocalAppData\TD Filament Studio\Updates",
-    "* /FORCECLOSEAPPLICATIONS — weniger Inno-Meldungen",
+    "* /FORCECLOSEAPPLICATIONS - weniger Inno-Meldungen",
     "",
     "### Aus 1.5.62",
     "* Creality-Autostart; Drucker-Hinweise",
