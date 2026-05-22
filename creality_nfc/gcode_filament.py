@@ -468,7 +468,10 @@ def parse_filament_colors_from_gcode_file(
         file_size = path.stat().st_size
     except OSError:
         file_size = 0
-    if file_size > max_bytes:
+    need_tail = file_size > max_bytes or (
+        file_size > 4096 and _head_missing_filament_meta(head)
+    )
+    if need_tail:
         tail_raw = _read_gcode_region(path, max_bytes=tail_bytes, from_end=True)
         tail = _parse_filament_fields_from_text(
             tail_raw, stop_on_motion=False, max_lines=None
@@ -595,6 +598,18 @@ def _parse_filament_fields_from_text(
     return colors, materials, weights
 
 
+def _head_missing_filament_meta(
+    head: tuple[list[str], list[str], list[float]],
+) -> bool:
+    """Creality Print: Kopf endet beim ersten G — Farben/Gramm stehen am Dateiende."""
+    colors, _materials, weights = head
+    if colors:
+        return False
+    if _active_weight_slots(weights) > 0:
+        return False
+    return True
+
+
 def _merge_filament_field_lists(
     head: tuple[list[str], list[str], list[float]],
     tail: tuple[list[str], list[str], list[float]],
@@ -667,7 +682,10 @@ def parse_filament_specs_from_gcode_file(
         file_size = path.stat().st_size
     except OSError:
         file_size = 0
-    if file_size > max_bytes:
+    need_tail = file_size > max_bytes or (
+        file_size > 4096 and _head_missing_filament_meta(head)
+    )
+    if need_tail:
         tail_raw = _read_gcode_region(path, max_bytes=tail_bytes, from_end=True)
         tail = _parse_filament_fields_from_text(
             tail_raw, stop_on_motion=False, max_lines=None
