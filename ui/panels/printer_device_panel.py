@@ -156,8 +156,36 @@ class PrinterDevicePanel(ttk.Frame):
         return host or None
 
     def on_tab_hidden(self) -> None:
-        """Tab „Drucker“ verlassen — Verbindung offen lassen (kein disconnect)."""
+        """Tab „Drucker“ verlassen — Verbindung und Kamera offen lassen."""
         self._printer_tab_visible = False
+
+    def _resume_camera_after_tab(self) -> None:
+        """Kamera nach kurzem Tab-Wechsel: nur anzeigen/resize, nicht neu verbinden."""
+        host = normalize_host(
+            self._conn.host if self._conn else (self._host_quiet() or "")
+        )
+        if not host:
+            return
+        if self._edge_cam and self._edge_cam.active:
+            try:
+                self._edge_cam.bind_resize()
+            except Exception:
+                pass
+            self.after(30, self._edge_cam.resize)
+            return
+        if (
+            self._cam_worker
+            and self._cam_worker.running
+            and self._cam_active_host == host
+        ):
+            if self._last_cam_jpeg:
+                self.after(30, self._paint_cam_frame)
+            return
+        if self._last_cam_jpeg and self._cam_active_host == host:
+            self.after(30, self._paint_cam_frame)
+            return
+        if self._conn and self._conn.connected:
+            self.after(100, lambda: self._ensure_live_camera(force=False))
 
     def on_tab_shown(self) -> None:
         """Tab „Drucker“ aktiv — Verbindung und Live-Updates sicherstellen."""
@@ -165,11 +193,7 @@ class PrinterDevicePanel(ttk.Frame):
         self._printer_tab_visible = True
         if not self._poll_id:
             self._schedule_poll()
-        if self._last_cam_jpeg:
-            self.after(50, self._paint_cam_frame)
-        elif self._conn and self._conn.connected:
-            # Nach App-Start lief die Kamera oft im Hintergrund ohne Bild — hier neu anstoßen.
-            self.after(150, lambda: self._ensure_live_camera(force=True))
+        self._resume_camera_after_tab()
         host = self._host_quiet()
         if not host:
             return
@@ -301,12 +325,16 @@ class PrinterDevicePanel(ttk.Frame):
             return
         self._reconnect_pending = True
         self.conn_var.set("Verbindung wird erneuert …")
-        self.disconnect()
+        if self._conn:
+            self._conn.remove_listener(self._on_ws_live)
+            self._conn.stop()
+            self._conn = None
 
         def _again() -> None:
             self._reconnect_pending = False
-            if self._host_quiet():
-                self.connect()
+            h = self._host_quiet()
+            if h:
+                self._attach_ws_connection(h, fresh=False)
 
         self.after(400, _again)
 
@@ -356,6 +384,47 @@ class PrinterDevicePanel(ttk.Frame):
 
         self.app.after(0, _ui)
 
+    def _attach_ws_connection(self, host: str, *, fresh: bool) -> None:
+        """WebSocket zum K2 — optional ohne Kamera neu zu starten."""
+        host = normalize_host(host)
+        self._conn = PrinterConnection(host)
+        self._conn.add_listener(self._on_ws_live)
+        self._last_full_poll = 0.0
+        self._last_telemetry_req = 0.0
+        if fresh:
+            self._was_connected = False
+            self._print_phase_synced = False
+            self._gcode_polls = 0
+            self._gcode_ssh_tried = False
+        self._conn.start()
+        self.conn_var.set(f"Verbunden — {host}" if not fresh else f"Verbinde mit {host}:9999 …")
+        self._conn.request_get(
+            ReqPrinterPara=1,
+            reqPrintObjects=1,
+            boxsInfo=1,
+            reqGcodeList=1,
+            reqGcodeFile=1,
+            reqGcodeFileInfo=1,
+            reqGcodeFileInfo2=1,
+        )
+        if not self._poll_id:
+            self._schedule_poll()
+        self._schedule_connect_refresh(0)
+        threading.Thread(target=self._run_wait_telemetry, daemon=True).start()
+        if not self._live_poll_id:
+            self._schedule_live_poll()
+        self.after(1200, self._pull_live_snapshot_async)
+        if fresh:
+            self._schedule_camera_start()
+        else:
+            self.after(80, self._resume_camera_after_tab)
+        self.after(400, self._refresh_print_strip)
+        self.after(1500, self._refresh_print_strip)
+        if fresh:
+            self.after(500, self._refresh_gcode_list)
+        self.after(600, self._fetch_cfs_snapshot_async)
+        self.after(800, self._refresh_cfs)
+
     def connect(self) -> None:
         host = self._host()
         if not host:
@@ -372,41 +441,16 @@ class PrinterDevicePanel(ttk.Frame):
             self._schedule_connect_refresh(0)
             if not self._live_poll_id:
                 self._schedule_live_poll()
-            if not self._last_cam_jpeg:
+            if not self._last_cam_jpeg and not (
+                self._cam_worker and self._cam_worker.running
+            ):
                 self._schedule_camera_start()
+            else:
+                self.after(50, self._resume_camera_after_tab)
             threading.Thread(target=self._run_wait_telemetry, daemon=True).start()
             return
         self.disconnect()
-        self._conn = PrinterConnection(host)
-        self._conn.add_listener(self._on_ws_live)
-        self._last_full_poll = 0.0
-        self._last_telemetry_req = 0.0
-        self._was_connected = False
-        self._print_phase_synced = False
-        self._conn.start()
-        self.conn_var.set(f"Verbinde mit {host}:9999 …")
-        self._gcode_polls = 0
-        self._gcode_ssh_tried = False
-        self._conn.request_get(
-            ReqPrinterPara=1,
-            reqPrintObjects=1,
-            boxsInfo=1,
-            reqGcodeList=1,
-            reqGcodeFile=1,
-            reqGcodeFileInfo=1,
-            reqGcodeFileInfo2=1,
-        )
-        self._schedule_poll()
-        self._schedule_connect_refresh(0)
-        threading.Thread(target=self._run_wait_telemetry, daemon=True).start()
-        self._schedule_live_poll()
-        self.after(1200, self._pull_live_snapshot_async)
-        self._schedule_camera_start()
-        self.after(400, self._refresh_print_strip)
-        self.after(1500, self._refresh_print_strip)
-        self.after(500, self._refresh_gcode_list)
-        self.after(600, self._fetch_cfs_snapshot_async)
-        self.after(800, self._refresh_cfs)
+        self._attach_ws_connection(host, fresh=True)
 
     def _on_gcode_preview_resize(self) -> None:
         if self._gcode_preview_hold and self._preview_pil is not None:
@@ -1134,6 +1178,10 @@ class PrinterDevicePanel(ttk.Frame):
         if not self._edge_cam:
             self._edge_cam = EmbeddedEdgeCamera(cam_host, host)
         if self._edge_cam.start():
+            try:
+                self._edge_cam.bind_resize()
+            except Exception:
+                pass
             self._cam_status_var.set("Live (Edge/WebRTC)")
         else:
             self._cam_status_var.set(
@@ -1198,8 +1246,10 @@ class PrinterDevicePanel(ttk.Frame):
             if self._last_cam_jpeg:
                 self._paint_cam_frame()
                 return
+            if self._cam_worker.running:
+                return
             age = time.monotonic() - self._cam_started_at if self._cam_started_at else 999.0
-            if age < 6.0:
+            if age < 30.0:
                 return
             force = True
         same_host = self._cam_active_host == host

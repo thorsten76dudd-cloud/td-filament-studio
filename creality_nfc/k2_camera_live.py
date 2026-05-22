@@ -487,8 +487,12 @@ class K2CameraWorker:
         self._got_frame = False
         self._edge_requested = False
 
+    @property
+    def running(self) -> bool:
+        return self._thread is not None and self._thread.is_alive()
+
     def start(self) -> None:
-        if self._thread and self._thread.is_alive():
+        if self.running:
             return
         self._stop.clear()
         self._mode = "snapshot" if self._prefer_snapshot else "webrtc"
