@@ -31,6 +31,7 @@ from creality_nfc.printer_control import (
 )
 from creality_nfc.cfs_adopt import SLOT_LABELS, CfsSlotInfo, parse_cfs_slots
 from creality_nfc.cfs_feed import find_loaded_slot_index
+from creality_nfc.gcode_annotate import annotate_gcode_text
 from creality_nfc.gcode_filament import (
     find_gcode_file_info,
     format_gcode_snippet_for_view,
@@ -509,32 +510,86 @@ class PrinterDevicePanel(ttk.Frame):
             self.gcode_preview_label.place(relx=0, rely=0, relwidth=1, relheight=1)
         self._clear_gcode_text_display()
 
+    def _set_gcode_hint_display(self, text: str) -> None:
+        if not hasattr(self, "gcode_hint_text"):
+            return
+        self.gcode_hint_text.config(state="normal")
+        self.gcode_hint_text.delete("1.0", tk.END)
+        self.gcode_hint_text.insert("1.0", annotate_gcode_text(text or ""))
+        self.gcode_hint_text.config(state="disabled")
+
     def _clear_gcode_text_display(self) -> None:
         if not hasattr(self, "gcode_text"):
             return
-        self.gcode_text.config(state="normal")
-        self.gcode_text.delete("1.0", tk.END)
-        self.gcode_text.insert(
-            "1.0",
+        placeholder = (
             "; G-Code-Text erscheint hier nach Auswahl einer Datei.\n"
-            "; Root-SSH und Drucker-IP wie beim Herunterladen.\n",
+            "; Root-SSH und Drucker-IP wie beim Herunterladen.\n"
         )
-        self.gcode_text.config(state="disabled")
+        self.gcode_text.delete("1.0", tk.END)
+        self.gcode_text.insert("1.0", placeholder)
+        self._set_gcode_hint_display(placeholder)
         if hasattr(self, "_gcode_text_status"):
             self._gcode_text_status.set(
-                "Datei wählen — G-Code wird per SSH geladen (Anfang/Ende)."
+                "Datei wählen — G-Code per SSH (Anfang/Ende). Markieren, kopieren, lokal bearbeiten."
             )
 
     def _set_gcode_text_display(self, text: str, status: str) -> None:
         if not hasattr(self, "gcode_text"):
             return
-        self.gcode_text.config(state="normal")
+        body = text or ""
         self.gcode_text.delete("1.0", tk.END)
-        self.gcode_text.insert("1.0", text or "")
-        self.gcode_text.config(state="disabled")
+        self.gcode_text.insert("1.0", body)
+        self._set_gcode_hint_display(body)
         self.gcode_text.see("1.0")
         if hasattr(self, "_gcode_text_status"):
             self._gcode_text_status.set(status)
+
+    def _copy_gcode_display(self) -> None:
+        if not hasattr(self, "gcode_text"):
+            return
+        try:
+            if self.gcode_text.tag_ranges(tk.SEL):
+                chunk = self.gcode_text.get(tk.SEL_FIRST, tk.SEL_LAST)
+            else:
+                chunk = self.gcode_text.get("1.0", "end-1c")
+        except tk.TclError:
+            chunk = self.gcode_text.get("1.0", "end-1c")
+        if not chunk.strip():
+            notify(self, "Kein G-Code zum Kopieren.", "warn")
+            return
+        self.clipboard_clear()
+        self.clipboard_append(chunk)
+        notify(self, "G-Code in Zwischenablage kopiert.", "ok")
+
+    def _save_gcode_edited_local(self) -> None:
+        if not hasattr(self, "gcode_text"):
+            return
+        body = self.gcode_text.get("1.0", "end-1c")
+        if not body.strip():
+            notify(self, "Kein G-Code zum Speichern.", "warn")
+            return
+        entry = self._selected_gcode_entry()
+        initial = (entry.get("name") if entry else None) or "druck.gcode"
+        if not str(initial).lower().endswith(".gcode"):
+            initial = f"{initial}.gcode"
+        path = filedialog.asksaveasfilename(
+            title="G-Code lokal speichern",
+            defaultextension=".gcode",
+            filetypes=[("G-Code", "*.gcode"), ("Alle Dateien", "*.*")],
+            initialfile=Path(initial).name,
+        )
+        if not path:
+            return
+        try:
+            Path(path).write_text(body, encoding="utf-8", errors="replace")
+        except OSError as exc:
+            notify(self, f"Speichern fehlgeschlagen: {exc}", "error")
+            return
+        notify(
+            self,
+            "Gespeichert (nur auf dem PC — nicht automatisch auf dem Drucker).",
+            "ok",
+        )
 
     def _reload_gcode_text(self) -> None:
         entry = self._selected_gcode_entry()

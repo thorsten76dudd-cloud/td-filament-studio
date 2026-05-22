@@ -378,36 +378,95 @@ def build_creality_dashboard(panel: PrinterDevicePanel, outer: ttk.Frame) -> Non
 
     gcode_txt_frame = ttk.Frame(tab_gcode, style="Printer.TFrame")
     gcode_txt_frame.grid(row=0, column=0, sticky="nsew", padx=2, pady=2)
-    gcode_txt_frame.rowconfigure(1, weight=1)
+    gcode_txt_frame.rowconfigure(2, weight=1)
     gcode_txt_frame.columnconfigure(0, weight=1)
     panel._gcode_text_status = tk.StringVar(
-        value="Datei wählen — G-Code wird per SSH geladen (Anfang/Ende)."
+        value="Datei wählen — G-Code per SSH (Anfang/Ende). Markieren, kopieren, lokal bearbeiten."
     )
     ttk.Label(gcode_txt_frame, textvariable=panel._gcode_text_status, style=_MUTED).grid(
         row=0, column=0, sticky="ew", pady=(0, 2)
     )
+    gcode_hdr = ttk.Frame(gcode_txt_frame, style="Printer.TFrame")
+    gcode_hdr.grid(row=1, column=0, sticky="ew", pady=(0, 2))
+    gcode_hdr.columnconfigure(0, weight=3)
+    gcode_hdr.columnconfigure(1, weight=2)
+    ttk.Label(gcode_hdr, text="G-Code", style=_BODY).grid(row=0, column=0, sticky="w")
+    ttk.Label(gcode_hdr, text="Was der Drucker macht", style=_BODY).grid(
+        row=0, column=1, sticky="w", padx=(8, 0)
+    )
     txt_wrap = ttk.Frame(gcode_txt_frame, style="Printer.TFrame")
-    txt_wrap.grid(row=1, column=0, sticky="nsew")
+    txt_wrap.grid(row=2, column=0, sticky="nsew")
     txt_wrap.rowconfigure(0, weight=1)
-    txt_wrap.columnconfigure(0, weight=1)
+    txt_wrap.columnconfigure(0, weight=3)
+    txt_wrap.columnconfigure(1, weight=2)
     scroll_gcode = ttk.Scrollbar(txt_wrap, orient=tk.VERTICAL)
     style_scrollbar(scroll_gcode)
+
+    def _gcode_scroll_both(*args: object) -> None:
+        panel.gcode_text.yview(*args)
+        if hasattr(panel, "gcode_hint_text"):
+            panel.gcode_hint_text.yview(*args)
+
+    def _gcode_yscroll_sync(first: str, last: str) -> None:
+        scroll_gcode.set(first, last)
+        if hasattr(panel, "gcode_hint_text"):
+            if first == "moveto":
+                panel.gcode_hint_text.yview_moveto(last)
+            else:
+                panel.gcode_hint_text.yview_scroll(int(last), "units")
+
+    scroll_gcode.config(command=_gcode_scroll_both)
     panel.gcode_text = tk.Text(
         txt_wrap,
         height=22,
         wrap="none",
         font=("Consolas", 9),
-        state="disabled",
-        yscrollcommand=scroll_gcode.set,
+        undo=True,
+        yscrollcommand=_gcode_yscroll_sync,
     )
     apply_text_area_style(panel.gcode_text, bg=P_CARD_ALT)
     panel.gcode_text.grid(row=0, column=0, sticky="nsew")
-    scroll_gcode.config(command=panel.gcode_text.yview)
-    scroll_gcode.grid(row=0, column=1, sticky="ns")
+    panel.gcode_hint_text = tk.Text(
+        txt_wrap,
+        height=22,
+        wrap="word",
+        font=("Segoe UI", 8),
+        state="disabled",
+        cursor="arrow",
+        yscrollcommand=_gcode_yscroll_sync,
+    )
+    apply_text_area_style(panel.gcode_hint_text, bg=SURFACE_DARK)
+    panel.gcode_hint_text.grid(row=0, column=1, sticky="nsew", padx=(6, 0))
+    scroll_gcode.grid(row=0, column=2, sticky="ns")
     panel.gcode_text.insert(
         "1.0",
         "; G-Code-Text erscheint hier nach Auswahl einer Datei.\n"
         "; Root-SSH und Drucker-IP wie beim Herunterladen.\n",
+    )
+    panel.gcode_hint_text.config(state="normal")
+    panel.gcode_hint_text.insert(
+        "1.0",
+        "Hinweis nach Dateiauswahl\nSSH wie beim Herunterladen",
+    )
+    panel.gcode_hint_text.config(state="disabled")
+
+    gcode_act = ttk.Frame(gcode_txt_frame, style="Printer.TFrame")
+    gcode_act.grid(row=3, column=0, sticky="ew", pady=(4, 0))
+    rounded_button(
+        gcode_act,
+        text="Alles kopieren",
+        command=panel._copy_gcode_display,
+        style=_BTN,
+    ).pack(side="left", padx=(0, 6))
+    rounded_button(
+        gcode_act,
+        text="Speichern unter…",
+        command=panel._save_gcode_edited_local,
+        style=_BTN,
+    ).pack(side="left")
+    tip(
+        gcode_act,
+        "Strg+C kopiert markierten Text. Bearbeitungen sind nur lokal — nicht auf dem Drucker.",
     )
 
     button_grid(
