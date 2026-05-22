@@ -851,8 +851,9 @@ class PrinterDevicePanel(ttk.Frame):
             raw = self.print_file_var.get().strip()
             if raw and raw != "—":
                 fname = raw
-        if not fname and hasattr(self, "_selected_gcode"):
-            fname = (self._selected_gcode or "").strip()
+        entry = self._selected_gcode_entry()
+        if not fname and entry:
+            fname = str(entry.get("name") or entry.get("path") or "").strip()
         if not fname:
             notify(self, "Zuerst eine G-Code-Datei in der Liste wählen.", "warn")
             return

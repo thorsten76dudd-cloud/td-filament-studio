@@ -296,16 +296,14 @@ def resolve_slot_for_spec(
     hint = material_hint_from_gcode_path(gcode_path)
     material = (spec.material_type or "").strip().upper()
     color_hex = spec.color_hex
-    if single_filament and hint:
-        material = hint
-        color_hex = None
-    elif hint:
+    if hint:
         if not material:
             material = hint
         elif material != hint and not color_hex:
             material = hint
     candidates = _candidate_slot_indices(slots, material_type=material or None)
 
+    # Farbe aus G-Code/Slicer hat Vorrang (nicht „was gerade im Extruder hängt“).
     if color_hex:
         idx = match_slot_by_color(
             slots,
@@ -315,17 +313,20 @@ def resolve_slot_for_spec(
         )
         if idx is not None:
             return idx
+        idx = match_slot_by_color(slots, color_hex, material_type=material or None)
+        if idx is not None:
+            return idx
+
+    if material and len(candidates) > 1:
+        for i in candidates:
+            if _slot_matches_material(slots[i], material):
+                return i
 
     if len(candidates) == 1:
         return candidates[0]
 
     if loaded_slot_index is not None and loaded_slot_index in candidates:
         return loaded_slot_index
-
-    if material and len(candidates) > 1:
-        for i in candidates:
-            if _slot_matches_material(slots[i], material):
-                return i
 
     return None
 
@@ -1287,19 +1288,42 @@ def build_slot_usage_plan(
         job = total_job_filament_grams(state, gcode_path, file_entry=file_entry)
         if job:
             grams_total, src = job
-            targets = mappings or []
-            if not targets and loaded_slot_index is not None:
-                targets = [
-                    (
-                        loaded_slot_index,
-                        GcodeFilamentSpec(
-                            loaded_slot_index,
-                            None,
-                            material_hint_from_gcode_path(gcode_path),
-                            float(grams_total),
-                        ),
+            targets = list(mappings)
+            if not targets:
+                info = merge_gcode_filament_info(state, gcode_path, file_entry)
+                specs = active_filament_specs(parse_filament_specs(info))
+                if specs:
+                    spec0 = specs[0]
+                    idx = resolve_slot_for_spec(
+                        slots,
+                        spec0,
+                        gcode_path=gcode_path,
+                        loaded_slot_index=None,
+                        single_filament=len(specs) <= 1,
                     )
-                ]
+                    if idx is None and loaded_slot_index is not None:
+                        idx = loaded_slot_index
+                        spec0 = GcodeFilamentSpec(
+                            idx,
+                            spec0.color_hex,
+                            spec0.material_type
+                            or material_hint_from_gcode_path(gcode_path),
+                            float(grams_total),
+                        )
+                    if idx is not None:
+                        targets = [(idx, spec0)]
+                elif loaded_slot_index is not None:
+                    targets = [
+                        (
+                            loaded_slot_index,
+                            GcodeFilamentSpec(
+                                loaded_slot_index,
+                                None,
+                                material_hint_from_gcode_path(gcode_path),
+                                float(grams_total),
+                            ),
+                        )
+                    ]
             if len(targets) == 1:
                 idx, spec = targets[0]
                 out.append(

@@ -77,12 +77,13 @@ def check_print_readiness(
     job = total_job_filament_grams(state, fn, file_entry=entry, local_path=local_gcode)
     total_g = job[0] if job else None
 
+    # Kein „aktuell geladenes“ Filament — Zuordnung nur aus G-Code-Farbe/Material.
     plans = build_slot_usage_plan(
         state,
         fn,
         slots,
         file_entry=entry,
-        loaded_slot_index=loaded_slot_index,
+        loaded_slot_index=None,
     )
 
     if not plans:
@@ -120,6 +121,19 @@ def check_print_readiness(
 
             mat = (slot.material_type or slot.name or "").strip()
             gmat = (plan.spec.material_type or "").strip()
+            gcol = (plan.spec.color_hex or "").strip()
+            scol = f"#{slot.color_hex}" if slot.color_hex else ""
+            if gcol and scol:
+                from creality_nfc.gcode_filament import _color_distance
+
+                dist = _color_distance(gcol, scol)
+                if dist > 80:
+                    lines.append(
+                        ReadinessLine(
+                            "warn",
+                            f"{lab}: Farbe G-Code ({gcol}) weicht von CFS ({scol}) ab.",
+                        )
+                    )
             if gmat and mat and gmat.upper() not in mat.upper() and mat.upper() not in gmat.upper():
                 lines.append(
                     ReadinessLine(

@@ -52,10 +52,22 @@ class PrinterDashboardPanel(ttk.LabelFrame):
 
         btns = ttk.Frame(top)
         btns.pack(fill="x")
+        def _open_print_check() -> None:
+            panel = getattr(self.app, "_printer_device_panel", None)
+            if panel is None:
+                return
+            self.app.notebook.select(self.app.tab_printer)
+            panel.show_print_check()
+
         for text, cmd, help_txt in (
             ("Status prüfen", self.check_status, "Erreichbarkeit des Druckers und SSH prüfen."),
             (
-                "DB vergleichen",
+                "Druck-Check",
+                _open_print_check,
+                "Markierte G-Code-Datei vs. CFS/Spulen (Tab Drucker → Dateien).",
+            ),
+            (
+                "DB vergleigen",
                 self.compare_db,
                 "Lokale und Drucker-Datenbank vergleichen (Unterschiede anzeigen).",
             ),

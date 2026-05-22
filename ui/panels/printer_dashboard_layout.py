@@ -519,6 +519,13 @@ def build_creality_dashboard(panel: PrinterDevicePanel, outer: ttk.Frame) -> Non
     gcode_act.grid(row=4, column=0, sticky="ew", pady=(4, 0))
     rounded_button(
         gcode_act,
+        "Druck-Check",
+        panel.show_print_check,
+        variant="accent",
+        compact=True,
+    ).pack(side="left", padx=(0, 8))
+    rounded_button(
+        gcode_act,
         "Alles kopieren",
         panel._copy_gcode_display,
         variant="secondary",
@@ -547,6 +554,7 @@ def build_creality_dashboard(panel: PrinterDevicePanel, outer: ttk.Frame) -> Non
     button_grid(
         tab_files,
         [
+            ("Druck-Check", panel.show_print_check, _BTN, "G-Code vs. CFS/Spulen-Rest prüfen (Datei wählen)."),
             ("Aktualisieren", panel._refresh_gcode_list, _BTN, "Liste neu laden."),
             ("Hochladen…", panel._upload_gcode, _BTN, "Hochladen."),
             ("Herunterladen…", panel._download_gcode, _BTN, "G-Code komplett speichern."),
