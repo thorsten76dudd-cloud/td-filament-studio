@@ -454,15 +454,17 @@ def build_creality_dashboard(panel: PrinterDevicePanel, outer: ttk.Frame) -> Non
     gcode_act.grid(row=3, column=0, sticky="ew", pady=(4, 0))
     rounded_button(
         gcode_act,
-        text="Alles kopieren",
-        command=panel._copy_gcode_display,
-        style=_BTN,
+        "Alles kopieren",
+        panel._copy_gcode_display,
+        variant="secondary",
+        compact=True,
     ).pack(side="left", padx=(0, 6))
     rounded_button(
         gcode_act,
-        text="Speichern unter…",
-        command=panel._save_gcode_edited_local,
-        style=_BTN,
+        "Speichern unter…",
+        panel._save_gcode_edited_local,
+        variant="secondary",
+        compact=True,
     ).pack(side="left")
     tip(
         gcode_act,
