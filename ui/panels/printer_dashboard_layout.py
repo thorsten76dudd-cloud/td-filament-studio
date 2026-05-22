@@ -402,18 +402,23 @@ def build_creality_dashboard(panel: PrinterDevicePanel, outer: ttk.Frame) -> Non
     scroll_gcode = ttk.Scrollbar(txt_wrap, orient=tk.VERTICAL)
     style_scrollbar(scroll_gcode)
 
-    def _gcode_scroll_both(*args: object) -> None:
-        panel.gcode_text.yview(*args)
-        if hasattr(panel, "gcode_hint_text"):
-            panel.gcode_hint_text.yview(*args)
-
     def _gcode_yscroll_sync(first: str, last: str) -> None:
         scroll_gcode.set(first, last)
-        if hasattr(panel, "gcode_hint_text"):
-            if first == "moveto":
-                panel.gcode_hint_text.yview_moveto(last)
-            else:
-                panel.gcode_hint_text.yview_scroll(int(last), "units")
+        panel._sync_gcode_hint_to_gcode()
+
+    def _gcode_scroll_both(*args: object) -> None:
+        panel.gcode_text.yview(*args)
+        panel._sync_gcode_hint_to_gcode()
+
+    def _gcode_wheel(event: tk.Event) -> str:
+        if event.delta:
+            panel.gcode_text.yview_scroll(int(-1 * (event.delta / 120)), "units")
+        elif getattr(event, "num", None) == 4:
+            panel.gcode_text.yview_scroll(-3, "units")
+        elif getattr(event, "num", None) == 5:
+            panel.gcode_text.yview_scroll(3, "units")
+        panel._sync_gcode_hint_to_gcode()
+        return "break"
 
     scroll_gcode.config(command=_gcode_scroll_both)
     panel.gcode_text = tk.Text(
@@ -429,11 +434,10 @@ def build_creality_dashboard(panel: PrinterDevicePanel, outer: ttk.Frame) -> Non
     panel.gcode_hint_text = tk.Text(
         txt_wrap,
         height=22,
-        wrap="word",
+        wrap="none",
         font=("Segoe UI", 8),
         state="disabled",
         cursor="arrow",
-        yscrollcommand=_gcode_yscroll_sync,
     )
     apply_text_area_style(panel.gcode_hint_text, bg=SURFACE_DARK)
     panel.gcode_hint_text.grid(row=0, column=1, sticky="nsew", padx=(6, 0))
@@ -449,6 +453,10 @@ def build_creality_dashboard(panel: PrinterDevicePanel, outer: ttk.Frame) -> Non
         "Hinweis nach Dateiauswahl\nSSH wie beim Herunterladen",
     )
     panel.gcode_hint_text.config(state="disabled")
+    for _w in (txt_wrap, panel.gcode_text, panel.gcode_hint_text):
+        _w.bind("<MouseWheel>", _gcode_wheel)
+        _w.bind("<Button-4>", _gcode_wheel)
+        _w.bind("<Button-5>", _gcode_wheel)
 
     gcode_act = ttk.Frame(gcode_txt_frame, style="Printer.TFrame")
     gcode_act.grid(row=3, column=0, sticky="ew", pady=(4, 0))

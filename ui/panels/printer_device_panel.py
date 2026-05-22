@@ -510,6 +510,16 @@ class PrinterDevicePanel(ttk.Frame):
             self.gcode_preview_label.place(relx=0, rely=0, relwidth=1, relheight=1)
         self._clear_gcode_text_display()
 
+    def _sync_gcode_hint_to_gcode(self) -> None:
+        """Erklärungsspalte auf dieselbe sichtbare Zeile wie G-Code (ein Scroll)."""
+        if not hasattr(self, "gcode_text") or not hasattr(self, "gcode_hint_text"):
+            return
+        try:
+            top_line = int(float(self.gcode_text.index("@0,0").split(".")[0]))
+            self.gcode_hint_text.see(f"{top_line}.0")
+        except (ValueError, tk.TclError):
+            pass
+
     def _set_gcode_hint_display(self, text: str) -> None:
         if not hasattr(self, "gcode_hint_text"):
             return
@@ -517,6 +527,7 @@ class PrinterDevicePanel(ttk.Frame):
         self.gcode_hint_text.delete("1.0", tk.END)
         self.gcode_hint_text.insert("1.0", annotate_gcode_text(text or ""))
         self.gcode_hint_text.config(state="disabled")
+        self._sync_gcode_hint_to_gcode()
 
     def _clear_gcode_text_display(self) -> None:
         if not hasattr(self, "gcode_text"):
@@ -541,6 +552,7 @@ class PrinterDevicePanel(ttk.Frame):
         self.gcode_text.insert("1.0", body)
         self._set_gcode_hint_display(body)
         self.gcode_text.see("1.0")
+        self._sync_gcode_hint_to_gcode()
         if hasattr(self, "_gcode_text_status"):
             self._gcode_text_status.set(status)
 
