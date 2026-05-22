@@ -7,7 +7,7 @@ import webbrowser
 from tkinter import filedialog, ttk
 from typing import TYPE_CHECKING, Any
 
-from creality_nfc.cfs_adopt import SLOT_LABELS, parse_cfs_slots
+from creality_nfc.cfs_adopt import CfsMeta, CfsSlotInfo, SLOT_LABELS, parse_cfs_meta, parse_cfs_slots
 from creality_nfc.cfs_spool_link import find_spool_for_slot
 from creality_nfc.filament_alerts import find_low_filament_spools
 from creality_nfc.print_history import PrintHistoryStore
@@ -99,6 +99,8 @@ def show_cfs_batch_dialog(
     inventory: SpoolInventory,
     *,
     threshold_g: int = 200,
+    slots: list[CfsSlotInfo] | None = None,
+    meta: CfsMeta | None = None,
 ) -> None:
     dlg = tk.Toplevel(parent)
     dlg.title("CFS — alle Slots")
@@ -129,21 +131,25 @@ def show_cfs_batch_dialog(
         tree.column(c, width=w)
     tree.pack(fill="both", expand=True, padx=12, pady=4)
 
-    slots = parse_cfs_slots(state)
-    by_idx = {s.index: s for s in slots}
+    cfs_meta = meta if meta is not None else parse_cfs_meta(state)
+    slot_list = slots if slots is not None else parse_cfs_slots(state)
+    by_idx = {s.index: s for s in slot_list}
+    has_box = bool(_find_boxs_info_key(state))
     for i in range(4):
         info = by_idx.get(i)
         lab = SLOT_LABELS[i]
-        if not info:
-            tree.insert("", tk.END, values=(lab, "—", "—", "—", "—", "—", "leer / offline"))
+        if info is None or info.empty:
+            hint = "keine CFS-Daten" if not has_box else "leer"
+            tree.insert("", tk.END, values=(lab, "—", "—", "—", "—", "—", hint))
             continue
-        mat = info.material_type or "—"
-        col = info.color_hex or "—"
-        rfid = (info.rfid_id or "—")[:12]
+        mat = info.material_type or info.name or "—"
+        col = f"#{info.color_hex}" if info.color_hex else "—"
+        rfid = (info.rfid_id or "—")[:16]
         sp = find_spool_for_slot(inventory, i)
         sp_label = sp.label if sp else "—"
         rest = f"{sp.remaining_g} g" if sp and sp.remaining_g is not None else "—"
-        status = "im Einsatz" if info.loaded else "bereit"
+        in_use = cfs_meta.loaded_index == i or cfs_meta.feeding_index == i
+        status = "im Einsatz" if in_use else "bereit"
         if sp and is_low_filament(sp, threshold_g):
             status = f"niedrig (<{threshold_g}g)"
         tree.insert(
@@ -157,4 +163,19 @@ def show_cfs_batch_dialog(
         msg = "Niedriger Rest: " + ", ".join(s.label for s, _ in low[:4])
         ttk.Label(dlg, text=msg, foreground="#c9a227").pack(anchor="w", padx=12, pady=4)
 
+    if not has_box and all(s.empty for s in slot_list):
+        ttk.Label(
+            dlg,
+            text="Tipp: Tab Filament muss CFS-Daten zeigen — dann ↻ oder neu verbinden.",
+            style="Muted.TLabel",
+            wraplength=560,
+        ).pack(anchor="w", padx=12, pady=4)
+
     ttk.Button(dlg, text="Schließen", command=dlg.destroy).pack(pady=10)
+
+
+def _find_boxs_info_key(state: dict[str, Any]) -> bool:
+    for key in ("boxsInfo", "boxsinfo", "BoxsInfo", "retBoxsInfo"):
+        if key in state and state[key]:
+            return True
+    return False

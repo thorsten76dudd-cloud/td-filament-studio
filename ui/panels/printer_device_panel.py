@@ -839,14 +839,61 @@ class PrinterDevicePanel(ttk.Frame):
         if not self._conn:
             notify(self, "Zuerst mit dem Drucker verbinden.", "warn")
             return
+        from creality_nfc.cfs_adopt import parse_cfs_meta, parse_cfs_slots
         from ui.extras_dialogs import show_cfs_batch_dialog
 
-        show_cfs_batch_dialog(
-            self,
-            self._conn.snapshot(),
-            self.app.inventory,
-            threshold_g=self.app.settings.low_filament_threshold_g,
-        )
+        snap = self._conn.snapshot()
+        slots = list(self._cfs_slots)
+        meta = parse_cfs_meta(snap)
+        if slots and not all(s.empty for s in slots):
+            show_cfs_batch_dialog(
+                self,
+                snap,
+                self.app.inventory,
+                threshold_g=self.app.settings.low_filament_threshold_g,
+                slots=slots,
+                meta=meta,
+            )
+            return
+
+        self._conn.request_get(boxsInfo=1)
+        notify(self, "CFS-Slots werden geladen …", "info")
+        host = self._conn.host
+
+        def work() -> None:
+            fresh: dict = {}
+            try:
+                fresh = fetch_ws_snapshot(
+                    host,
+                    timeout=10.0,
+                    boxsInfo=1,
+                    reqPrintObjects=1,
+                )
+                bi = fresh.get("boxsInfo")
+                if bi is not None and self._conn:
+                    with self._conn._lock:
+                        prev = self._conn._state.get("boxsInfo")
+                        self._conn._state["boxsInfo"] = PrinterConnection._merge_boxs_info(
+                            prev, bi
+                        )
+                    fresh = self._conn.snapshot()
+            except Exception:
+                fresh = self._conn.snapshot() if self._conn else {}
+
+            def open_dlg() -> None:
+                sl = parse_cfs_slots(fresh)
+                show_cfs_batch_dialog(
+                    self,
+                    fresh,
+                    self.app.inventory,
+                    threshold_g=self.app.settings.low_filament_threshold_g,
+                    slots=sl,
+                    meta=parse_cfs_meta(fresh),
+                )
+
+            self.app.after(0, open_dlg)
+
+        threading.Thread(target=work, daemon=True).start()
 
     def _reload_gcode_text(self) -> None:
         entry = self._selected_gcode_entry()

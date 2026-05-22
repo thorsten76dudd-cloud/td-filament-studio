@@ -2,10 +2,10 @@
 # Creates latest stable release and removes the previous stable release tag.
 
 param(
-    [string]$Version = "1.5.84",
-    [string]$Tag = "v1.5.84-stable",
+    [string]$Version = "1.5.85",
+    [string]$Tag = "v1.5.85-stable",
     [string]$Repo = "thorsten76dudd-cloud/td-filament-studio",
-    [string]$RemoveTag = "v1.5.83-stable",
+    [string]$RemoveTag = "v1.5.84-stable",
     [switch]$DeleteAllOldReleases
 )
 
@@ -31,14 +31,11 @@ if (-not (Test-Path $Setup)) {
 $notes = @(
     "## TD Filament Studio $Version",
     "",
-    "### Neu",
-    "* Live Filament-Schaetzung beim Druck, Druck-Historie + CSV",
-    "* G-Code: Zeile anklicken, Suche, HTML-Export mit Erklaerung",
-    "* CFS Alle Slots, Spulen-Etikett HTML/QR, Windows-Toasts",
-    "* Warnung bei niedrigem Filament-Rest",
+    "### Fix",
+    "* CFS Alle Slots: zeigt jetzt die vier Slots (nutzt Live-Daten vom Filament-Tab)",
     "",
-    "### Enthalten ab 1.5.83",
-    "* Deutsche G-Code-Erklaerungen, voller Download",
+    "### Enthalten ab 1.5.84",
+    "* Historie, G-Code-Suche, Live-Verbrauch, Etikett, Toasts",
     "",
     "Setup ausfuehren (ueberschreibt alte Installation)."
 ) -join [Environment]::NewLine
