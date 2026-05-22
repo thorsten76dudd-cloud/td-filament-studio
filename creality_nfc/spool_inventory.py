@@ -10,6 +10,7 @@ from datetime import datetime, timezone
 from pathlib import Path
 
 from creality_nfc.cfs_adopt import SLOT_LABELS
+from creality_nfc.cfs_layout import cfs_slot_label, parse_slot_key
 
 try:
     from ui.color_swatch import normalize_hex
@@ -71,6 +72,16 @@ class Spool:
     extra_tag_uids: list[str] = field(default_factory=list)
     notes: str = ""
     cfs_slot: int | None = None
+    cfs_box_id: int | None = None
+    opened_at: str = ""
+    batch_id: str = ""
+    last_print_at: str = ""
+    last_print_filename: str = ""
+    last_print_deducted_g: int | None = None
+    location_printer: str = ""
+    last_seen_printer: str = ""
+    last_seen_slot_label: str = ""
+    last_seen_at: str = ""
     usage_log: list[dict] = field(default_factory=list)
     updated: str = field(default_factory=_now)
 
@@ -142,35 +153,64 @@ class Spool:
         parts = [self.label or self.material_name or "Spule"]
         if self.remaining_g is not None:
             parts.append(f"({self.remaining_g}g)")
-        slot = self.effective_cfs_slot()
-        if slot is not None:
-            parts.append(f"CFS {SLOT_LABELS[slot]}")
+        key = self.effective_cfs_key()
+        if key is not None:
+            parts.append(f"CFS {cfs_slot_label(key[0], key[1])}")
         if self.all_tag_uids():
             n = len(self.all_tag_uids())
             parts.append("RFID" if n == 1 else f"RFID×{n}")
         return " ".join(parts)
 
     def effective_cfs_slot(self) -> int | None:
-        """Gesetzter CFS-Slot oder aus Bemerkung (z. B. CFS-S3)."""
+        """Slot-Index 0–3 (legacy)."""
+        key = self.effective_cfs_key()
+        return key[1] if key else None
+
+    def effective_cfs_key(self) -> tuple[int, int] | None:
+        """(box_id, slot_index) — Standard box_id=1."""
         if self.cfs_slot is not None and 0 <= int(self.cfs_slot) <= 3:
-            return int(self.cfs_slot)
-        return parse_cfs_slot_index(self.notes)
+            bid = int(self.cfs_box_id or 1)
+            return max(1, min(4, bid)), int(self.cfs_slot)
+        parsed = parse_slot_key(self.notes)
+        if parsed:
+            return parsed
+        idx = parse_cfs_slot_index(self.notes)
+        if idx is not None:
+            return 1, idx
+        return None
 
     def sync_cfs_slot_from_notes(self) -> bool:
-        """Bemerkung CFS-S1… → cfs_slot; True wenn Feld gesetzt wurde."""
+        """Bemerkung CFS-1A / CFS-S3 → cfs_slot + cfs_box_id."""
         if self.cfs_slot is not None and 0 <= int(self.cfs_slot) <= 3:
             return False
-        idx = parse_cfs_slot_index(self.notes)
-        if idx is None:
-            return False
-        self.cfs_slot = idx
+        key = parse_slot_key(self.notes)
+        if key is None:
+            idx = parse_cfs_slot_index(self.notes)
+            if idx is None:
+                return False
+            self.cfs_box_id = 1
+            self.cfs_slot = idx
+            return True
+        self.cfs_box_id, self.cfs_slot = key
         return True
 
     def cfs_slot_label(self) -> str:
-        idx = self.effective_cfs_slot()
-        if idx is None:
+        key = self.effective_cfs_key()
+        if key is None:
             return ""
-        return SLOT_LABELS[idx]
+        return cfs_slot_label(key[0], key[1])
+
+    def location_display(self) -> str:
+        parts: list[str] = []
+        if self.location_printer.strip():
+            parts.append(self.location_printer.strip())
+        if self.last_seen_printer.strip() and self.last_seen_printer.strip() != self.location_printer.strip():
+            parts.append(f"zuletzt: {self.last_seen_printer.strip()}")
+        if self.last_seen_slot_label.strip():
+            parts.append(self.last_seen_slot_label.strip())
+        if not parts and self.effective_cfs_key():
+            parts.append(f"Slot {self.cfs_slot_label()}")
+        return " · ".join(parts) if parts else ""
 
 
 class SpoolInventory:

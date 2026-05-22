@@ -7,7 +7,8 @@ import webbrowser
 from tkinter import filedialog, ttk
 from typing import TYPE_CHECKING, Any
 
-from creality_nfc.cfs_adopt import CfsMeta, CfsSlotInfo, SLOT_LABELS, parse_cfs_meta, parse_cfs_slots
+from creality_nfc.cfs_adopt import CfsMeta, CfsSlotInfo, parse_cfs_meta, parse_cfs_slots
+from creality_nfc.cfs_layout import cfs_slot_label, parse_cfs_layout
 from creality_nfc.cfs_spool_link import find_spool_for_slot
 from creality_nfc.filament_alerts import find_low_filament_spools
 from creality_nfc.print_history import PrintHistoryStore
@@ -148,16 +149,17 @@ def show_cfs_batch_dialog(
     tree_wrap.grid_rowconfigure(0, weight=1)
     tree_wrap.grid_columnconfigure(0, weight=1)
 
-    cols = ("slot", "mat", "color", "rfid", "spool", "rest", "status")
-    tree = ttk.Treeview(tree_wrap, columns=cols, show="headings", height=6)
+    cols = ("cfs", "slot", "mat", "color", "rfid", "spool", "rest", "status")
+    tree = ttk.Treeview(tree_wrap, columns=cols, show="headings", height=8)
     for c, t, w, stretch in (
-        ("slot", "Slot", 48, False),
+        ("cfs", "CFS", 40, False),
+        ("slot", "Slot", 44, False),
         ("mat", "Material", 72, False),
         ("color", "Farbe", 76, False),
         ("rfid", "RFID", 88, False),
-        ("spool", "Meine Spule", 280, True),
+        ("spool", "Meine Spule", 240, True),
         ("rest", "Rest", 72, False),
-        ("status", "Status", 120, False),
+        ("status", "Status", 110, False),
     ):
         tree.heading(c, text=t)
         tree.column(c, width=w, minwidth=w // 2, stretch=stretch)
@@ -169,30 +171,59 @@ def show_cfs_batch_dialog(
     sx.grid(row=1, column=0, sticky="ew")
 
     cfs_meta = meta if meta is not None else parse_cfs_meta(state)
-    slot_list = slots if slots is not None else parse_cfs_slots(state)
-    by_idx = {s.index: s for s in slot_list}
+    layout = parse_cfs_layout(state)
+    slot_list = slots if slots is not None else layout.all_slots()
+    if slots and len(slots) <= 4:
+        slot_list = layout.all_slots() if layout.box_count() > 1 else list(slots)
     has_box = bool(_find_boxs_info_key(state))
-    for i in range(4):
-        info = by_idx.get(i)
-        lab = SLOT_LABELS[i]
-        if info is None or info.empty:
+    rows = slot_list if layout.box_count() > 0 else []
+    if not rows:
+        for i in range(4):
+            rows.append(
+                CfsSlotInfo(
+                    index=i,
+                    label=cfs_slot_label(1, i),
+                    vendor="",
+                    name="",
+                    material_type="",
+                    color_raw="",
+                    color_hex="FFFFFF",
+                    percent=None,
+                    rfid_id="",
+                    empty=True,
+                    box_id=1,
+                )
+            )
+    for info in rows:
+        bid = getattr(info, "box_id", 1) or 1
+        lab = cfs_slot_label(bid, info.index)
+        if info.empty:
             hint = "keine CFS-Daten" if not has_box else "leer"
-            tree.insert("", tk.END, values=(lab, "—", "—", "—", "—", "—", hint))
+            tree.insert(
+                "",
+                tk.END,
+                values=(str(bid), lab, "—", "—", "—", "—", "—", hint),
+            )
             continue
         mat = info.material_type or info.name or "—"
         col = f"#{info.color_hex}" if info.color_hex else "—"
         rfid = (info.rfid_id or "—")[:16]
-        sp = find_spool_for_slot(inventory, info) or inventory.find_by_cfs_slot(i)
+        sp = find_spool_for_slot(inventory, info)
+        if sp is None:
+            sp = inventory.find_by_cfs_slot(info.index)
         sp_label = sp.label if sp else "—"
         rest = f"{sp.remaining_g} g" if sp and sp.remaining_g is not None else "—"
-        in_use = cfs_meta.loaded_index == i or cfs_meta.feeding_index == i
+        in_use = (
+            cfs_meta.loaded_index == info.index
+            or cfs_meta.feeding_index == info.index
+        ) and layout.box_count() <= 1
         status = "im Einsatz" if in_use else "bereit"
         if sp and is_low_filament(sp, threshold_g):
             status = f"niedrig (<{threshold_g}g)"
         tree.insert(
             "",
             tk.END,
-            values=(lab, mat, col, rfid, sp_label, rest, status),
+            values=(str(bid), lab, mat, col, rfid, sp_label, rest, status),
         )
 
     low = find_low_filament_spools(inventory, threshold_g)

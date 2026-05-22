@@ -5,8 +5,30 @@ from __future__ import annotations
 from pathlib import Path
 from typing import Any
 
-from creality_nfc.cfs_adopt import CfsSlotInfo, SLOT_LABELS
+from creality_nfc.cfs_adopt import CfsSlotInfo
+from creality_nfc.cfs_layout import cfs_slot_label
 from creality_nfc.gcode_filament import estimate_grams_for_slot, total_job_filament_grams
+
+
+def _remaining_time_hint(state: dict[str, Any], progress_pct: int) -> str:
+    """Restzeit aus Drucker-Telemetrie, falls vorhanden."""
+    for key in ("printLeftTime", "print_left_time", "leftTime", "remaining_time"):
+        raw = state.get(key)
+        if raw is None:
+            continue
+        try:
+            sec = int(float(raw))
+        except (TypeError, ValueError):
+            continue
+        if sec <= 0:
+            return ""
+        if sec < 90:
+            return f"noch ca. {sec} s"
+        mins = sec // 60
+        if mins < 120:
+            return f"noch ca. {mins} min"
+        return f"noch ca. {mins // 60} h {mins % 60} min"
+    return ""
 
 
 def format_live_filament_status(
@@ -18,6 +40,7 @@ def format_live_filament_status(
     cfs_slots: list[CfsSlotInfo] | None,
     local_gcode: Path | None = None,
     spool_remaining_g: int | None = None,
+    active_box_id: int = 1,
 ) -> str:
     """
     Kurztext für die Druck-Leiste (Monitor-Tab).
@@ -49,6 +72,10 @@ def format_live_filament_status(
 
     parts = [f"ca. {used} g verbraucht", f"noch ca. {left_job} g bis Job-Ende"]
 
+    eta = _remaining_time_hint(state, pct)
+    if eta:
+        parts.append(eta)
+
     if active_slot is not None and 0 <= active_slot <= 3:
         slot_est = estimate_grams_for_slot(
             state,
@@ -58,16 +85,19 @@ def format_live_filament_status(
             file_entry=entry,
             local_path=local_gcode,
         )
-        lab = SLOT_LABELS[active_slot]
+        lab = cfs_slot_label(active_box_id, active_slot)
         if slot_est:
             sg, _ = slot_est
             slot_used = int(round(sg * pct / 100.0))
-            parts.append(f"Slot {lab}: ca. {slot_used}/{sg} g")
+            slot_left = max(0, sg - slot_used)
+            parts.append(f"Slot {lab}: ca. {slot_used}/{sg} g (noch ca. {slot_left} g)")
         else:
             parts.append(f"aktiver Slot {lab}")
 
     if spool_remaining_g is not None:
         after = max(0, spool_remaining_g - used)
         parts.append(f"Rest Spule danach ca. {after} g")
+        if left_job > 0 and spool_remaining_g < left_job:
+            parts.append("⚠ Rest evtl. knapp für Job-Ende")
 
     return " · ".join(parts)

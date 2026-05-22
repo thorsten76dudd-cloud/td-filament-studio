@@ -10,6 +10,8 @@ from typing import TYPE_CHECKING, Callable
 
 from app.constants import printer_int_to_display
 from creality_nfc.cfs_adopt import SLOT_LABELS
+from creality_nfc.cfs_layout import cfs_slot_label
+from creality_nfc.printer_store import load_printers
 from creality_nfc.materials import FilamentProfile
 from creality_nfc.spool_inventory import Spool, SpoolInventory, parse_cfs_slot_index
 from creality_nfc.spool_profile import spool_fields_from_profile
@@ -126,9 +128,35 @@ class SpoolEditPanel(ttk.LabelFrame):
         ttk.Combobox(
             form,
             textvariable=self.cfs_slot_var,
-            values=["", *SLOT_LABELS],
+            values=["", *[cfs_slot_label(1, i) for i in range(4)]],
             state="readonly",
         ).pack(fill="x", **pad)
+
+        ttk.Label(form, text="Standort (physisch)", style="Muted.TLabel").pack(anchor="w", **pad)
+        loc_vals = [""] + [p.name for p in load_printers()] + ["Lager / Regal"]
+        self.location_printer_var = tk.StringVar(value="")
+        ttk.Combobox(
+            form,
+            textvariable=self.location_printer_var,
+            values=loc_vals,
+        ).pack(fill="x", **pad)
+
+        passport = ttk.LabelFrame(form, text="  Filament-Passport  ", padding=6)
+        passport.pack(fill="x", **pad)
+        ttk.Label(passport, text="Geöffnet am (YYYY-MM-DD)", style="Muted.TLabel").pack(anchor="w")
+        self.opened_at_var = tk.StringVar(value="")
+        ttk.Entry(passport, textvariable=self.opened_at_var, width=16).pack(anchor="w", pady=(0, 4))
+        ttk.Label(passport, text="Charge / Batch-ID", style="Muted.TLabel").pack(anchor="w")
+        self.batch_id_var = tk.StringVar(value="")
+        ttk.Entry(passport, textvariable=self.batch_id_var).pack(fill="x", pady=(0, 4))
+        self._passport_last_var = tk.StringVar(value="—")
+        ttk.Label(
+            passport,
+            textvariable=self._passport_last_var,
+            style="Muted.TLabel",
+            wraplength=280,
+            justify="left",
+        ).pack(anchor="w")
 
         ttk.Label(form, text="RFID-Chips (UIDs)", style="Muted.TLabel").pack(anchor="w", **pad)
         self._tag_uids_label = ttk.Label(
@@ -210,11 +238,16 @@ class SpoolEditPanel(ttk.LabelFrame):
     def _set_full_weight(self) -> None:
         self.remaining_var.set(str(weight_class_to_grams(self.weight_var.get())))
 
-    def _parse_cfs_slot(self) -> int | None:
+    def _parse_cfs_slot(self) -> tuple[int | None, int | None]:
+        from creality_nfc.cfs_layout import parse_slot_key
+
         lab = self.cfs_slot_var.get().strip().upper()
+        key = parse_slot_key(lab)
+        if key:
+            return key[0], key[1]
         if lab in SLOT_LABELS:
-            return SLOT_LABELS.index(lab)
-        return None
+            return 1, SLOT_LABELS.index(lab)
+        return None, None
 
     def load_new(self) -> None:
         self._spool_id = SpoolInventory.new_id()
@@ -234,6 +267,10 @@ class SpoolEditPanel(ttk.LabelFrame):
         self.remaining_var.set("")
         self.notes_var.set("")
         self.cfs_slot_var.set("")
+        self.location_printer_var.set("")
+        self.opened_at_var.set("")
+        self.batch_id_var.set("")
+        self._passport_last_var.set("—")
         self._update_color_preview()
 
     def _update_color_preview(self) -> None:
@@ -404,6 +441,19 @@ class SpoolEditPanel(ttk.LabelFrame):
         self.remaining_var.set("" if sp.remaining_g is None else str(sp.remaining_g))
         self.notes_var.set(sp.notes)
         self.cfs_slot_var.set(sp.cfs_slot_label())
+        self.location_printer_var.set(sp.location_printer or "")
+        self.opened_at_var.set(sp.opened_at or "")
+        self.batch_id_var.set(sp.batch_id or "")
+        if sp.last_print_at:
+            fn = sp.last_print_filename or "?"
+            dg = (
+                f", {sp.last_print_deducted_g} g abgezogen"
+                if sp.last_print_deducted_g
+                else ""
+            )
+            self._passport_last_var.set(f"Letzter Druck: {sp.last_print_at[:10]} — {fn}{dg}")
+        else:
+            self._passport_last_var.set("Letzter Druck: —")
         self._usage_log = list(sp.usage_log or [])
         self._update_color_preview()
 
@@ -421,9 +471,13 @@ class SpoolEditPanel(ttk.LabelFrame):
                 notify(self, "Restgewicht muss eine Zahl sein.", "warn")
                 return None
         color = self.color_var.get().strip().lstrip("#").upper()[:6] or "FFFFFF"
-        cfs_slot = self._parse_cfs_slot()
+        box_id, cfs_slot = self._parse_cfs_slot()
         if cfs_slot is None:
             cfs_slot = parse_cfs_slot_index(self.notes_var.get())
+            box_id = 1 if cfs_slot is not None else None
+        loc = self.location_printer_var.get().strip()
+        if loc == "Lager / Regal":
+            loc = ""
         return Spool(
             id=self._spool_id,
             label=self.label_var.get().strip() or "Unbenannt",
@@ -439,6 +493,10 @@ class SpoolEditPanel(ttk.LabelFrame):
             extra_tag_uids=list(self._extra_tag_uids),
             notes=self.notes_var.get().strip(),
             cfs_slot=cfs_slot,
+            cfs_box_id=box_id,
+            opened_at=self.opened_at_var.get().strip(),
+            batch_id=self.batch_id_var.get().strip(),
+            location_printer=loc,
             usage_log=list(self._usage_log),
         )
 
@@ -486,6 +544,15 @@ class SpoolManagerPanel(ttk.Frame):
         tip(
             ttk.Button(top, text="Etikett speichern…", command=self._label),
             "Spulen-Etikett als Bilddatei exportieren.",
+        ).pack(side="right", padx=4)
+        tip(
+            ttk.Button(
+                top,
+                text="Standort-Übersicht",
+                command=self._show_locations,
+                style="Secondary.TButton",
+            ),
+            "Wo liegt welche Spule (Drucker / Lager)?",
         ).pack(side="right", padx=4)
 
         body = ttk.Panedwindow(self, orient="horizontal")
@@ -582,9 +649,18 @@ class SpoolManagerPanel(ttk.Frame):
         self.reload()
         self.tree.bind("<Configure>", self._on_tree_configure, add="+")
 
+    def _show_locations(self) -> None:
+        from ui.spool_location_dialog import show_spool_location_dialog
+
+        show_spool_location_dialog(self, self.app.inventory)
+
     def _spool_cell(self, sp: Spool, col: str) -> str:
         if col == "cfs":
-            return sp.cfs_slot_label()
+            lab = sp.cfs_slot_label()
+            loc = sp.location_display()
+            if lab and loc:
+                return f"{lab} · {loc[:24]}"
+            return lab or loc[:28] or ""
         if col == "label":
             return sp.label
         if col == "brand":

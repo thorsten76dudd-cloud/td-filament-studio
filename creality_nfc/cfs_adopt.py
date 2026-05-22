@@ -33,6 +33,7 @@ class CfsSlotInfo:
     percent: int | None
     rfid_id: str
     empty: bool
+    box_id: int = 1
 
     @property
     def display(self) -> str:
@@ -202,6 +203,7 @@ def _fill_slot(slots: list[CfsSlotInfo], mat: dict[str, Any], sid: int) -> None:
     empty = (not vendor and not name and not mtype) or name in ("?", "—", "-", "null", "None")
     if state_i == 0:
         empty = True
+    box_id = int(slots[sid].box_id) if sid < len(slots) else 1
     slots[sid] = CfsSlotInfo(
         index=sid,
         label=SLOT_LABELS[sid],
@@ -213,6 +215,7 @@ def _fill_slot(slots: list[CfsSlotInfo], mat: dict[str, Any], sid: int) -> None:
         percent=pct_i,
         rfid_id=rfid,
         empty=empty,
+        box_id=box_id,
     )
 
 
@@ -277,12 +280,25 @@ def parse_cfs_slots(state: dict[str, Any]) -> list[CfsSlotInfo]:
         _apply_materials(slots, flat)
 
     boxes = _material_boxes(bi, state)
-    for box in _boxes_for_slots(boxes):
-        mats = box.get("materials") or box.get("filaments") or box.get("list") or []
+    cfs_boxes = [b for b in _boxes_for_slots(boxes) if b.get("type") == 0]
+    if not cfs_boxes:
+        cfs_boxes = _boxes_for_slots(boxes)
+    # Nur erste CFS-Box in parse_cfs_slots (Multi-Box: parse_cfs_layout).
+    target = cfs_boxes[0] if cfs_boxes else None
+    if target is not None:
+        try:
+            bid = int(target.get("id", 1) or 1)
+        except (TypeError, ValueError):
+            bid = 1
+        for s in slots:
+            s.box_id = bid
+        mats = target.get("materials") or target.get("filaments") or target.get("list") or []
         if isinstance(mats, dict):
             mats = list(mats.values())
         if isinstance(mats, list) and mats:
             _apply_materials(slots, mats)
+            for s in slots:
+                s.label = SLOT_LABELS[s.index]
 
     _apply_same_material(slots, bi)
     return slots

@@ -28,8 +28,12 @@ def find_spool_for_slot(
     slot: CfsSlotInfo,
 ) -> Spool | None:
     """Passende Spule: expliziter CFS-Slot, Tag-UID, Filament-ID, Name."""
+    slot_box = getattr(slot, "box_id", 1) or 1
     for sp in inventory.spools:
-        if sp.effective_cfs_slot() == slot.index:
+        key = sp.effective_cfs_key()
+        if key and key == (slot_box, slot.index):
+            return sp
+        if sp.effective_cfs_slot() == slot.index and (sp.cfs_box_id or 1) == slot_box:
             return sp
     rfid = (slot.rfid_id or "").strip()
     if rfid:

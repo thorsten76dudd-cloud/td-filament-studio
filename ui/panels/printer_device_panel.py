@@ -125,6 +125,7 @@ class PrinterDevicePanel(ttk.Frame):
         self._poll_id: str | None = None
         self._was_connected = False
         self._cfs_slots: list[CfsSlotInfo] = []
+        self._cfs_layout = None
         self._cfs_empty_polls = 0
         self._gcode_polls = 0
         self._gcode_ssh_tried = False
@@ -787,21 +788,27 @@ class PrinterDevicePanel(ttk.Frame):
         from creality_nfc.cfs_spool_link import find_spool_for_slot
         from creality_nfc.live_filament import format_live_filament_status
 
-        slot = find_loaded_slot_index(state)
+        slot_idx = find_loaded_slot_index(state)
         sp_rem = None
-        if slot is not None:
-            sp = find_spool_for_slot(self.app.inventory, slot)
-            if sp and sp.remaining_g is not None:
-                sp_rem = sp.remaining_g
+        box_id = 1
+        if slot_idx is not None and self._cfs_slots:
+            idx = slot_idx
+            if 0 <= idx < len(self._cfs_slots):
+                cfs_slot = self._cfs_slots[idx]
+                box_id = getattr(cfs_slot, "box_id", 1) or 1
+                sp = find_spool_for_slot(self.app.inventory, cfs_slot)
+                if sp and sp.remaining_g is not None:
+                    sp_rem = sp.remaining_g
         cache = self._gcode_cache_path
         text = format_live_filament_status(
             state,
             filename=filename,
             progress_pct=prog,
-            active_slot=slot,
+            active_slot=slot_idx,
             cfs_slots=self._cfs_slots,
             local_gcode=cache,
             spool_remaining_g=sp_rem,
+            active_box_id=box_id,
         )
         self._filament_live_var.set(text)
 
@@ -834,6 +841,44 @@ class PrinterDevicePanel(ttk.Frame):
 
     def show_print_history(self) -> None:
         self.app.show_print_history()
+
+    def show_print_check(self) -> None:
+        if not self._conn:
+            notify(self, "Zuerst mit dem Drucker verbinden.", "warn")
+            return
+        fname = ""
+        if hasattr(self, "print_file_var"):
+            raw = self.print_file_var.get().strip()
+            if raw and raw != "—":
+                fname = raw
+        if not fname and hasattr(self, "_selected_gcode"):
+            fname = (self._selected_gcode or "").strip()
+        if not fname:
+            notify(self, "Zuerst eine G-Code-Datei in der Liste wählen.", "warn")
+            return
+        from creality_nfc.cfs_feed import find_loaded_slot_index
+        from creality_nfc.cfs_layout import parse_cfs_layout
+        from creality_nfc.print_readiness import check_print_readiness
+        from ui.print_check_dialog import show_print_check_dialog
+
+        snap = self._conn.snapshot()
+        layout = getattr(self, "_cfs_layout", None) or parse_cfs_layout(snap)
+        report = check_print_readiness(
+            snap,
+            fname,
+            self.app.inventory,
+            self._cfs_slots,
+            layout=layout,
+            local_gcode=self._gcode_cache_path,
+            low_threshold_g=self.app.settings.low_filament_threshold_g,
+            loaded_slot_index=find_loaded_slot_index(snap),
+        )
+        show_print_check_dialog(self, report)
+
+    def show_spool_locations(self) -> None:
+        from ui.spool_location_dialog import show_spool_location_dialog
+
+        show_spool_location_dialog(self, self.app.inventory)
 
     def show_cfs_batch_scan(self) -> None:
         if not self._conn:
@@ -1808,12 +1853,28 @@ class PrinterDevicePanel(ttk.Frame):
 
     def _update_cfs_ui(self, state: dict) -> None:
         from creality_nfc.cfs_adopt import parse_cfs_meta
+        from creality_nfc.cfs_layout import parse_cfs_layout
+        from creality_nfc.spool_location import update_last_seen_from_layout
 
         self.cfs_dashboard.set_inventory(self.app.inventory)
         self.cfs_dashboard.update_from_state(state)
-        self._cfs_slots = list(self.cfs_dashboard._slots)
+        self._cfs_layout = parse_cfs_layout(state)
+        self._cfs_slots = list(self._cfs_layout.primary_slots())
         meta = parse_cfs_meta(state)
         self._cfs_active_index = meta.active_index
+        pname = ""
+        if hasattr(self.app, "printer_var"):
+            pname = self.app.printer_var.get().strip()
+        if not pname and hasattr(self.app, "ssh_host_var"):
+            pname = self.app.ssh_host_var.get().strip() or "K2"
+        n = update_last_seen_from_layout(
+            self.app.inventory, self._cfs_layout, printer_name=pname
+        )
+        if n > 0:
+            try:
+                self.app.inventory.save()
+            except Exception:
+                pass
 
     def _fetch_cfs_snapshot_async(self) -> None:
         if self._cfs_fetch_pending:

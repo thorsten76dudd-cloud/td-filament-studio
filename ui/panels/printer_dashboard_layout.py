@@ -180,8 +180,22 @@ def _build_print_strip(panel: PrinterDevicePanel, parent: ttk.Frame) -> None:
     hist_row.pack(fill="x", pady=(0, 4))
     rounded_button(
         hist_row,
+        "Druck-Check",
+        panel.show_print_check,
+        variant="secondary",
+        compact=True,
+    ).pack(side="left", padx=(0, 6))
+    rounded_button(
+        hist_row,
         "Druck-Historie",
         panel.show_print_history,
+        variant="secondary",
+        compact=True,
+    ).pack(side="left", padx=(0, 6))
+    rounded_button(
+        hist_row,
+        "Spulen-Standort",
+        panel.show_spool_locations,
         variant="secondary",
         compact=True,
     ).pack(side="left")

@@ -2258,6 +2258,14 @@ class TDFilamentStudioApp(AppTk):
         self.notify(msg, "ok" if fid else "warn")
         sp = find_spool_for_slot(self.inventory, slot)
         if sp:
+            from creality_nfc.spool_passport import sync_passport_from_cfs_slot
+
+            pname = self.printer_var.get().strip() if hasattr(self, "printer_var") else ""
+            res = sync_passport_from_cfs_slot(sp, slot, printer_name=pname)
+            if res.updated_fields:
+                self.inventory.save()
+            for w in res.warnings:
+                self.notify(w, "warn")
             self.apply_spool(sp)
 
     def bind_cfs_slot_dialog(self, slot_index: int, slot: CfsSlotInfo) -> None:
@@ -2710,6 +2718,18 @@ class TDFilamentStudioApp(AppTk):
                 note="Abzug bestätigt" if ded else "Druck beendet (kein Abzug)",
             )
         )
+        if spool_id:
+            sp = self.inventory.get(spool_id)
+            if sp:
+                from creality_nfc.spool_passport import touch_passport_after_print
+
+                touch_passport_after_print(
+                    sp,
+                    filename=filename,
+                    deducted_g=total_g,
+                    ts=_now(),
+                )
+                self.inventory.save()
 
     def _duplicate_last_tag_template(self) -> None:
         tpl = self._last_write_template
