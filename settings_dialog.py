@@ -14,7 +14,6 @@ class SettingsDialog(tk.Toplevel):
     def __init__(self, parent: tk.Misc, settings: AppSettings) -> None:
         super().__init__(parent)
         self.title("Einstellungen")
-        self.geometry("440x460")
         theme_dialog(self)
         self.result: AppSettings | None = None
         self._settings = settings
@@ -87,7 +86,7 @@ class SettingsDialog(tk.Toplevel):
         ttk.Button(btns, text="Abbrechen", command=self.destroy).pack(side="right")
         ttk.Button(btns, text="Speichern", command=self._save).pack(side="right", padx=8)
 
-        prepare_toplevel(self, parent, width=440, height=460)
+        prepare_toplevel(self, parent, width=440, height=460, geometry_key="settings")
 
     def _save(self) -> None:
         s = self._settings

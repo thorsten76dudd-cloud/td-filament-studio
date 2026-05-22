@@ -177,8 +177,21 @@ def ask_post_print_deductions(
     dlg_w = 640
     win.minsize(560, 300)
 
-    win.update_idletasks()
-    center_toplevel(win, width=dlg_w, height=dlg_h)
+    from ui.window_geometry import get_window_geometry_manager
+
+    mgr = get_window_geometry_manager()
+    if mgr:
+        mgr.attach_toplevel(
+            win,
+            "post_print_deduct",
+            default_width=dlg_w,
+            default_height=dlg_h,
+            min_width=560,
+            min_height=300,
+        )
+    else:
+        win.update_idletasks()
+        center_toplevel(win, width=dlg_w, height=dlg_h)
     try:
         win.grab_set()
         parent.wait_window(win)

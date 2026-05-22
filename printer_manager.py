@@ -79,7 +79,7 @@ class PrinterManagerDialog(tk.Toplevel):
         scroll.pack(side="right", fill="y")
 
         self._reload()
-        prepare_toplevel(self, parent, width=620, height=420)
+        prepare_toplevel(self, parent, width=620, height=420, geometry_key="printer_manager")
 
     def _reload(self) -> None:
         for i in self.tree.get_children():
@@ -188,7 +188,7 @@ class PrinterManagerDialog(tk.Toplevel):
             side="right", padx=(8, 0)
         )
         ttk.Button(btn_bar, text="OK", command=ok, style="Accent.TButton").pack(side="right")
-        prepare_toplevel(dlg, self, width=460, height=420)
+        prepare_toplevel(dlg, self, width=460, height=420, geometry_key="printer_edit")
 
     def _delete(self) -> None:
         p = self._selected()

@@ -105,7 +105,7 @@ class PrinterConnectDialog(tk.Toplevel):
             side="right", padx=8
         )
 
-        prepare_toplevel(self, parent, width=420, height=380)
+        prepare_toplevel(self, parent, width=420, height=380, geometry_key="printer_connect")
 
     def _pick_saved(self, _event=None) -> None:
         name = self.saved_var.get()

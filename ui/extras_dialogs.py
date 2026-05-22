@@ -27,10 +27,15 @@ def show_print_history_dialog(
 ) -> None:
     dlg = tk.Toplevel(parent)
     dlg.title("Druck-Historie")
-    prepare_toplevel(dlg, parent)
-    theme_dialog(dlg)
-    dlg.geometry("720x420")
-    dlg.minsize(520, 300)
+    prepare_toplevel(
+        dlg,
+        parent,
+        width=720,
+        height=420,
+        geometry_key="print_history",
+        min_width=520,
+        min_height=300,
+    )
 
     top = ttk.Frame(dlg, padding=8)
     top.pack(fill="x")
@@ -121,10 +126,15 @@ def show_cfs_batch_dialog(
 ) -> None:
     dlg = tk.Toplevel(parent)
     dlg.title("CFS — alle Slots")
-    prepare_toplevel(dlg, parent)
-    theme_dialog(dlg)
-    dlg.geometry("920x380")
-    dlg.minsize(760, 300)
+    prepare_toplevel(
+        dlg,
+        parent,
+        width=920,
+        height=380,
+        geometry_key="cfs_all_slots",
+        min_width=760,
+        min_height=300,
+    )
 
     ttk.Label(
         dlg,

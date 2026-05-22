@@ -822,7 +822,7 @@ class SpoolManagerPanel(ttk.Frame):
             return
         dlg = tk.Toplevel(self)
         dlg.title(f"Verlauf — {sp.label}")
-        prepare_toplevel(dlg, self, width=480, height=320)
+        prepare_toplevel(dlg, self, width=480, height=320, geometry_key="spool_usage_log")
         txt = tk.Text(dlg, wrap="word", height=14)
         txt.pack(fill="both", expand=True, padx=10, pady=10)
         if not sp.usage_log:

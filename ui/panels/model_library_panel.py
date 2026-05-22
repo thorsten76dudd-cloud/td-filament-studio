@@ -643,7 +643,7 @@ class ModelLibraryPanel(ttk.Frame):
         result: list[str | None] = [None]
         dlg = tk.Toplevel(self)
         dlg.title(title)
-        prepare_toplevel(dlg, self, width=460, height=200)
+        prepare_toplevel(dlg, self, width=460, height=200, geometry_key="model_new_folder")
 
         def ok(_event=None) -> None:
             val = var.get().strip()
@@ -1040,7 +1040,7 @@ class ModelLibraryPanel(ttk.Frame):
 
         dlg = tk.Toplevel(self)
         dlg.title("In Ordner verschieben")
-        prepare_toplevel(dlg, self, width=480, height=200)
+        prepare_toplevel(dlg, self, width=480, height=200, geometry_key="model_move_folder")
         picked: list[str] = []
 
         def ok() -> None:

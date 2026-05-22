@@ -157,7 +157,7 @@ class TagHolderLinksDialog(tk.Toplevel):
             wraplength=540,
         ).pack(anchor="w", pady=(0, 8))
         ttk.Button(footer, text="Schließen", command=self.destroy).pack(anchor="e")
-        prepare_toplevel(self, parent, width=600, height=640)
+        prepare_toplevel(self, parent, width=600, height=640, geometry_key="tag_holder_links")
 
     def _save_plastic_holder(self) -> None:
         save_bundled_plastic_holder_stls(self)

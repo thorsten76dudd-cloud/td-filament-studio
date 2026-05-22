@@ -177,17 +177,15 @@ class TDFilamentStudioApp(AppTk):
         self.minsize(1280, 800)
 
         apply_theme(self)
-        try:
-            self.state("zoomed")
-        except tk.TclError:
-            try:
-                self.attributes("-zoomed", True)
-            except tk.TclError:
-                self.geometry("1280x900")
 
         self.reader = CrealityNfcReader()
         apply_window_icon(self)
         self.settings = AppSettings.load(DEFAULT_SETTINGS_PATH)
+        from ui.window_geometry import WindowGeometryManager, set_window_geometry_manager
+
+        self._window_geom = WindowGeometryManager(self.settings, self._save_settings)
+        set_window_geometry_manager(self._window_geom)
+        self._window_geom.attach_root(self)
         self.profiles: list[FilamentProfile] = []
         self.db_data: dict | None = None
         self.db_path: Path | None = None
@@ -2268,7 +2266,9 @@ class TDFilamentStudioApp(AppTk):
 
         dlg = tk.Toplevel(self)
         dlg.title(f"CFS {slot_label(slot_index)} — Spule zuweisen")
-        prepare_toplevel(dlg, self, width=420, height=280)
+        prepare_toplevel(
+            dlg, self, width=420, height=280, geometry_key="cfs_bind_spool"
+        )
 
         ttk.Label(
             dlg,
@@ -4145,7 +4145,9 @@ class TDFilamentStudioApp(AppTk):
         dlg = tk.Toplevel(self)
         self._update_dialog = dlg
         dlg.title("Update verfügbar")
-        prepare_toplevel(dlg, parent=self, width=520, height=340, modal=True)
+        prepare_toplevel(
+            dlg, parent=self, width=520, height=340, geometry_key="update_dialog", modal=True
+        )
         tk.Label(
             dlg,
             text=body,
@@ -4300,6 +4302,11 @@ class TDFilamentStudioApp(AppTk):
         if self._shutdown_done:
             return
         self._shutdown_done = True
+        try:
+            if hasattr(self, "_window_geom"):
+                self._window_geom.save_root(self)
+        except Exception:
+            pass
         try:
             self._save_settings()
         except Exception:

@@ -31,7 +31,7 @@ class TagToolsDialog(tk.Toplevel):
         self.text = scrolledtext.ScrolledText(self, height=20, font=("Consolas", 9))
         self.text.pack(fill="both", expand=True, padx=10, pady=8)
 
-        prepare_toplevel(self, parent, width=520, height=420)
+        prepare_toplevel(self, parent, width=520, height=420, geometry_key="tag_tools")
 
     def _session(self) -> TagSession:
         self.reader.connect()

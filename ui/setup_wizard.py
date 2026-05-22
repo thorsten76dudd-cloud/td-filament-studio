@@ -244,7 +244,7 @@ class SetupWizardDialog(tk.Toplevel):
 
 
 
-        prepare_toplevel(self, parent, width=560, height=520)
+        prepare_toplevel(self, parent, width=560, height=520, geometry_key="setup_wizard")
 
 
 

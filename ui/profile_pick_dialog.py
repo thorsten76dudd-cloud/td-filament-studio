@@ -22,7 +22,7 @@ def ask_filament_profile(
     result: list[FilamentProfile | None] = [None]
     dlg = tk.Toplevel(parent)
     dlg.title(title)
-    prepare_toplevel(dlg, parent, width=620, height=480)
+    prepare_toplevel(dlg, parent, width=620, height=480, geometry_key="profile_pick")
     theme_dialog(dlg)
     dlg.transient(parent.winfo_toplevel())
     dlg.grab_set()

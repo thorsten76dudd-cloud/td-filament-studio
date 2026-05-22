@@ -33,9 +33,14 @@ def prepare_toplevel(
     *,
     width: int | None = None,
     height: int | None = None,
+    geometry_key: str | None = None,
+    min_width: int = 0,
+    min_height: int = 0,
     modal: bool = True,
 ) -> None:
-    """Theme + optional modal + zentriert auf dem Monitor."""
+    """Theme + optional modal + gespeicherte oder zentrierte Geometrie."""
+    from ui.window_geometry import get_window_geometry_manager
+
     theme_dialog(win)
     apply_window_icon(win)
     if parent is not None:
@@ -45,7 +50,20 @@ def prepare_toplevel(
             win.grab_set()
         except tk.TclError:
             pass
-    win.after_idle(lambda: center_toplevel(win, width=width, height=height))
+    mgr = get_window_geometry_manager()
+    dw = width or 480
+    dh = height or 360
+    if mgr and geometry_key:
+        mgr.attach_toplevel(
+            win,
+            geometry_key,
+            default_width=dw,
+            default_height=dh,
+            min_width=min_width,
+            min_height=min_height,
+        )
+    elif width and height:
+        win.after_idle(lambda: center_toplevel(win, width=width, height=height))
 
 
 def add_dialog_footer(

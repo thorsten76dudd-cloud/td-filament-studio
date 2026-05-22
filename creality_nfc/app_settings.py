@@ -45,6 +45,9 @@ class AppSettings:
     auto_reboot_after_db_push: bool = False
     # Bekannte funktionierende Kamera-Snapshot-URL pro Drucker-IP (schnellerer Start).
     camera_snapshot_by_host: dict[str, str] = field(default_factory=dict)
+    # Fenstergröße/-position: Schlüssel -> "BreitexHoehe+X+Y"
+    window_geometry: dict[str, str] = field(default_factory=dict)
+    main_window_maximized: bool = False
 
     @classmethod
     def load(cls, path: Path) -> AppSettings:
@@ -57,6 +60,13 @@ class AppSettings:
             cam = filtered.get("camera_snapshot_by_host")
             if not isinstance(cam, dict):
                 filtered["camera_snapshot_by_host"] = {}
+            wg = filtered.get("window_geometry")
+            if isinstance(wg, dict):
+                filtered["window_geometry"] = {
+                    k: str(v) for k, v in wg.items() if isinstance(k, str) and v
+                }
+            else:
+                filtered["window_geometry"] = {}
             return cls(**filtered)
         except Exception:
             return cls()

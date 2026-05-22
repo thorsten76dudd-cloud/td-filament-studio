@@ -79,7 +79,7 @@ class SmartcardHelpDialog(tk.Toplevel):
             style="Accent.TButton",
         ).pack(side="left")
 
-        prepare_toplevel(self, parent, width=520, height=440)
+        prepare_toplevel(self, parent, width=520, height=440, geometry_key="smartcard_help")
 
     def _retry(self, on_retry: Callable[[], None] | None) -> None:
         state = probe_pcsc()
