@@ -80,6 +80,23 @@ class PostPrintTriggerTests(unittest.TestCase):
       )
     )
 
+  def test_late_connect_idle_layers_done(self) -> None:
+    state = {"curLayer": 120, "totalLayer": 120, "state": 0}
+    ps = {"file": "job.gcode", "progress": 0}
+    self.assertTrue(
+      PrinterDevicePanel.printer_job_looks_finished(state, ps, "idle")
+    )
+
+  def test_late_connect_complete_phase(self) -> None:
+    self.assertTrue(
+      PrinterDevicePanel.printer_job_looks_finished({}, {"file": "x.gcode"}, "complete")
+    )
+
+  def test_idle_no_file_not_finished(self) -> None:
+    self.assertFalse(
+      PrinterDevicePanel.printer_job_looks_finished({}, {"file": ""}, "idle")
+    )
+
 
 if __name__ == "__main__":
   unittest.main()

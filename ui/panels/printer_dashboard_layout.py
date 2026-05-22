@@ -435,11 +435,12 @@ def build_creality_dashboard(panel: PrinterDevicePanel, outer: ttk.Frame) -> Non
         txt_wrap,
         height=22,
         wrap="none",
-        font=("Segoe UI", 8),
+        font=("Consolas", 9),
         state="disabled",
         cursor="arrow",
     )
     apply_text_area_style(panel.gcode_hint_text, bg=SURFACE_DARK)
+    panel.gcode_hint_text.configure(fg=P_MUTED)
     panel.gcode_hint_text.grid(row=0, column=1, sticky="nsew", padx=(6, 0))
     scroll_gcode.grid(row=0, column=2, sticky="ns")
     panel.gcode_text.insert(
@@ -476,7 +477,8 @@ def build_creality_dashboard(panel: PrinterDevicePanel, outer: ttk.Frame) -> Non
     ).pack(side="left")
     tip(
         gcode_act,
-        "Strg+C kopiert markierten Text. Bearbeitungen sind nur lokal — nicht auf dem Drucker.",
+        "Alles kopieren: komplette Datei vom PC-Cache (auch wenn nur Anfang/Ende sichtbar). "
+        "Strg+C nur die Auswahl. Bearbeitungen nur lokal.",
     )
 
     button_grid(

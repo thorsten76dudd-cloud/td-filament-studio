@@ -56,6 +56,7 @@ from creality_nfc.printer_ssh import (
     upload_gcode_to_printer,
 )
 from creality_nfc.printer_state import (
+    _first,
     build_print_phase_notification,
     print_job_phase,
     should_notify_print_phase_change,
@@ -116,6 +117,7 @@ class PrinterDevicePanel(ttk.Frame):
         self._gcode_preview_hold = False
         self._gcode_text_hold = False
         self._gcode_text_gen = 0
+        self._gcode_cache_path: Path | None = None
         self._poll_id: str | None = None
         self._was_connected = False
         self._cfs_slots: list[CfsSlotInfo] = []
@@ -511,13 +513,13 @@ class PrinterDevicePanel(ttk.Frame):
         self._clear_gcode_text_display()
 
     def _sync_gcode_hint_to_gcode(self) -> None:
-        """Erklärungsspalte auf dieselbe sichtbare Zeile wie G-Code (ein Scroll)."""
+        """Erklärungsspalte: gleiche Scroll-Position wie G-Code (Bruchteil, gleiche Schrift)."""
         if not hasattr(self, "gcode_text") or not hasattr(self, "gcode_hint_text"):
             return
         try:
-            top_line = int(float(self.gcode_text.index("@0,0").split(".")[0]))
-            self.gcode_hint_text.see(f"{top_line}.0")
-        except (ValueError, tk.TclError):
+            top, _bottom = self.gcode_text.yview()
+            self.gcode_hint_text.yview_moveto(top)
+        except tk.TclError:
             pass
 
     def _set_gcode_hint_display(self, text: str) -> None:
@@ -532,6 +534,7 @@ class PrinterDevicePanel(ttk.Frame):
     def _clear_gcode_text_display(self) -> None:
         if not hasattr(self, "gcode_text"):
             return
+        self._gcode_cache_path = None
         placeholder = (
             "; G-Code-Text erscheint hier nach Auswahl einer Datei.\n"
             "; Root-SSH und Drucker-IP wie beim Herunterladen.\n"
@@ -556,21 +559,39 @@ class PrinterDevicePanel(ttk.Frame):
         if hasattr(self, "_gcode_text_status"):
             self._gcode_text_status.set(status)
 
+    def _read_gcode_for_clipboard(self) -> tuple[str, bool]:
+        """Text zum Kopieren: Auswahl, sonst komplette Cache-Datei falls vorhanden."""
+        try:
+            if self.gcode_text.tag_ranges(tk.SEL):
+                return self.gcode_text.get(tk.SEL_FIRST, tk.SEL_LAST), False
+        except tk.TclError:
+            pass
+        cache = self._gcode_cache_path
+        if cache and cache.is_file():
+            try:
+                return cache.read_text(encoding="utf-8", errors="replace"), True
+            except OSError:
+                pass
+        return self.gcode_text.get("1.0", "end-1c"), False
+
     def _copy_gcode_display(self) -> None:
         if not hasattr(self, "gcode_text"):
             return
-        try:
-            if self.gcode_text.tag_ranges(tk.SEL):
-                chunk = self.gcode_text.get(tk.SEL_FIRST, tk.SEL_LAST)
-            else:
-                chunk = self.gcode_text.get("1.0", "end-1c")
-        except tk.TclError:
-            chunk = self.gcode_text.get("1.0", "end-1c")
+        chunk, from_full_file = self._read_gcode_for_clipboard()
         if not chunk.strip():
             notify(self, "Kein G-Code zum Kopieren.", "warn")
             return
         self.clipboard_clear()
         self.clipboard_append(chunk)
+        if from_full_file:
+            shown = self.gcode_text.get("1.0", "end-1c")
+            if len(chunk) > len(shown) + 200:
+                notify(
+                    self,
+                    "Komplette G-Code-Datei kopiert (nicht nur die Vorschau in der Anzeige).",
+                    "ok",
+                )
+                return
         notify(self, "G-Code in Zwischenablage kopiert.", "ok")
 
     def _save_gcode_edited_local(self) -> None:
@@ -659,6 +680,7 @@ class PrinterDevicePanel(ttk.Frame):
             def ok() -> None:
                 if gen != self._gcode_text_gen:
                     return
+                self._gcode_cache_path = local
                 self._set_gcode_text_display(body, status)
 
             self.app.after(0, ok)
@@ -684,6 +706,7 @@ class PrinterDevicePanel(ttk.Frame):
         self._gcode_preview_hold = False
         self._gcode_text_hold = False
         self._gcode_text_gen += 1
+        self._gcode_cache_path = None
         self._clear_gcode_text_display()
         self._was_connected = False
         self._print_phase_synced = False
@@ -968,6 +991,36 @@ class PrinterDevicePanel(ttk.Frame):
         return f"noch ca. {m}min"
 
     @staticmethod
+    def printer_job_looks_finished(state: dict, ps: dict, phase: str) -> bool:
+        """Druck wirkt beendet (z. B. App-Neustart/Update während Drucker schon fertig)."""
+        if phase == "complete":
+            return True
+        if phase != "idle":
+            return False
+        if not str(ps.get("file") or "").strip():
+            return False
+        try:
+            prog = ps.get("progress")
+            if prog is not None and int(prog) >= 99:
+                return True
+        except (TypeError, ValueError):
+            pass
+        try:
+            st = int(_first(state, "state", "deviceState", "printState") or 0)
+            if st == 2:
+                return True
+        except (TypeError, ValueError):
+            pass
+        try:
+            cl = int(_first(state, "curLayer", "layer") or 0)
+            tl = int(_first(state, "totalLayer", "totalLayers", "TotalLayer") or 0)
+            if tl > 0 and cl >= tl:
+                return True
+        except (TypeError, ValueError):
+            pass
+        return False
+
+    @staticmethod
     def should_trigger_post_print_deduct(
         prev_phase: str,
         phase: str,
@@ -1048,6 +1101,8 @@ class PrinterDevicePanel(ttk.Frame):
         prog = ps.get("progress")
         prev_phase = self._last_print_phase
         if not self._print_phase_synced:
+            if self.printer_job_looks_finished(s, ps, phase):
+                self._request_post_print_deduct(s, ps)
             self._last_print_phase = phase
             self._print_phase_synced = True
         else:
