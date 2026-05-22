@@ -42,6 +42,11 @@ if "%ISCC%"=="" if exist "%ProgramFiles%\Inno Setup 6\ISCC.exe" set "ISCC=%Progr
 
 if not "%ISCC%"=="" (
     echo [2/2] Inno Setup Installer ...
+    python scripts\sync_installer_version.py
+    if errorlevel 1 (
+        echo Versions-Sync fehlgeschlagen.
+        exit /b 1
+    )
     "%ISCC%" "installer\setup.iss"
     if errorlevel 1 (
         echo Inno Setup fehlgeschlagen.
