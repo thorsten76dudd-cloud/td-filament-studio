@@ -2,10 +2,10 @@
 # Creates latest stable release and removes the previous stable release tag.
 
 param(
-    [string]$Version = "1.5.76",
-    [string]$Tag = "v1.5.76-stable",
+    [string]$Version = "1.5.77",
+    [string]$Tag = "v1.5.77-stable",
     [string]$Repo = "thorsten76dudd-cloud/td-filament-studio",
-    [string]$RemoveTag = "v1.5.75-stable",
+    [string]$RemoveTag = "v1.5.76-stable",
     [switch]$DeleteAllOldReleases
 )
 
@@ -32,7 +32,8 @@ $notes = @(
     "## TD Filament Studio $Version",
     "",
     "### Drucker Dateien",
-    "* G-Code-Text anzeigen (Tab G-Code, SSH, Anfang/Ende grosser Dateien)",
+    "* G-Code-Text: mehr Platz (Layout-Fix), Tab Bild kleiner",
+    "* G-Code-Text anzeigen (SSH, Anfang/Ende grosser Dateien)",
     "",
     "### Enthalten ab 1.5.75",
     "* Kamera-Tab-Wechsel, Material-DB lokal, Filament-Dialog",

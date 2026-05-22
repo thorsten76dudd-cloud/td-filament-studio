@@ -356,7 +356,7 @@ def build_creality_dashboard(panel: PrinterDevicePanel, outer: ttk.Frame) -> Non
         highlightbackground=P_BORDER,
         highlightthickness=1,
         width=380,
-        height=280,
+        height=140,
     )
     panel._gcode_preview_host.grid(row=0, column=0, sticky="nsew", padx=2, pady=2)
     panel._gcode_preview_host.grid_propagate(False)
@@ -378,13 +378,13 @@ def build_creality_dashboard(panel: PrinterDevicePanel, outer: ttk.Frame) -> Non
 
     gcode_txt_frame = ttk.Frame(tab_gcode, style="Printer.TFrame")
     gcode_txt_frame.grid(row=0, column=0, sticky="nsew", padx=2, pady=2)
-    gcode_txt_frame.rowconfigure(0, weight=1)
+    gcode_txt_frame.rowconfigure(1, weight=1)
     gcode_txt_frame.columnconfigure(0, weight=1)
     panel._gcode_text_status = tk.StringVar(
         value="Datei wählen — G-Code wird per SSH geladen (Anfang/Ende)."
     )
     ttk.Label(gcode_txt_frame, textvariable=panel._gcode_text_status, style=_MUTED).grid(
-        row=0, column=0, sticky="w", pady=(0, 4)
+        row=0, column=0, sticky="ew", pady=(0, 2)
     )
     txt_wrap = ttk.Frame(gcode_txt_frame, style="Printer.TFrame")
     txt_wrap.grid(row=1, column=0, sticky="nsew")
@@ -394,7 +394,7 @@ def build_creality_dashboard(panel: PrinterDevicePanel, outer: ttk.Frame) -> Non
     style_scrollbar(scroll_gcode)
     panel.gcode_text = tk.Text(
         txt_wrap,
-        height=14,
+        height=22,
         wrap="none",
         font=("Consolas", 9),
         state="disabled",
