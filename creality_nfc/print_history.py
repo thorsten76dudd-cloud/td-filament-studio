@@ -80,6 +80,20 @@ class PrintHistoryStore:
         )
 
     def add(self, record: PrintJobRecord) -> None:
+        """Neuester Eintrag oben; gleiche Datei kurz nacheinander wird aktualisiert."""
+        if self._entries and (record.filename or "").strip():
+            prev = self._entries[0]
+            if (prev.filename or "").strip() == (record.filename or "").strip():
+                if record.deducted_g is not None:
+                    prev.deducted_g = record.deducted_g
+                if record.note:
+                    prev.note = record.note
+                if record.duration_sec is not None:
+                    prev.duration_sec = record.duration_sec
+                if record.spool_label:
+                    prev.spool_label = record.spool_label
+                self.save()
+                return
         self._entries.insert(0, record)
         self._entries = self._entries[: self.max_entries]
         self.save()

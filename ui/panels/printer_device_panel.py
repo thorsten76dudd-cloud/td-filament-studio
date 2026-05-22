@@ -881,7 +881,8 @@ class PrinterDevicePanel(ttk.Frame):
                 fresh = self._conn.snapshot() if self._conn else {}
 
             def open_dlg() -> None:
-                sl = parse_cfs_slots(fresh)
+                self._update_cfs_ui(fresh)
+                sl = list(self._cfs_slots) or parse_cfs_slots(fresh)
                 show_cfs_batch_dialog(
                     self,
                     fresh,
@@ -1319,6 +1320,16 @@ class PrinterDevicePanel(ttk.Frame):
         return False
 
     def _request_post_print_deduct(self, s: dict, ps: dict, *, manual: bool = False) -> None:
+        fname = str(ps.get("file") or self._last_print_filename or "").strip()
+        if not manual and fname:
+            try:
+                self.app._record_print_history(
+                    filename=fname,
+                    deductions=[],
+                    state=s,
+                )
+            except Exception:
+                pass
         try:
             snap = self._conn.snapshot() if self._conn else s
             loaded = find_loaded_slot_index(snap)

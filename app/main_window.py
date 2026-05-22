@@ -2344,11 +2344,12 @@ class TDFilamentStudioApp(AppTk):
         """Nach Druckende: Verbrauch pro G-Code-Farbe/Slot von verknüpften Spulen abziehen."""
         fname = (filename or "").strip()
         if not manual:
-            if not self.settings.prompt_deduct_after_print:
-                return
             if fname and self.settings.is_post_print_deduct_handled(fname):
                 return
             if self._post_print_prompted:
+                return
+            if not self.settings.prompt_deduct_after_print:
+                self._record_print_history(filename=fname, deductions=[], dialog_rows=[], state=printer_state or {})
                 return
 
         def _prepare_then_ask() -> None:
@@ -2597,10 +2598,10 @@ class TDFilamentStudioApp(AppTk):
             )
             self._post_print_prompted = False
             self._record_print_history(
-                filename,
-                deductions or [],
-                dialog_rows,
-                state,
+                filename=filename,
+                deductions=deductions or [],
+                dialog_rows=dialog_rows,
+                state=state,
             )
             if not deductions:
                 return
@@ -2655,10 +2656,11 @@ class TDFilamentStudioApp(AppTk):
 
     def _record_print_history(
         self,
+        *,
         filename: str,
-        deductions: list[tuple[str, int]],
-        dialog_rows: list,
-        state: dict,
+        deductions: list[tuple[str, int]] | None = None,
+        dialog_rows: list | None = None,
+        state: dict | None = None,
     ) -> None:
         import time
 
@@ -2671,14 +2673,15 @@ class TDFilamentStudioApp(AppTk):
             started = getattr(panel, "_print_job_started_mono", None)
             if started:
                 duration_sec = max(0, int(time.monotonic() - float(started)))
-        total_g = sum(g for _sid, g in deductions) if deductions else None
+        ded = deductions or []
+        total_g = sum(g for _sid, g in ded) if ded else None
         slot_idx = None
         spool_label = ""
         spool_id = ""
         if panel is not None:
             slot_idx = getattr(panel, "_last_print_cfs_slot", None)
-        if deductions:
-            spool_id = deductions[0][0]
+        if ded:
+            spool_id = ded[0][0]
             sp = self.inventory.get(spool_id)
             if sp:
                 spool_label = sp.label
@@ -2704,7 +2707,7 @@ class TDFilamentStudioApp(AppTk):
                 cfs_slot_label=SLOT_LABELS[slot_idx] if slot_idx is not None else "",
                 spool_label=spool_label,
                 spool_id=spool_id,
-                note="Abzug bestätigt" if deductions else "ohne Abzug",
+                note="Abzug bestätigt" if ded else "Druck beendet (kein Abzug)",
             )
         )
 

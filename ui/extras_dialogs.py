@@ -75,7 +75,24 @@ def show_print_history_dialog(
     tree.pack(side="left", fill="both", expand=True, padx=(8, 0), pady=8)
     sy.pack(side="right", fill="y", pady=8, padx=(0, 8))
 
-    for e in store.list_entries():
+    entries = store.list_entries()
+    if not entries:
+        ttk.Label(
+            dlg,
+            text=(
+                "Noch keine Einträge.\n\n"
+                "Die Historie füllt sich, wenn ein Druck auf dem K2 endet und der "
+                "Tab Drucker verbunden ist — auch wenn du den Filament-Dialog "
+                "überspringst.\n\n"
+                "Einstellungen: „Nach Druckende: Verbrauch abfragen“ kann aus sein; "
+                "der Eintrag wird trotzdem gespeichert."
+            ),
+            style="Muted.TLabel",
+            wraplength=520,
+            justify="left",
+        ).pack(anchor="w", padx=12, pady=(0, 6))
+
+    for e in entries:
         ded = f"{e.deducted_g} g" if e.deducted_g is not None else "—"
         tree.insert(
             "",
@@ -145,7 +162,7 @@ def show_cfs_batch_dialog(
         mat = info.material_type or info.name or "—"
         col = f"#{info.color_hex}" if info.color_hex else "—"
         rfid = (info.rfid_id or "—")[:16]
-        sp = find_spool_for_slot(inventory, i)
+        sp = find_spool_for_slot(inventory, info) or inventory.find_by_cfs_slot(i)
         sp_label = sp.label if sp else "—"
         rest = f"{sp.remaining_g} g" if sp and sp.remaining_g is not None else "—"
         in_use = cfs_meta.loaded_index == i or cfs_meta.feeding_index == i
