@@ -334,23 +334,37 @@ def build_creality_dashboard(panel: PrinterDevicePanel, outer: ttk.Frame) -> Non
     scroll_files.pack(side="right", fill="y")
     panel.file_list.bind("<<ListboxSelect>>", panel._on_gcode_select)
 
-    prev_card = ttk.LabelFrame(tab_files, text="  Vorschau (vom Slicer)  ", padding=4, style=_SEC)
+    prev_card = ttk.LabelFrame(tab_files, text="  Vorschau  ", padding=4, style=_SEC)
     prev_card.grid(row=1, column=1, sticky="nsew")
+    prev_card.rowconfigure(0, weight=1)
+    prev_card.columnconfigure(0, weight=1)
+    panel._gcode_prev_nb = ttk.Notebook(prev_card, style=_NB)
+    panel._gcode_prev_nb.grid(row=0, column=0, sticky="nsew", padx=2, pady=2)
+
+    tab_thumb = ttk.Frame(panel._gcode_prev_nb, style="Printer.TFrame")
+    tab_gcode = ttk.Frame(panel._gcode_prev_nb, style="Printer.TFrame")
+    tab_thumb.rowconfigure(0, weight=1)
+    tab_thumb.columnconfigure(0, weight=1)
+    tab_gcode.rowconfigure(0, weight=1)
+    tab_gcode.columnconfigure(0, weight=1)
+    panel._gcode_prev_nb.add(tab_thumb, text="  Bild  ")
+    panel._gcode_prev_nb.add(tab_gcode, text="  G-Code  ")
+
     panel._gcode_preview_host = tk.Frame(
-        prev_card,
+        tab_thumb,
         bg=P_CARD_ALT,
         highlightbackground=P_BORDER,
         highlightthickness=1,
         width=380,
-        height=320,
+        height=280,
     )
-    panel._gcode_preview_host.pack(fill="both", expand=True, padx=4, pady=4)
-    panel._gcode_preview_host.pack_propagate(False)
+    panel._gcode_preview_host.grid(row=0, column=0, sticky="nsew", padx=2, pady=2)
+    panel._gcode_preview_host.grid_propagate(False)
     panel._gcode_preview_host.bind("<Configure>", lambda _e: panel._on_gcode_preview_resize())
 
     panel.gcode_preview_label = tk.Label(
         panel._gcode_preview_host,
-        text="Datei in der Liste wählen\n\n(Vorschaubild aus dem G-Code,\nsofern beim Slicen erzeugt)",
+        text="Datei wählen\n\n(Vorschaubild vom Slicer,\nfalls vorhanden)",
         anchor="center",
         bg=P_CARD_ALT,
         fg=P_MUTED,
@@ -360,12 +374,49 @@ def build_creality_dashboard(panel: PrinterDevicePanel, outer: ttk.Frame) -> Non
     )
     panel.gcode_preview_label.place(relx=0, rely=0, relwidth=1, relheight=1)
 
+    from ui.theme import apply_text_area_style
+
+    gcode_txt_frame = ttk.Frame(tab_gcode, style="Printer.TFrame")
+    gcode_txt_frame.grid(row=0, column=0, sticky="nsew", padx=2, pady=2)
+    gcode_txt_frame.rowconfigure(0, weight=1)
+    gcode_txt_frame.columnconfigure(0, weight=1)
+    panel._gcode_text_status = tk.StringVar(
+        value="Datei wählen — G-Code wird per SSH geladen (Anfang/Ende)."
+    )
+    ttk.Label(gcode_txt_frame, textvariable=panel._gcode_text_status, style=_MUTED).grid(
+        row=0, column=0, sticky="w", pady=(0, 4)
+    )
+    txt_wrap = ttk.Frame(gcode_txt_frame, style="Printer.TFrame")
+    txt_wrap.grid(row=1, column=0, sticky="nsew")
+    txt_wrap.rowconfigure(0, weight=1)
+    txt_wrap.columnconfigure(0, weight=1)
+    scroll_gcode = ttk.Scrollbar(txt_wrap, orient=tk.VERTICAL)
+    style_scrollbar(scroll_gcode)
+    panel.gcode_text = tk.Text(
+        txt_wrap,
+        height=14,
+        wrap="none",
+        font=("Consolas", 9),
+        state="disabled",
+        yscrollcommand=scroll_gcode.set,
+    )
+    apply_text_area_style(panel.gcode_text, bg=P_CARD_ALT)
+    panel.gcode_text.grid(row=0, column=0, sticky="nsew")
+    scroll_gcode.config(command=panel.gcode_text.yview)
+    scroll_gcode.grid(row=0, column=1, sticky="ns")
+    panel.gcode_text.insert(
+        "1.0",
+        "; G-Code-Text erscheint hier nach Auswahl einer Datei.\n"
+        "; Root-SSH und Drucker-IP wie beim Herunterladen.\n",
+    )
+
     button_grid(
         tab_files,
         [
             ("Aktualisieren", panel._refresh_gcode_list, _BTN, "Liste neu laden."),
             ("Hochladen…", panel._upload_gcode, _BTN, "Hochladen."),
-            ("Herunterladen…", panel._download_gcode, _BTN, "Speichern."),
+            ("Herunterladen…", panel._download_gcode, _BTN, "G-Code komplett speichern."),
+            ("G-Code laden", panel._reload_gcode_text, _BTN, "Text neu vom Drucker holen."),
             ("Löschen", panel._delete_gcode, _BTN, "Löschen."),
         ],
         columns=3,

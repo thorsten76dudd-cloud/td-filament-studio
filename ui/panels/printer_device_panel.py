@@ -33,6 +33,7 @@ from creality_nfc.cfs_adopt import SLOT_LABELS, CfsSlotInfo, parse_cfs_slots
 from creality_nfc.cfs_feed import find_loaded_slot_index
 from creality_nfc.gcode_filament import (
     find_gcode_file_info,
+    format_gcode_snippet_for_view,
     gcode_uses_external_spool,
     merge_gcode_filament_info,
     parse_gcode_print_temps,
@@ -112,6 +113,8 @@ class PrinterDevicePanel(ttk.Frame):
         self._cfs_active_index: int | None = None
         self._last_print_cfs_slot: int | None = None
         self._gcode_preview_hold = False
+        self._gcode_text_hold = False
+        self._gcode_text_gen = 0
         self._poll_id: str | None = None
         self._was_connected = False
         self._cfs_slots: list[CfsSlotInfo] = []
@@ -494,14 +497,106 @@ class PrinterDevicePanel(ttk.Frame):
 
     def _clear_gcode_preview(self) -> None:
         self._gcode_preview_hold = False
+        self._gcode_text_hold = False
+        self._gcode_text_gen += 1
         self._preview_pil = None
         self._photo = None
         if hasattr(self, "gcode_preview_label"):
             self.gcode_preview_label.config(
                 image="",
-                text="Datei in der Liste wählen\n\n(Vorschaubild aus dem G-Code)",
+                text="Datei wählen\n\n(Vorschaubild vom Slicer,\nfalls vorhanden)",
             )
             self.gcode_preview_label.place(relx=0, rely=0, relwidth=1, relheight=1)
+        self._clear_gcode_text_display()
+
+    def _clear_gcode_text_display(self) -> None:
+        if not hasattr(self, "gcode_text"):
+            return
+        self.gcode_text.config(state="normal")
+        self.gcode_text.delete("1.0", tk.END)
+        self.gcode_text.insert(
+            "1.0",
+            "; G-Code-Text erscheint hier nach Auswahl einer Datei.\n"
+            "; Root-SSH und Drucker-IP wie beim Herunterladen.\n",
+        )
+        self.gcode_text.config(state="disabled")
+        if hasattr(self, "_gcode_text_status"):
+            self._gcode_text_status.set(
+                "Datei wählen — G-Code wird per SSH geladen (Anfang/Ende)."
+            )
+
+    def _set_gcode_text_display(self, text: str, status: str) -> None:
+        if not hasattr(self, "gcode_text"):
+            return
+        self.gcode_text.config(state="normal")
+        self.gcode_text.delete("1.0", tk.END)
+        self.gcode_text.insert("1.0", text or "")
+        self.gcode_text.config(state="disabled")
+        self.gcode_text.see("1.0")
+        if hasattr(self, "_gcode_text_status"):
+            self._gcode_text_status.set(status)
+
+    def _reload_gcode_text(self) -> None:
+        entry = self._selected_gcode_entry()
+        if not entry:
+            notify(self, "Bitte zuerst eine G-Code-Datei in der Liste wählen.", "warn")
+            return
+        host = self._host()
+        if not host:
+            return
+        self._gcode_text_hold = True
+        self._gcode_text_gen += 1
+        gen = self._gcode_text_gen
+        name = entry.get("name") or "?"
+        self._set_gcode_text_display(f"; Lade {name} vom Drucker …\n", "Lade …")
+        if hasattr(self, "_gcode_prev_nb"):
+            try:
+                self._gcode_prev_nb.select(1)
+            except tk.TclError:
+                pass
+        threading.Thread(
+            target=self._load_gcode_text_bg,
+            args=(host, entry, gen),
+            daemon=True,
+        ).start()
+
+    def _load_gcode_text_bg(self, host: str, entry: dict, gen: int) -> None:
+        name = entry.get("name") or "druck.gcode"
+        if not str(name).lower().endswith(".gcode"):
+            name = f"{name}.gcode"
+        password = self._ssh_password()
+
+        def fail(msg: str) -> None:
+            def ui() -> None:
+                if gen != self._gcode_text_gen:
+                    return
+                self._set_gcode_text_display(f"; Fehler\n; {msg}\n", msg)
+
+            self.app.after(0, ui)
+
+        try:
+            remote = entry_remote_path(entry)
+        except ValueError as exc:
+            fail(str(exc))
+            return
+        try:
+            from app.paths import GCODE_CACHE_DIR
+
+            GCODE_CACHE_DIR.mkdir(parents=True, exist_ok=True)
+            safe = Path(name).name
+            local = GCODE_CACHE_DIR / safe
+            download_gcode_from_printer(host, password, remote, local)
+            body, status = format_gcode_snippet_for_view(local)
+            status = f"{status} · {safe}"
+
+            def ok() -> None:
+                if gen != self._gcode_text_gen:
+                    return
+                self._set_gcode_text_display(body, status)
+
+            self.app.after(0, ok)
+        except Exception as exc:
+            fail(str(exc))
 
     def disconnect(self) -> None:
         if self._poll_id:
@@ -520,6 +615,9 @@ class PrinterDevicePanel(ttk.Frame):
             self._conn = None
         self.conn_var.set("Getrennt")
         self._gcode_preview_hold = False
+        self._gcode_text_hold = False
+        self._gcode_text_gen += 1
+        self._clear_gcode_text_display()
         self._was_connected = False
         self._print_phase_synced = False
         self._gcode_polls = 0
@@ -1809,6 +1907,15 @@ class PrinterDevicePanel(ttk.Frame):
         threading.Thread(
             target=self._load_gcode_preview_bg,
             args=(host, entry),
+            daemon=True,
+        ).start()
+        self._gcode_text_hold = True
+        self._gcode_text_gen += 1
+        gen = self._gcode_text_gen
+        self._set_gcode_text_display(f"; Lade {name} …\n", "Lade …")
+        threading.Thread(
+            target=self._load_gcode_text_bg,
+            args=(host, entry, gen),
             daemon=True,
         ).start()
 

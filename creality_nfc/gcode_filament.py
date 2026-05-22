@@ -391,6 +391,37 @@ def _read_gcode_region(path: Path, *, max_bytes: int, from_end: bool) -> str:
         return ""
 
 
+def format_gcode_snippet_for_view(
+    path: Path | str,
+    *,
+    head_bytes: int = 96_000,
+    tail_bytes: int = 48_000,
+) -> tuple[str, str]:
+    """
+    G-Code-Text für die Anzeige (Anfang + ggf. Ende großer Dateien).
+    Rückgabe: (text, statuszeile).
+    """
+    p = Path(path)
+    if not p.is_file():
+        return "", "Datei nicht gefunden."
+    try:
+        size = p.stat().st_size
+    except OSError:
+        return "", "Datei nicht lesbar."
+    head = _read_gcode_region(p, max_bytes=head_bytes, from_end=False)
+    if size <= head_bytes + 1024:
+        lines = head.count("\n") + 1
+        return head, f"{size:,} Bytes · {lines:,} Zeilen (vollständig)"
+    tail = _read_gcode_region(p, max_bytes=tail_bytes, from_end=True)
+    omitted = max(0, size - head_bytes - tail_bytes)
+    mid = (
+        f"; --- {omitted:,} Bytes in der Mitte nicht angezeigt "
+        f"(„Herunterladen…“ für die ganze Datei) ---\n"
+    )
+    text = head.rstrip() + "\n\n" + mid + "\n" + tail.lstrip()
+    return text, f"{size:,} Bytes · Anfang + Ende (Vorschau)"
+
+
 def _active_weight_slots(weights: list[float]) -> int:
     return sum(1 for w in weights if w is not None and w > 0.01)
 
