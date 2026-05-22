@@ -41,9 +41,15 @@ def show_print_check_dialog(
     short = report.filename.replace("\\", "/").rsplit("/", 1)[-1]
     ttk.Label(
         top,
-        text=f"Datei: {short}",
+        text=f"Prüfe markierte Datei: {short}",
         font=("Segoe UI", 11, "bold"),
     ).pack(anchor="w")
+    ttk.Label(
+        top,
+        text="(Die Datei muss in der Liste grün markiert sein — nicht der letzte Druck.)",
+        style="Muted.TLabel",
+        wraplength=520,
+    ).pack(anchor="w", pady=(2, 0))
     ttk.Label(top, text=report.summary(), style="Muted.TLabel").pack(anchor="w", pady=(4, 0))
 
     body = tk.Frame(dlg, bg=BG)

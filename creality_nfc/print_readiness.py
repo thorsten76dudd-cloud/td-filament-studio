@@ -51,6 +51,7 @@ def check_print_readiness(
     *,
     layout: CfsLayout | None = None,
     local_gcode: Path | None = None,
+    file_entry: dict[str, Any] | None = None,
     low_threshold_g: int = 200,
     loaded_slot_index: int | None = None,
 ) -> PrintReadinessReport:
@@ -73,7 +74,7 @@ def check_print_readiness(
     slots = layout.primary_slots()
     all_slots = layout.all_slots()
 
-    entry = find_gcode_file_info(state, fn)
+    entry = file_entry if file_entry else find_gcode_file_info(state, fn)
     job = total_job_filament_grams(state, fn, file_entry=entry, local_path=local_gcode)
     total_g = job[0] if job else None
 
@@ -97,6 +98,13 @@ def check_print_readiness(
         if total_g:
             lines.append(
                 ReadinessLine("info", f"Geschätzter Gesamtverbrauch: ca. {total_g} g ({job[1]}).")
+            )
+        if plans and plans[0].spec.color_hex:
+            lines.append(
+                ReadinessLine(
+                    "info",
+                    f"G-Code-Farbe: {plans[0].spec.color_hex} → Slot {plans[0].slot_label}",
+                )
             )
         for plan in plans:
             sid = plan.slot_index

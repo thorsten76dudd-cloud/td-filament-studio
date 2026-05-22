@@ -102,5 +102,17 @@ class PrintCheckColorTests(unittest.TestCase):
             )
 
 
+    def test_active_specs_ignores_color_palette_without_weight(self) -> None:
+        from creality_nfc.gcode_filament import GcodeFilamentSpec, active_filament_specs
+
+        specs = [
+            GcodeFilamentSpec(0, "#FF8000", "PETG", None),
+            GcodeFilamentSpec(1, "#0000FF", "PETG", None),
+            GcodeFilamentSpec(2, None, None, None),
+            GcodeFilamentSpec(3, None, None, None),
+        ]
+        self.assertEqual(active_filament_specs(specs), [])
+
+
 if __name__ == "__main__":
     unittest.main()

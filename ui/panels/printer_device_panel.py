@@ -842,37 +842,54 @@ class PrinterDevicePanel(ttk.Frame):
     def show_print_history(self) -> None:
         self.app.show_print_history()
 
+    def _local_gcode_for_entry(self, entry: dict | None) -> Path | None:
+        """Cache/Pfad nur zur aktuell in der Liste gewählten Datei."""
+        if not entry:
+            return None
+        from creality_nfc.gcode_filament import resolve_local_gcode_path
+
+        name = str(entry.get("name") or entry.get("path") or "").strip()
+        if not name:
+            return None
+        base = name.replace("\\", "/").rsplit("/", 1)[-1].lower()
+        cache = self._gcode_cache_path
+        if cache and cache.is_file() and cache.name.lower() == base:
+            return cache
+        from app.paths import GCODE_CACHE_DIR
+
+        cached = GCODE_CACHE_DIR / Path(name).name
+        if cached.is_file():
+            return cached
+        return resolve_local_gcode_path(name)
+
     def show_print_check(self) -> None:
         if not self._conn:
             notify(self, "Zuerst mit dem Drucker verbinden.", "warn")
             return
-        fname = ""
-        if hasattr(self, "print_file_var"):
-            raw = self.print_file_var.get().strip()
-            if raw and raw != "—":
-                fname = raw
         entry = self._selected_gcode_entry()
-        if not fname and entry:
-            fname = str(entry.get("name") or entry.get("path") or "").strip()
-        if not fname:
-            notify(self, "Zuerst eine G-Code-Datei in der Liste wählen.", "warn")
+        if not entry:
+            notify(self, "Bitte zuerst eine G-Code-Datei in der Liste anklicken.", "warn")
             return
-        from creality_nfc.cfs_feed import find_loaded_slot_index
+        fname = str(entry.get("name") or entry.get("path") or "").strip()
+        if not fname:
+            notify(self, "Dateiname unbekannt — Liste aktualisieren.", "warn")
+            return
         from creality_nfc.cfs_layout import parse_cfs_layout
         from creality_nfc.print_readiness import check_print_readiness
         from ui.print_check_dialog import show_print_check_dialog
 
         snap = self._conn.snapshot()
         layout = getattr(self, "_cfs_layout", None) or parse_cfs_layout(snap)
+        local = self._local_gcode_for_entry(entry)
         report = check_print_readiness(
             snap,
             fname,
             self.app.inventory,
             self._cfs_slots,
             layout=layout,
-            local_gcode=self._gcode_cache_path,
+            local_gcode=local,
+            file_entry=entry,
             low_threshold_g=self.app.settings.low_filament_threshold_g,
-            loaded_slot_index=find_loaded_slot_index(snap),
         )
         show_print_check_dialog(self, report)
 

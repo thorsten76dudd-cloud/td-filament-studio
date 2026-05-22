@@ -197,16 +197,22 @@ def parse_filament_specs(info: dict[str, Any]) -> list[GcodeFilamentSpec]:
 
 def active_filament_specs(specs: list[GcodeFilamentSpec]) -> list[GcodeFilamentSpec]:
     """Extruder, die im Job wirklich genutzt werden."""
-    by_weight = [
-        s
-        for s in specs
-        if slot_filament_grams(s.weight_g) is not None
-    ]
+    by_weight = [s for s in specs if s.weight_g is not None and float(s.weight_g) > 0.01]
     if by_weight:
-        return by_weight
+        total = sum(float(s.weight_g) for s in by_weight)
+        if len(by_weight) == 1:
+            return by_weight
+        return [
+            s
+            for s in by_weight
+            if float(s.weight_g) >= 0.05 or float(s.weight_g) >= total * 0.01
+        ]
     by_color = [s for s in specs if s.color_hex]
-    if by_color:
+    if len(by_color) == 1:
         return by_color
+    if len(by_color) > 1:
+        # Mehrere Farben ohne Gewicht = oft Slicer-Palette, nicht Multi-Color-Job
+        return []
     by_type = [s for s in specs if s.material_type]
     return by_type[:1] if by_type else specs[:1]
 
