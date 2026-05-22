@@ -411,8 +411,13 @@ class TDFilamentStudioApp(AppTk):
             tab = self.notebook.nametowidget(self.notebook.select())
         except tk.TclError:
             return
-        if tab is self.tab_printer and hasattr(self, "_device_panel"):
-            self._device_panel.on_tab_shown()
+        panel = getattr(self, "_device_panel", None)
+        if panel is None:
+            return
+        if tab is self.tab_printer:
+            panel.on_tab_shown()
+        else:
+            panel.on_tab_hidden()
 
     def _build_tab_tag(self) -> None:
         root = ttk.Frame(self.tab_tag)

@@ -135,6 +135,9 @@ class PrinterDevicePanel(ttk.Frame):
         self._cfs_fetch_pending = False
         self._reconnect_pending = False
         self._printer_tab_visited = False
+        self._printer_tab_visible = False
+        self._RECONNECT_IDLE_TAB_S = 90.0
+        self._RECONNECT_IDLE_BG_S = 180.0
         self._last_snap: dict[str, Any] = {}
         self._last_auto_burst = 0.0
         self._live_poll_id: str | None = None
@@ -152,9 +155,14 @@ class PrinterDevicePanel(ttk.Frame):
         host = normalize_host(self.app.ssh_host_var.get())
         return host or None
 
+    def on_tab_hidden(self) -> None:
+        """Tab „Drucker“ verlassen — Verbindung offen lassen (kein disconnect)."""
+        self._printer_tab_visible = False
+
     def on_tab_shown(self) -> None:
         """Tab „Drucker“ aktiv — Verbindung und Live-Updates sicherstellen."""
         self._printer_tab_visited = True
+        self._printer_tab_visible = True
         if not self._poll_id:
             self._schedule_poll()
         if self._last_cam_jpeg:
@@ -169,7 +177,8 @@ class PrinterDevicePanel(ttk.Frame):
             self.connect()
             return
         if self._conn.connected:
-            if self._conn.has_received() and self._conn.recv_idle_seconds() > 15.0:
+            idle = self._conn.recv_idle_seconds() if self._conn.has_received() else 0.0
+            if idle > self._RECONNECT_IDLE_TAB_S:
                 self._force_reconnect()
             else:
                 self._soft_live_refresh()
@@ -476,11 +485,18 @@ class PrinterDevicePanel(ttk.Frame):
             if self._conn.connected:
                 recv_idle = self._conn.recv_idle_seconds()
                 print_idle = self._conn.print_idle_seconds()
-                if self._conn.has_received() and recv_idle > 15.0:
+                stale_limit = (
+                    self._RECONNECT_IDLE_TAB_S
+                    if self._printer_tab_visible
+                    else self._RECONNECT_IDLE_BG_S
+                )
+                if self._conn.has_received() and recv_idle > stale_limit:
                     self.conn_var.set("Verbindung unterbrochen — verbinde neu …")
                     self._force_reconnect()
                     self._poll_id = self.after(450, self._poll)
                     return
+                if not self._printer_tab_visible and recv_idle > 8.0:
+                    self._soft_live_refresh()
                 if print_idle > 6.0 and now - self._last_auto_burst > 6.0:
                     self._pull_live_snapshot_async()
                     self._last_auto_burst = now
