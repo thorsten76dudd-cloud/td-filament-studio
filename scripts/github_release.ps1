@@ -32,7 +32,7 @@ $notes = @(
     "## TD Filament Studio $Version",
     "",
     "### Fix",
-    "* G-Code Download: groesste Datei (UDISK vs usr/data) — volle ~3 MB statt ~145 KB",
+    "* G-Code Download: groesste Datei (UDISK vs usr/data), volle Datei statt 145 KB Vorschau",
     "* Kopieren/Speichern: komplette Cache-Datei wenn Vorschau nicht bearbeitet",
     "* Creality Web-UI: Port 4408/8000 statt Port 80 (404)",
     "",
