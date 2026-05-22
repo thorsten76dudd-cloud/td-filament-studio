@@ -160,7 +160,7 @@ class PrinterDevicePanel(ttk.Frame):
         self._printer_tab_visible = False
 
     def _resume_camera_after_tab(self) -> None:
-        """Kamera nach kurzem Tab-Wechsel: nur anzeigen/resize, nicht neu verbinden."""
+        """Kamera nach Tab-Wechsel: Bild/Edge nur anpassen, sonst normal starten."""
         host = normalize_host(
             self._conn.host if self._conn else (self._host_quiet() or "")
         )
@@ -177,15 +177,18 @@ class PrinterDevicePanel(ttk.Frame):
             self._cam_worker
             and self._cam_worker.running
             and self._cam_active_host == host
+            and self._last_cam_jpeg
         ):
-            if self._last_cam_jpeg:
-                self.after(30, self._paint_cam_frame)
+            self.after(30, self._paint_cam_frame)
             return
         if self._last_cam_jpeg and self._cam_active_host == host:
             self.after(30, self._paint_cam_frame)
-            return
+            if self._cam_worker and self._cam_worker.running:
+                return
         if self._conn and self._conn.connected:
-            self.after(100, lambda: self._ensure_live_camera(force=False))
+            self._ensure_live_camera(force=not bool(self._last_cam_jpeg))
+        elif self._host_quiet():
+            self._schedule_camera_start()
 
     def on_tab_shown(self) -> None:
         """Tab „Drucker“ aktiv — Verbindung und Live-Updates sicherstellen."""
@@ -193,14 +196,12 @@ class PrinterDevicePanel(ttk.Frame):
         self._printer_tab_visible = True
         if not self._poll_id:
             self._schedule_poll()
-        self._resume_camera_after_tab()
         host = self._host_quiet()
         if not host:
             return
         if not self._conn:
             self.connect()
-            return
-        if self._conn.connected:
+        elif self._conn.connected:
             idle = self._conn.recv_idle_seconds() if self._conn.has_received() else 0.0
             if idle > self._RECONNECT_IDLE_TAB_S:
                 self._force_reconnect()
@@ -211,6 +212,7 @@ class PrinterDevicePanel(ttk.Frame):
                 self.after(900, self._refresh_print_strip)
         elif not self._reconnect_pending:
             self._force_reconnect()
+        self.after(250, self._resume_camera_after_tab)
 
     def on_printer_subtab_shown(self) -> None:
         """Unter-Tabs Monitor/Steuerung/… — Druckzeile auch auf Monitor aktualisieren."""
@@ -416,8 +418,15 @@ class PrinterDevicePanel(ttk.Frame):
         self.after(1200, self._pull_live_snapshot_async)
         if fresh:
             self._schedule_camera_start()
-        else:
+        elif (
+            self._cam_worker
+            and self._cam_worker.running
+            and self._last_cam_jpeg
+            and self._cam_active_host == host
+        ):
             self.after(80, self._resume_camera_after_tab)
+        else:
+            self._schedule_camera_start()
         self.after(400, self._refresh_print_strip)
         self.after(1500, self._refresh_print_strip)
         if fresh:
@@ -441,12 +450,10 @@ class PrinterDevicePanel(ttk.Frame):
             self._schedule_connect_refresh(0)
             if not self._live_poll_id:
                 self._schedule_live_poll()
-            if not self._last_cam_jpeg and not (
-                self._cam_worker and self._cam_worker.running
-            ):
-                self._schedule_camera_start()
-            else:
+            if self._last_cam_jpeg and self._cam_worker and self._cam_worker.running:
                 self.after(50, self._resume_camera_after_tab)
+            else:
+                self._schedule_camera_start()
             threading.Thread(target=self._run_wait_telemetry, daemon=True).start()
             return
         self.disconnect()
@@ -1247,10 +1254,10 @@ class PrinterDevicePanel(ttk.Frame):
                 self._paint_cam_frame()
                 return
             if self._cam_worker.running:
-                return
-            age = time.monotonic() - self._cam_started_at if self._cam_started_at else 999.0
-            if age < 30.0:
-                return
+                age = time.monotonic() - (self._cam_started_at or 0.0)
+                if age < 12.0:
+                    self._cam_status_var.set("Kamera: verbinde …")
+                    return
             force = True
         same_host = self._cam_active_host == host
         self._stop_live_camera(keep_frame=same_host and not force)

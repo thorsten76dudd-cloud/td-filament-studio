@@ -2,10 +2,10 @@
 # Creates latest stable release and removes the previous stable release tag.
 
 param(
-    [string]$Version = "1.5.74",
-    [string]$Tag = "v1.5.74-stable",
+    [string]$Version = "1.5.75",
+    [string]$Tag = "v1.5.75-stable",
     [string]$Repo = "thorsten76dudd-cloud/td-filament-studio",
-    [string]$RemoveTag = "v1.5.73-stable",
+    [string]$RemoveTag = "v1.5.74-stable",
     [switch]$DeleteAllOldReleases
 )
 
@@ -32,8 +32,8 @@ $notes = @(
     "## TD Filament Studio $Version",
     "",
     "### Tab Drucker / Kamera",
+    "* Fix: Kamera startet wieder zuverlaessig (1.5.74-Regression)",
     "* Live-Kamera bleibt beim kurzen Tab-Wechsel verbunden",
-    "* WebSocket-Neuverbindung stoppt die Kamera nicht mehr",
     "",
     "### Enthalten ab 1.5.73",
     "* Drucker-Tab verbunden lassen, Material-DB lokal, Filament-Dialog",
