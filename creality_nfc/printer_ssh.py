@@ -256,7 +256,15 @@ def list_gcode_files_ssh(
 
 def _gcode_path_candidates(remote: str) -> list[str]:
     remote = remote.strip().replace("\\", "/")
-    paths = [remote]
+    paths: list[str] = []
+    if remote:
+        paths.append(remote)
+    name = remote.rsplit("/", 1)[-1] if remote else ""
+    for directory in GCODE_DIR_CANDIDATES:
+        if name:
+            candidate = f"{directory}/{name.lstrip('/')}"
+            if candidate not in paths:
+                paths.append(candidate)
     if remote.startswith(GCODE_REMOTE_DIR):
         alt = remote.replace(GCODE_REMOTE_DIR, GCODE_DIR_CANDIDATES[1], 1)
         if alt not in paths:
@@ -268,19 +276,39 @@ def _gcode_path_candidates(remote: str) -> list[str]:
     return paths
 
 
+def _pick_largest_gcode_remote(sftp, remote: str) -> tuple[str, int]:
+    """K2: gleicher Name in usr/data und UDISK — größte Datei = vollständiger G-Code."""
+    best_path = ""
+    best_size = -1
+    last_err: OSError | None = None
+    for path in _gcode_path_candidates(remote):
+        try:
+            size = int(sftp.stat(path).st_size)
+        except OSError as exc:
+            last_err = exc
+            continue
+        if size > best_size:
+            best_size = size
+            best_path = path
+    if not best_path or best_size < 0:
+        raise FileNotFoundError(
+            f"G-Code auf dem Drucker nicht gefunden: {remote}"
+        ) from last_err
+    return best_path, best_size
+
+
 def _sftp_download(client, remote: str, local: Path) -> None:
     sftp = client.open_sftp()
-    last_err: Exception | None = None
     try:
-        for path in _gcode_path_candidates(remote):
-            try:
-                sftp.get(path, str(local))
-                return
-            except OSError as exc:
-                last_err = exc
+        best_path, expected = _pick_largest_gcode_remote(sftp, remote)
+        sftp.get(best_path, str(local))
+        got = local.stat().st_size
+        if got != expected:
+            raise OSError(
+                f"Download unvollständig ({got:,} von {expected:,} Bytes): {best_path}"
+            )
     finally:
         sftp.close()
-    raise FileNotFoundError(f"G-Code auf dem Drucker nicht gefunden: {remote}") from last_err
 
 
 def download_gcode_from_printer(

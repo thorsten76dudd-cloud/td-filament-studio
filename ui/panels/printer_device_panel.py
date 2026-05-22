@@ -16,7 +16,7 @@ from typing import TYPE_CHECKING, Any
 from creality_nfc.k2_camera_embed import EmbeddedEdgeCamera
 from creality_nfc.k2_camera_live import K2CameraWorker, open_camera_app_window
 from creality_nfc.printer_camera import fetch_image_urls, open_url
-from creality_nfc.printer_klipper import best_ui_url, probe_klipper
+from creality_nfc.printer_klipper import best_ui_url, creality_web_ui_url, probe_klipper
 from creality_nfc.print_cfs import get_cfs_box_id
 from creality_nfc.printer_control import (
     PRINT_SPEED_PRESETS,
@@ -553,11 +553,44 @@ class PrinterDevicePanel(ttk.Frame):
         body = text or ""
         self.gcode_text.delete("1.0", tk.END)
         self.gcode_text.insert("1.0", body)
+        try:
+            self.gcode_text.edit_modified(False)
+        except tk.TclError:
+            pass
         self._set_gcode_hint_display(body)
         self.gcode_text.see("1.0")
         self._sync_gcode_hint_to_gcode()
         if hasattr(self, "_gcode_text_status"):
             self._gcode_text_status.set(status)
+
+    @staticmethod
+    def _entry_size_bytes(entry: dict | None) -> int | None:
+        if not entry:
+            return None
+        raw = entry.get("size")
+        if raw is None or raw == "":
+            return None
+        try:
+            return int(float(str(raw).replace(",", ".").strip()))
+        except (TypeError, ValueError):
+            return None
+
+    def _gcode_cache_bytes(self) -> bytes | None:
+        cache = self._gcode_cache_path
+        if not cache or not cache.is_file():
+            return None
+        try:
+            return cache.read_bytes()
+        except OSError:
+            return None
+
+    def _gcode_editor_dirty(self) -> bool:
+        if not hasattr(self, "gcode_text"):
+            return False
+        try:
+            return bool(self.gcode_text.edit_modified())
+        except tk.TclError:
+            return False
 
     def _read_gcode_for_clipboard(self) -> tuple[str, bool]:
         """Text zum Kopieren: Auswahl, sonst komplette Cache-Datei falls vorhanden."""
@@ -566,12 +599,9 @@ class PrinterDevicePanel(ttk.Frame):
                 return self.gcode_text.get(tk.SEL_FIRST, tk.SEL_LAST), False
         except tk.TclError:
             pass
-        cache = self._gcode_cache_path
-        if cache and cache.is_file():
-            try:
-                return cache.read_text(encoding="utf-8", errors="replace"), True
-            except OSError:
-                pass
+        data = self._gcode_cache_bytes()
+        if data is not None:
+            return data.decode("utf-8", errors="replace"), True
         return self.gcode_text.get("1.0", "end-1c"), False
 
     def _copy_gcode_display(self) -> None:
@@ -581,6 +611,17 @@ class PrinterDevicePanel(ttk.Frame):
         if not chunk.strip():
             notify(self, "Kein G-Code zum Kopieren.", "warn")
             return
+        expected = self._entry_size_bytes(self._selected_gcode_entry())
+        if from_full_file and expected and len(chunk.encode("utf-8", errors="ignore")) < int(
+            expected * 0.9
+        ):
+            notify(
+                self,
+                f"Cache nur {len(chunk):,} Zeichen, Drucker meldet {expected:,} Bytes.\n"
+                "Bitte „G-Code laden“ oder „Herunterladen…“ erneut.",
+                "warn",
+            )
+            return
         self.clipboard_clear()
         self.clipboard_append(chunk)
         if from_full_file:
@@ -588,7 +629,7 @@ class PrinterDevicePanel(ttk.Frame):
             if len(chunk) > len(shown) + 200:
                 notify(
                     self,
-                    "Komplette G-Code-Datei kopiert (nicht nur die Vorschau in der Anzeige).",
+                    f"Komplette Datei kopiert ({len(chunk):,} Zeichen, nicht nur die Vorschau).",
                     "ok",
                 )
                 return
@@ -597,16 +638,18 @@ class PrinterDevicePanel(ttk.Frame):
     def _save_gcode_edited_local(self) -> None:
         if not hasattr(self, "gcode_text"):
             return
+        entry = self._selected_gcode_entry()
+        cache = self._gcode_cache_bytes()
+        dirty = self._gcode_editor_dirty()
         body = self.gcode_text.get("1.0", "end-1c")
-        if not body.strip():
+        if not body.strip() and not cache:
             notify(self, "Kein G-Code zum Speichern.", "warn")
             return
-        entry = self._selected_gcode_entry()
         initial = (entry.get("name") if entry else None) or "druck.gcode"
         if not str(initial).lower().endswith(".gcode"):
             initial = f"{initial}.gcode"
         path = filedialog.asksaveasfilename(
-            title="G-Code lokal speichern",
+            title="G-Code speichern",
             defaultextension=".gcode",
             filetypes=[("G-Code", "*.gcode"), ("Alle Dateien", "*.*")],
             initialfile=Path(initial).name,
@@ -614,13 +657,35 @@ class PrinterDevicePanel(ttk.Frame):
         if not path:
             return
         try:
-            Path(path).write_text(body, encoding="utf-8", errors="replace")
+            if cache and not dirty:
+                Path(path).write_bytes(cache)
+                nbytes = len(cache)
+            else:
+                if cache and dirty:
+                    if not confirm(
+                        self,
+                        "Nur die bearbeitete Vorschau speichern?\n\n"
+                        "Für die komplette Datei vom Drucker: Abbrechen und "
+                        "„Herunterladen…“ nutzen (oder Vorschau nicht bearbeiten).",
+                    ):
+                        return
+                Path(path).write_text(body, encoding="utf-8", errors="replace")
+                nbytes = len(body.encode("utf-8", errors="replace"))
+            expected = self._entry_size_bytes(entry)
+            if expected and nbytes < int(expected * 0.9):
+                notify(
+                    self,
+                    f"Gespeichert ({nbytes:,} Bytes) — kleiner als Drucker-Größe "
+                    f"({expected:,} Bytes). Für die volle Datei: „Herunterladen…“.",
+                    "warn",
+                )
+                return
         except OSError as exc:
             notify(self, f"Speichern fehlgeschlagen: {exc}", "error")
             return
         notify(
             self,
-            "Gespeichert (nur auf dem PC — nicht automatisch auf dem Drucker).",
+            f"Gespeichert ({nbytes:,} Bytes, nur auf dem PC).",
             "ok",
         )
 
@@ -674,8 +739,12 @@ class PrinterDevicePanel(ttk.Frame):
             safe = Path(name).name
             local = GCODE_CACHE_DIR / safe
             download_gcode_from_printer(host, password, remote, local)
+            got = local.stat().st_size
+            expected = self._entry_size_bytes(entry)
             body, status = format_gcode_snippet_for_view(local)
-            status = f"{status} · {safe}"
+            status = f"{status} · {safe} · Cache {got:,} B"
+            if expected and got < int(expected * 0.9):
+                status += f" (Drucker: {expected:,} B — bitte „Herunterladen…“ prüfen)"
 
             def ok() -> None:
                 if gen != self._gcode_text_gen:
@@ -2135,7 +2204,16 @@ class PrinterDevicePanel(ttk.Frame):
         if not host:
             notify(self, "Bitte zuerst die Drucker-IP im Tab „RFID-Tag“ eintragen.", "warn")
             return
-        open_url(f"http://{host}/")
+        url = creality_web_ui_url(host)
+        if url:
+            open_url(url)
+            return
+        notify(
+            self,
+            "Keine Creality-Web-Oberfläche gefunden (Port 80 liefert oft 404).\n"
+            "K2: WebSocket Port 9999 — Steuerung in dieser App; optional „Klipper / Web-UI“.",
+            "warn",
+        )
 
     def open_klipper_ui(self) -> None:
         host = self._host()

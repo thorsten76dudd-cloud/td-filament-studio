@@ -477,8 +477,8 @@ def build_creality_dashboard(panel: PrinterDevicePanel, outer: ttk.Frame) -> Non
     ).pack(side="left")
     tip(
         gcode_act,
-        "Alles kopieren: komplette Datei vom PC-Cache (auch wenn nur Anfang/Ende sichtbar). "
-        "Strg+C nur die Auswahl. Bearbeitungen nur lokal.",
+        "Alles kopieren / Speichern: komplette Datei aus dem Cache nach „G-Code laden“ "
+        "(nicht nur die Vorschau). Volle Datei vom Drucker: „Herunterladen…“.",
     )
 
     button_grid(

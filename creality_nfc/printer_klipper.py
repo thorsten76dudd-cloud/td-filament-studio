@@ -130,3 +130,26 @@ def best_ui_url(host: str) -> str | None:
     if probe.moonraker:
         return _moonraker_base(host)
     return None
+
+
+def creality_web_ui_url(host: str, timeout: float = 2.0) -> str | None:
+    """
+    Creality-Oberfläche im Browser (K2: oft Port 4408 oder 8000, nicht Port 80 /).
+    """
+    host = normalize_host(host)
+    probe = probe_klipper(host, timeout=timeout)
+    for prefer in ("Creality-Web", "Creality-API", "Drucker-Web"):
+        for label, url in probe.ui_links:
+            if label == prefer:
+                return url
+    for port in (4408, 8000, 80):
+        if not _port_open(host, port, timeout=0.8):
+            continue
+        url = f"http://{host}" if port == 80 else f"http://{host}:{port}/"
+        if _http_head_ok(url, timeout=timeout):
+            return url
+    if _port_open(host, 4408, timeout=0.8):
+        return f"http://{host}:4408/"
+    if _port_open(host, 8000, timeout=0.8):
+        return f"http://{host}:8000/"
+    return None
