@@ -123,30 +123,40 @@ def show_cfs_batch_dialog(
     dlg.title("CFS — alle Slots")
     prepare_toplevel(dlg, parent)
     theme_dialog(dlg)
-    dlg.geometry("640x360")
-    dlg.minsize(480, 280)
+    dlg.geometry("920x380")
+    dlg.minsize(760, 300)
 
     ttk.Label(
         dlg,
         text="Live vom Drucker (WebSocket). RFID-Chips am PC: Tab RFID-Tag.",
         style="Muted.TLabel",
-        wraplength=580,
+        wraplength=860,
     ).pack(anchor="w", padx=12, pady=(10, 6))
 
+    tree_wrap = ttk.Frame(dlg)
+    tree_wrap.pack(fill="both", expand=True, padx=12, pady=4)
+    tree_wrap.grid_rowconfigure(0, weight=1)
+    tree_wrap.grid_columnconfigure(0, weight=1)
+
     cols = ("slot", "mat", "color", "rfid", "spool", "rest", "status")
-    tree = ttk.Treeview(dlg, columns=cols, show="headings", height=6)
-    for c, t, w in (
-        ("slot", "Slot", 44),
-        ("mat", "Material", 100),
-        ("color", "Farbe", 70),
-        ("rfid", "RFID (Drucker)", 100),
-        ("spool", "Meine Spule", 120),
-        ("rest", "Rest", 60),
-        ("status", "Status", 140),
+    tree = ttk.Treeview(tree_wrap, columns=cols, show="headings", height=6)
+    for c, t, w, stretch in (
+        ("slot", "Slot", 48, False),
+        ("mat", "Material", 72, False),
+        ("color", "Farbe", 76, False),
+        ("rfid", "RFID", 88, False),
+        ("spool", "Meine Spule", 280, True),
+        ("rest", "Rest", 72, False),
+        ("status", "Status", 120, False),
     ):
         tree.heading(c, text=t)
-        tree.column(c, width=w)
-    tree.pack(fill="both", expand=True, padx=12, pady=4)
+        tree.column(c, width=w, minwidth=w // 2, stretch=stretch)
+    sy = ttk.Scrollbar(tree_wrap, orient="vertical", command=tree.yview)
+    sx = ttk.Scrollbar(tree_wrap, orient="horizontal", command=tree.xview)
+    tree.configure(yscrollcommand=sy.set, xscrollcommand=sx.set)
+    tree.grid(row=0, column=0, sticky="nsew")
+    sy.grid(row=0, column=1, sticky="ns")
+    sx.grid(row=1, column=0, sticky="ew")
 
     cfs_meta = meta if meta is not None else parse_cfs_meta(state)
     slot_list = slots if slots is not None else parse_cfs_slots(state)
