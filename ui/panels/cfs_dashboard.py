@@ -39,6 +39,7 @@ class CfsDashboard(ttk.Frame):
         on_feed: Callable[[], None] | None = None,
         on_retract: Callable[[], None] | None = None,
         on_bind_spool: Callable[[int], None] | None = None,
+        on_batch_scan: Callable[[], None] | None = None,
         inventory=None,
     ) -> None:
         self._printer = appearance == "printer"
@@ -82,6 +83,17 @@ class CfsDashboard(ttk.Frame):
         top.pack(fill="x", padx=8, pady=(8, 4))
         title = "Filamenteinstellungen" if self._creality else "Filament"
         ttk.Label(top, text=title, style=self._sh).pack(side="left")
+        if on_batch_scan:
+            tip(
+                rounded_button(
+                    top,
+                    "Alle Slots",
+                    on_batch_scan,
+                    variant="secondary",
+                    compact=True,
+                ),
+                "Übersicht 1A–1D mit verknüpften Spulen.",
+            ).pack(side="right", padx=(0, 6))
         tip(
             ttk.Button(top, text="↻", width=3, command=on_refresh, style=self._sb),
             "CFS-Daten neu laden.",

@@ -848,27 +848,33 @@ class SpoolManagerPanel(ttk.Frame):
             notify(self, "Bitte eine Spule auswählen.", "warn")
             return
         path = filedialog.asksaveasfilename(
-            defaultextension=".txt",
-            initialfile=f"spule_{sp.label.replace(' ', '_')}.txt",
-            filetypes=[("Text", "*.txt")],
+            defaultextension=".html",
+            initialfile=f"etikett_{sp.label.replace(' ', '_')}.html",
+            filetypes=[("HTML-Etikett", "*.html"), ("Text", "*.txt")],
         )
         if not path:
             return
-        lines = [
-            f"Spule: {sp.label}",
-            f"Bemerkung: {sp.notes or '—'}",
-            f"Marke: {sp.brand}",
-            f"Material: {sp.material_name}",
-            f"ID: {sp.filament_id}",
-            f"Farbe: #{sp.color_hex}",
-            f"Gewicht: {sp.weight}",
-            f"Rest: {sp.remaining_g} g" if sp.remaining_g is not None else "Rest: —",
-            f"Serie: {sp.serial}",
-            f"Tag-UID: {sp.tag_uid or '—'}",
-            f"CFS-Slot: {sp.cfs_slot_label() or '—'}",
-        ]
-        Path(path).write_text("\n".join(lines), encoding="utf-8")
-        notify(self, f"Etikett: {path}", "ok")
+        try:
+            import webbrowser
+
+            from creality_nfc.spool_label import write_spool_label_html
+
+            if str(path).lower().endswith(".html"):
+                write_spool_label_html(Path(path), sp)
+                webbrowser.open(Path(path).as_uri())
+                notify(self, f"Etikett (HTML) — im Browser drucken:\n{path}", "ok")
+            else:
+                lines = [
+                    f"Spule: {sp.label}",
+                    f"Marke: {sp.brand} · {sp.material_name}",
+                    f"Rest: {sp.remaining_g} g" if sp.remaining_g is not None else "Rest: —",
+                    f"SN: {sp.serial} · ID {sp.filament_id}",
+                    f"UID: {sp.tag_uid or '—'}",
+                ]
+                Path(path).write_text("\n".join(lines), encoding="utf-8")
+                notify(self, f"Etikett: {path}", "ok")
+        except OSError as exc:
+            notify(self, str(exc), "error")
 
     def _apply_to_tag(self) -> None:
         sp = self._selected()

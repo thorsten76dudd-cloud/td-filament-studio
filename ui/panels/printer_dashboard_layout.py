@@ -168,6 +168,24 @@ def _build_print_strip(panel: PrinterDevicePanel, parent: ttk.Frame) -> None:
     ttk.Label(mid, textvariable=panel.print_prog_var, style=_MUTED).pack(side="left")
     ttk.Label(mid, textvariable=panel._print_hint_var, style=_MUTED).pack(side="right")
 
+    panel._filament_live_var = tk.StringVar(value="")
+    ttk.Label(
+        parent,
+        textvariable=panel._filament_live_var,
+        style=_MUTED,
+        wraplength=560,
+    ).pack(anchor="w", pady=(0, 4))
+
+    hist_row = ttk.Frame(parent, style="Printer.TFrame")
+    hist_row.pack(fill="x", pady=(0, 4))
+    rounded_button(
+        hist_row,
+        "Druck-Historie",
+        panel.show_print_history,
+        variant="secondary",
+        compact=True,
+    ).pack(side="left")
+
     ctrl = tk.Frame(parent, bg=CARD)
     ctrl.pack(fill="x", pady=(6, 0))
     ttk.Label(
@@ -296,6 +314,7 @@ def build_creality_dashboard(panel: PrinterDevicePanel, outer: ttk.Frame) -> Non
         on_feed=panel._cfs_feed,
         on_retract=panel._cfs_retract,
         on_bind_spool=panel._bind_cfs_spool_slot,
+        on_batch_scan=panel.show_cfs_batch_scan,
         inventory=panel.app.inventory,
     )
     panel.cfs_dashboard.pack(fill="both", expand=True)
@@ -431,6 +450,7 @@ def build_creality_dashboard(panel: PrinterDevicePanel, outer: ttk.Frame) -> Non
     )
     apply_text_area_style(panel.gcode_text, bg=P_CARD_ALT)
     panel.gcode_text.grid(row=0, column=0, sticky="nsew")
+    panel.gcode_text.bind("<Button-1>", panel._gcode_on_click)
     panel.gcode_hint_text = tk.Text(
         txt_wrap,
         height=22,
@@ -459,8 +479,30 @@ def build_creality_dashboard(panel: PrinterDevicePanel, outer: ttk.Frame) -> Non
         _w.bind("<Button-4>", _gcode_wheel)
         _w.bind("<Button-5>", _gcode_wheel)
 
+    gcode_search = ttk.Frame(gcode_txt_frame, style="Printer.TFrame")
+    gcode_search.grid(row=3, column=0, sticky="ew", pady=(4, 0))
+    gcode_search.columnconfigure(1, weight=1)
+    ttk.Label(gcode_search, text="Suche", style=_MUTED).grid(row=0, column=0, sticky="w")
+    ttk.Entry(gcode_search, textvariable=panel._gcode_search_var, width=24).grid(
+        row=0, column=1, sticky="ew", padx=(6, 6)
+    )
+    rounded_button(
+        gcode_search,
+        "Weiter",
+        lambda: panel._gcode_find_next(backward=False),
+        variant="secondary",
+        compact=True,
+    ).grid(row=0, column=2, padx=(0, 4))
+    rounded_button(
+        gcode_search,
+        "Zurück",
+        lambda: panel._gcode_find_next(backward=True),
+        variant="secondary",
+        compact=True,
+    ).grid(row=0, column=3)
+
     gcode_act = ttk.Frame(gcode_txt_frame, style="Printer.TFrame")
-    gcode_act.grid(row=3, column=0, sticky="ew", pady=(4, 0))
+    gcode_act.grid(row=4, column=0, sticky="ew", pady=(4, 0))
     rounded_button(
         gcode_act,
         "Alles kopieren",
@@ -472,6 +514,13 @@ def build_creality_dashboard(panel: PrinterDevicePanel, outer: ttk.Frame) -> Non
         gcode_act,
         "Speichern unter…",
         panel._save_gcode_edited_local,
+        variant="secondary",
+        compact=True,
+    ).pack(side="left", padx=(0, 6))
+    rounded_button(
+        gcode_act,
+        "HTML-Export…",
+        panel._export_gcode_html,
         variant="secondary",
         compact=True,
     ).pack(side="left")

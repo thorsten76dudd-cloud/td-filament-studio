@@ -30,6 +30,8 @@ class AppSettings:
     alert_print_pause_error: bool = True
     alert_print_popup: bool = True
     alert_print_windows_toast: bool = True
+    alert_print_complete_toast: bool = True
+    alert_low_filament_toast: bool = True
     # G-Code-Dateien, für die der Verbrauchs-Dialog schon erledigt/abgebrochen wurde.
     post_print_deduct_handled: list[str] = field(default_factory=list)
     protect_tag_overwrite: bool = True

@@ -132,6 +132,22 @@ class SettingsPanel(ttk.Frame):
             text="… zusätzlich Windows-Benachrichtigung (wenn App im Hintergrund)",
             variable=self.alert_print_toast,
         ).pack(anchor="w", padx=24, pady=(0, 4))
+        self.alert_complete_toast = tk.BooleanVar(
+            value=getattr(settings, "alert_print_complete_toast", True)
+        )
+        self.alert_low_toast = tk.BooleanVar(
+            value=getattr(settings, "alert_low_filament_toast", True)
+        )
+        ttk.Checkbutton(
+            filament,
+            text="Windows-Benachrichtigung wenn Druck fertig ist",
+            variable=self.alert_complete_toast,
+        ).pack(anchor="w", padx=8)
+        ttk.Checkbutton(
+            filament,
+            text="Windows-Benachrichtigung bei niedrigem Filament-Rest",
+            variable=self.alert_low_toast,
+        ).pack(anchor="w", padx=8, pady=(0, 4))
         ttk.Label(
             filament,
             text="Gilt nur bei laufendem Druck und aktiver Verbindung zum K2 (Tab Drucker).",
@@ -270,6 +286,8 @@ class SettingsPanel(ttk.Frame):
         s.alert_print_pause_error = self.alert_print.get()
         s.alert_print_popup = self.alert_print_popup.get()
         s.alert_print_windows_toast = self.alert_print_toast.get()
+        s.alert_print_complete_toast = self.alert_complete_toast.get()
+        s.alert_low_filament_toast = self.alert_low_toast.get()
         s.default_post_print_deduct_g = int(self.default_deduct_g.get())
         s.protect_tag_overwrite = self.protect_tag.get()
         s.launch_with_creality_print = self.launch_with_creality.get()

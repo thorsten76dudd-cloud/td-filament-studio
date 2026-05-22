@@ -10,6 +10,8 @@ tkinterdnd2>=0.4.2
 
 websocket-client>=1.7.0
 
+qrcode[pil]>=7.4
+
 # optional: pyinstaller (build_exe.bat)
 
 

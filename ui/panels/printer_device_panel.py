@@ -118,6 +118,10 @@ class PrinterDevicePanel(ttk.Frame):
         self._gcode_text_hold = False
         self._gcode_text_gen = 0
         self._gcode_cache_path: Path | None = None
+        self._gcode_search_var = tk.StringVar(value="")
+        self._gcode_search_pos = "1.0"
+        self._print_job_started_mono: float | None = None
+        self._low_filament_warned_for: str = ""
         self._poll_id: str | None = None
         self._was_connected = False
         self._cfs_slots: list[CfsSlotInfo] = []
@@ -689,6 +693,161 @@ class PrinterDevicePanel(ttk.Frame):
             "ok",
         )
 
+    def _export_gcode_html(self) -> None:
+        body = self.gcode_text.get("1.0", "end-1c") if hasattr(self, "gcode_text") else ""
+        if not body.strip():
+            notify(self, "Kein G-Code zum Export.", "warn")
+            return
+        entry = self._selected_gcode_entry()
+        name = (entry.get("name") if entry else None) or "gcode.gcode"
+        path = filedialog.asksaveasfilename(
+            title="G-Code mit Erklärung (HTML)",
+            defaultextension=".html",
+            filetypes=[("HTML", "*.html")],
+            initialfile=Path(name).with_suffix(".html").name,
+        )
+        if not path:
+            return
+        try:
+            from creality_nfc.gcode_export_html import write_gcode_html_export
+
+            write_gcode_html_export(Path(path), body, filename=name)
+            import webbrowser
+
+            webbrowser.open(Path(path).as_uri())
+            notify(self, f"HTML exportiert:\n{path}", "ok")
+        except OSError as exc:
+            notify(self, str(exc), "error")
+
+    def _gcode_find_next(self, *, backward: bool = False) -> None:
+        if not hasattr(self, "gcode_text"):
+            return
+        needle = self._gcode_search_var.get().strip()
+        if not needle:
+            notify(self, "Suchbegriff eingeben (z. B. M104, LAYER).", "warn")
+            return
+        start = self._gcode_search_pos
+        if backward:
+            pos = self.gcode_text.search(needle, start, "1.0", backwards=True, regexp=True)
+        else:
+            pos = self.gcode_text.search(needle, start, tk.END, regexp=True)
+        if not pos:
+            pos = self.gcode_text.search(needle, "1.0", tk.END, regexp=True)
+            if backward:
+                pos = self.gcode_text.search(needle, tk.END, "1.0", backwards=True, regexp=True)
+        if not pos:
+            notify(self, f"Nicht gefunden: {needle}", "warn")
+            return
+        end = f"{pos}+{len(needle)}c"
+        self.gcode_text.tag_remove("search", "1.0", tk.END)
+        self.gcode_text.tag_add("search", pos, end)
+        self.gcode_text.tag_configure("search", background="#4a5568", foreground="#ffffff")
+        self.gcode_text.mark_set(tk.INSERT, pos)
+        self.gcode_text.see(pos)
+        self._gcode_search_pos = end
+        self._gcode_highlight_line(pos)
+        self._sync_gcode_hint_to_gcode()
+
+    def _gcode_on_click(self, event: tk.Event) -> None:
+        if not hasattr(self, "gcode_text"):
+            return
+        try:
+            index = self.gcode_text.index(f"@{event.x},{event.y}")
+        except tk.TclError:
+            return
+        self._gcode_highlight_line(index)
+
+    def _gcode_highlight_line(self, index: str) -> None:
+        if not hasattr(self, "gcode_text"):
+            return
+        try:
+            line = self.gcode_text.index(f"{index} linestart")
+            line_end = self.gcode_text.index(f"{line} lineend")
+        except tk.TclError:
+            return
+        self.gcode_text.tag_remove("curline", "1.0", tk.END)
+        self.gcode_text.tag_add("curline", line, f"{line_end}+1c")
+        self.gcode_text.tag_configure("curline", background="#2d4a3e")
+        if hasattr(self, "gcode_hint_text"):
+            ln = int(float(line))
+            self.gcode_hint_text.tag_remove("curline", "1.0", tk.END)
+            h_start = f"{ln}.0"
+            h_end = f"{ln}.0 lineend"
+            self.gcode_hint_text.tag_add("curline", h_start, h_end)
+            self.gcode_hint_text.tag_configure("curline", background="#3d3a2d")
+            self.gcode_hint_text.see(h_start)
+
+    def _update_live_filament_hint(self, state: dict, filename: str, prog: int | None) -> None:
+        if not hasattr(self, "_filament_live_var"):
+            return
+        if not filename or prog is None:
+            self._filament_live_var.set("")
+            return
+        from creality_nfc.cfs_feed import find_loaded_slot_index
+        from creality_nfc.cfs_spool_link import find_spool_for_slot
+        from creality_nfc.live_filament import format_live_filament_status
+
+        slot = find_loaded_slot_index(state)
+        sp_rem = None
+        if slot is not None:
+            sp = find_spool_for_slot(self.app.inventory, slot)
+            if sp and sp.remaining_g is not None:
+                sp_rem = sp.remaining_g
+        cache = self._gcode_cache_path
+        text = format_live_filament_status(
+            state,
+            filename=filename,
+            progress_pct=prog,
+            active_slot=slot,
+            cfs_slots=self._cfs_slots,
+            local_gcode=cache,
+            spool_remaining_g=sp_rem,
+        )
+        self._filament_live_var.set(text)
+
+    def _warn_low_filament_for_job(self, state: dict, filename: str) -> None:
+        key = (filename or "").strip()
+        if not key or key == self._low_filament_warned_for:
+            return
+        from creality_nfc.filament_alerts import find_low_filament_spools
+        from creality_nfc.gcode_filament import total_job_filament_grams
+
+        job = total_job_filament_grams(state, key)
+        planned = job[0] if job else None
+        thr = self.app.settings.low_filament_threshold_g
+        lows = find_low_filament_spools(
+            self.app.inventory, thr, planned_use_g=planned
+        )
+        if not lows:
+            return
+        self._low_filament_warned_for = key
+        msg = "\n".join(f"{s.label}: {why}" for s, why in lows[:4])
+        notify(self, f"Filament-Warnung vor Druck:\n{msg}", "warn")
+        if getattr(self.app.settings, "alert_low_filament_toast", True):
+            from creality_nfc.desktop_notify import show_desktop_notification
+
+            show_desktop_notification(
+                "Filament niedrig",
+                msg.replace("\n", " — "),
+                settings=self.app.settings,
+            )
+
+    def show_print_history(self) -> None:
+        self.app.show_print_history()
+
+    def show_cfs_batch_scan(self) -> None:
+        if not self._conn:
+            notify(self, "Zuerst mit dem Drucker verbinden.", "warn")
+            return
+        from ui.extras_dialogs import show_cfs_batch_dialog
+
+        show_cfs_batch_dialog(
+            self,
+            self._conn.snapshot(),
+            self.app.inventory,
+            threshold_g=self.app.settings.low_filament_threshold_g,
+        )
+
     def _reload_gcode_text(self) -> None:
         entry = self._selected_gcode_entry()
         if not entry:
@@ -1183,6 +1342,10 @@ class PrinterDevicePanel(ttk.Frame):
             if fname and fname != self._last_print_filename:
                 self.app._post_print_deduct_file = ""
                 self._peak_print_progress = 0
+                self._print_job_started_mono = time.monotonic()
+                self._warn_low_filament_for_job(s, fname)
+            elif self._print_job_started_mono is None:
+                self._print_job_started_mono = time.monotonic()
             loaded_now = find_loaded_slot_index(s)
             if loaded_now is not None:
                 self._last_print_cfs_slot = loaded_now
@@ -1201,7 +1364,13 @@ class PrinterDevicePanel(ttk.Frame):
             filename=fname,
             last_filename=self._last_print_filename,
         ):
+            done_name = fname or self._last_print_filename
+            try:
+                self.app.notify_print_finished(done_name)
+            except Exception:
+                pass
             self._request_post_print_deduct(s, ps)
+            self._print_job_started_mono = None
         if prog is not None:
             self._last_print_progress = max(0, min(100, int(prog)))
         if fname:
@@ -1257,6 +1426,7 @@ class PrinterDevicePanel(ttk.Frame):
             time_bits.append(left_txt)
 
         self.print_time_var.set(" · ".join(time_bits) if time_bits else "")
+        self._update_live_filament_hint(s, fname, prog)
         self._update_print_controls(s, phase=phase)
 
     def _manual_post_print_deduct(self) -> None:

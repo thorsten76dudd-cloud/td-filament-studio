@@ -202,6 +202,9 @@ class TDFilamentStudioApp(AppTk):
         self._scard_needs_start = False
         self._scard_help_shown = False
         self.inventory = SpoolInventory(DATA_DIR / "spools.json")
+        from creality_nfc.print_history import PrintHistoryStore
+
+        self.print_history = PrintHistoryStore(DATA_DIR / "print_history.json")
         self._filtered_profiles: list[FilamentProfile] = []
         self._material_combo_map: dict[str, tuple[str, str, str]] = {}
         self._current_profile: tuple[str, str, str] = ("", "", "")
@@ -272,6 +275,7 @@ class TDFilamentStudioApp(AppTk):
         m_file.add_command(label="Daten wiederherstellen (ZIP)…", command=self.restore_data)
         m_file.add_command(label="CFS-RFID ZIP importieren…", command=self.import_cfs_zip)
         m_file.add_command(label="Tag-Daten exportieren…", command=self.export_tag_data)
+        m_file.add_command(label="Druck-Historie…", command=self.show_print_history)
         m_file.add_command(label="Tag leeren…", command=self.format_tag_quick)
         m_file.add_command(label="Chip duplizieren…", command=self.duplicate_chip_start)
         m_file.add_separator()
@@ -2592,6 +2596,12 @@ class TDFilamentStudioApp(AppTk):
                 self, filename=filename, rows=dialog_rows
             )
             self._post_print_prompted = False
+            self._record_print_history(
+                filename,
+                deductions or [],
+                dialog_rows,
+                state,
+            )
             if not deductions:
                 return
             _remember_deduct_handled()
@@ -2613,10 +2623,90 @@ class TDFilamentStudioApp(AppTk):
                     "Abgezogen. Rest niedrig:\n" + "\n".join(low_msgs),
                     "warn",
                 )
+                if getattr(self.settings, "alert_low_filament_toast", True):
+                    from creality_nfc.desktop_notify import show_desktop_notification
+
+                    show_desktop_notification(
+                        "Filament niedrig",
+                        "\n".join(low_msgs),
+                        settings=self.settings,
+                    )
             else:
                 self.notify(f"Verbrauch abgezogen ({len(deductions)} Spule(n)).", "ok")
 
         self.after(400, _ask)
+
+    def show_print_history(self) -> None:
+        from ui.extras_dialogs import show_print_history_dialog
+
+        show_print_history_dialog(
+            self,
+            self.print_history,
+            threshold_g=self.settings.low_filament_threshold_g,
+        )
+
+    def notify_print_finished(self, filename: str) -> None:
+        fn = (filename or "").strip() or "Druck"
+        self.notify(f"Druck beendet: {fn}", "ok")
+        if getattr(self.settings, "alert_print_complete_toast", True):
+            from creality_nfc.desktop_notify import show_desktop_notification
+
+            show_desktop_notification("Druck fertig", fn, settings=self.settings)
+
+    def _record_print_history(
+        self,
+        filename: str,
+        deductions: list[tuple[str, int]],
+        dialog_rows: list,
+        state: dict,
+    ) -> None:
+        import time
+
+        from creality_nfc.cfs_adopt import SLOT_LABELS
+        from creality_nfc.print_history import PrintJobRecord, _now
+
+        panel = getattr(self, "_printer_device_panel", None)
+        duration_sec = None
+        if panel is not None:
+            started = getattr(panel, "_print_job_started_mono", None)
+            if started:
+                duration_sec = max(0, int(time.monotonic() - float(started)))
+        total_g = sum(g for _sid, g in deductions) if deductions else None
+        slot_idx = None
+        spool_label = ""
+        spool_id = ""
+        if panel is not None:
+            slot_idx = getattr(panel, "_last_print_cfs_slot", None)
+        if deductions:
+            spool_id = deductions[0][0]
+            sp = self.inventory.get(spool_id)
+            if sp:
+                spool_label = sp.label
+        est_g = None
+        try:
+            from creality_nfc.gcode_filament import total_job_filament_grams
+
+            job = total_job_filament_grams(state, filename)
+            if job:
+                est_g = job[0]
+        except Exception:
+            pass
+        self.print_history.add(
+            PrintJobRecord(
+                id=PrintJobRecord.new_id(),
+                ts=_now(),
+                filename=filename,
+                duration_sec=duration_sec,
+                progress_pct=100,
+                estimated_total_g=est_g,
+                deducted_g=total_g,
+                cfs_slot=slot_idx,
+                cfs_slot_label=SLOT_LABELS[slot_idx] if slot_idx is not None else "",
+                spool_label=spool_label,
+                spool_id=spool_id,
+                note="Abzug bestätigt" if deductions else "ohne Abzug",
+            )
+        )
 
     def _duplicate_last_tag_template(self) -> None:
         tpl = self._last_write_template
