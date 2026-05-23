@@ -45,8 +45,12 @@ def format_live_filament_status(
     """
     Kurztext für die Druck-Leiste (Monitor-Tab).
     """
-    if not filename or progress_pct is None or progress_pct < 1:
+    raw_name = (filename or "").strip()
+    if raw_name.lower().startswith("letzter druck:"):
+        raw_name = raw_name.split(":", 1)[-1].strip()
+    if not raw_name or progress_pct is None or progress_pct < 1:
         return ""
+    filename = raw_name
     entry = None
     try:
         from creality_nfc.gcode_filament import find_gcode_file_info

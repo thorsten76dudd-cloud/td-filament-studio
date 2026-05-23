@@ -3,6 +3,7 @@
 
 from __future__ import annotations
 
+import argparse
 import json
 import sys
 import time
@@ -13,6 +14,9 @@ ROOT = Path(__file__).resolve().parents[1]
 if str(ROOT) not in sys.path:
     sys.path.insert(0, str(ROOT))
 
+from creality_nfc.cfs_adopt import parse_cfs_slots
+from creality_nfc.cfs_feed import resolve_live_filament_slot_index
+from creality_nfc.live_filament import format_live_filament_status
 from creality_nfc.printer_state import format_print_phase_log, print_job_phase, print_status
 from creality_nfc.printer_ws import PrinterConnection
 
@@ -21,7 +25,9 @@ MAX_HOURS = 6
 INSTALL_DATA = Path.home() / "AppData/Local/Programs/TD Filament Studio/data"
 
 
-def _load_host() -> str:
+def _load_host(cli_host: str) -> str:
+    if cli_host.strip():
+        return cli_host.strip()
     for base in (INSTALL_DATA, ROOT / "data"):
         path = base / "printers.json"
         if not path.is_file():
@@ -30,7 +36,7 @@ def _load_host() -> str:
         printers = data.get("printers") or []
         if printers and printers[0].get("host"):
             return str(printers[0]["host"]).strip()
-    raise SystemExit("Kein Drucker in printers.json")
+    raise SystemExit("Kein Drucker in printers.json (oder --host angeben)")
 
 
 def _log(path: Path, line: str) -> None:
@@ -39,6 +45,35 @@ def _log(path: Path, line: str) -> None:
     with path.open("a", encoding="utf-8") as f:
         f.write(f"[{ts}] {line}\n")
     print(f"[{ts}] {line}")
+
+
+def _live_filament_line(state: dict, ps: dict) -> str:
+    fname = Path(str(ps.get("file") or "")).name
+    prog = ps.get("progress")
+    if not fname or prog is None:
+        return ""
+    try:
+        from app.paths import GCODE_CACHE_DIR
+    except ImportError:
+        GCODE_CACHE_DIR = ROOT / "data" / "gcode_cache"
+    local = GCODE_CACHE_DIR / fname
+    if not local.is_file():
+        alt = GCODE_CACHE_DIR / fname.replace(".stl_", "_").replace("1A.stl", "1A")
+        if alt.is_file():
+            local = alt
+        else:
+            local = None
+    slots = parse_cfs_slots(state)
+    slot_idx = resolve_live_filament_slot_index(state, fname, slots)
+    text = format_live_filament_status(
+        state,
+        filename=fname,
+        progress_pct=int(prog),
+        active_slot=slot_idx,
+        cfs_slots=slots,
+        local_gcode=local if local and local.is_file() else None,
+    )
+    return text or "(Live-Verbrauch noch nicht berechenbar)"
 
 
 def _gcode_summary(state: dict) -> str:
@@ -56,9 +91,19 @@ def _gcode_summary(state: dict) -> str:
 
 
 def main() -> int:
-    host = _load_host()
+    ap = argparse.ArgumentParser(description="K2-Druck per WebSocket loggen")
+    ap.add_argument("--host", default="", help="Drucker-IP (sonst printers.json)")
+    ap.add_argument(
+        "--interval",
+        type=int,
+        default=POLL_SEC,
+        help=f"Sekunden zwischen Log-Zeilen (Standard {POLL_SEC})",
+    )
+    args = ap.parse_args()
+    poll_sec = max(15, int(args.interval))
+    host = _load_host(args.host)
     log_path = ROOT / "data" / "print_monitor.log"
-    _log(log_path, f"Monitor start — {host}")
+    _log(log_path, f"Monitor start — {host} (alle {poll_sec} s)")
 
     conn = PrinterConnection(host)
     conn.start()
@@ -74,7 +119,7 @@ def main() -> int:
                     break
             if not conn.connected:
                 _log(log_path, f"WS nicht verbunden: {conn.last_error or 'unbekannt'}")
-                time.sleep(POLL_SEC)
+                time.sleep(poll_sec)
                 continue
 
             snap = conn.snapshot()
@@ -87,11 +132,12 @@ def main() -> int:
             left = ps.get("left_sec")
 
             if phase != last_phase or prog != last_prog:
+                live = _live_filament_line(snap, ps)
                 _log(
                     log_path,
                     f"{phase} | {fname or '?'} | {prog}% | Layer {layer}/{tot} | "
                     f"rest ~{left}s | {format_print_phase_log(snap, phase)} | "
-                    f"{_gcode_summary(snap)}",
+                    f"live: {live} | {_gcode_summary(snap)}",
                 )
                 last_phase = phase
                 last_prog = prog if prog is not None else last_prog
@@ -105,7 +151,7 @@ def main() -> int:
                 _log(log_path, "Druck beendet (idle nach printing).")
                 return 0
 
-            time.sleep(POLL_SEC)
+            time.sleep(poll_sec)
     finally:
         conn.stop()
 

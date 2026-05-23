@@ -181,8 +181,21 @@ class TDFilamentStudioApp(AppTk):
         self.reader = CrealityNfcReader()
         apply_window_icon(self)
         self.settings = AppSettings.load(DEFAULT_SETTINGS_PATH)
-        from ui.window_geometry import WindowGeometryManager, set_window_geometry_manager
+        from ui.window_geometry import (
+            WindowGeometryManager,
+            clear_table_dialog_geometries,
+            repair_stored_window_geometries,
+            set_window_geometry_manager,
+        )
 
+        geom_changed = clear_table_dialog_geometries(self.settings.window_geometry)
+        geom_changed = repair_stored_window_geometries(
+            self.settings.window_geometry,
+            screen_w=self.winfo_screenwidth(),
+            screen_h=self.winfo_screenheight(),
+        ) or geom_changed
+        if geom_changed:
+            self.settings.save(DEFAULT_SETTINGS_PATH)
         self._window_geom = WindowGeometryManager(self.settings, self._save_settings)
         set_window_geometry_manager(self._window_geom)
         self._window_geom.attach_root(self)
@@ -296,6 +309,12 @@ class TDFilamentStudioApp(AppTk):
         m_extra.add_command(label="Tag-Halter (Links)…", command=self.open_tag_holder_links)
         m_extra.add_command(label="Tab: Einstellungen", command=lambda: self.notebook.select(self.tab_settings))
         m_extra.add_command(label="Drucker verwalten…", command=self.open_printer_manager)
+        self._cfs_preview_var = tk.BooleanVar(value=False)
+        m_extra.add_checkbutton(
+            label="CFS-Vorschau (4 Boxen, nur Anzeige)",
+            variable=self._cfs_preview_var,
+            command=self._toggle_cfs_preview,
+        )
         m_extra.add_command(label="Nach Updates suchen", command=self.check_updates)
 
     def _build_header(self) -> None:
@@ -1028,9 +1047,12 @@ class TDFilamentStudioApp(AppTk):
 
     def _build_tab_printer(self) -> None:
         self._device_panel = PrinterDevicePanel(self.tab_printer, self)
+        self._printer_device_panel = self._device_panel
         self._device_panel.pack(fill="both", expand=True)
         self._printer_dashboard = PrinterDashboardPanel(self.tab_printer, self)
         self._printer_dashboard.pack(fill="x", padx=4, pady=(0, 8))
+        self._cfs_preview_var.set(False)
+        self._device_panel.set_cfs_preview(None)
 
     def _build_tab_spools(self) -> None:
         self._spool_panel = SpoolManagerPanel(self)
@@ -2273,7 +2295,7 @@ class TDFilamentStudioApp(AppTk):
         from ui.dialog_theme import prepare_toplevel
 
         dlg = tk.Toplevel(self)
-        dlg.title(f"CFS {slot_label(slot_index)} — Spule zuweisen")
+        dlg.title(f"CFS {slot.label} — Spule zuweisen")
         prepare_toplevel(
             dlg, self, width=420, height=280, geometry_key="cfs_bind_spool"
         )
@@ -2341,6 +2363,402 @@ class TDFilamentStudioApp(AppTk):
                 return entry
         return None
 
+    def _printer_cfs_context(self) -> tuple[dict, list[CfsSlotInfo]]:
+        """Aktueller Drucker-State und CFS-Slots (falls Tab verbunden)."""
+        from creality_nfc.cfs_layout import parse_cfs_layout
+
+        state: dict = {}
+        cfs_slots: list[CfsSlotInfo] = []
+        panel = getattr(self, "_printer_device_panel", None)
+        if panel is not None:
+            cfs_slots = list(getattr(panel, "_cfs_slots", []) or [])
+            state = dict(getattr(panel, "_printer_state", {}) or {})
+        if not cfs_slots and state:
+            cfs_slots = parse_cfs_layout(state).all_slots()
+        if not cfs_slots:
+            cfs_slots = parse_cfs_layout({}).all_slots()
+        return state, cfs_slots
+
+    def _collect_post_print_deduct_rows(
+        self,
+        filename: str,
+        state: dict,
+        cfs_slots: list[CfsSlotInfo],
+        *,
+        slot_hint: int | None = None,
+        file_entry: dict | None = None,
+    ) -> list[DeductRow]:
+        """Zeilen für Verbrauchs-Dialog (G-Code + verknüpfte Spulen)."""
+        fname = (filename or "").strip()
+        if not fname or not cfs_slots:
+            return []
+        local_gcode = resolve_local_gcode_path(fname)
+        from creality_nfc.cfs_feed import find_loaded_flat_index
+
+        loaded_slot = find_loaded_flat_index(state, cfs_slots) if state and cfs_slots else None
+        prefer_slot = slot_hint if slot_hint is not None else loaded_slot
+        gcode_map = primary_gcode_slot_mapping(
+            state,
+            fname,
+            cfs_slots,
+            file_entry=file_entry,
+            prefer_slot_index=prefer_slot,
+        )
+        gcode_slot = gcode_map[0] if gcode_map else None
+        use_slot = gcode_slot if gcode_slot is not None else prefer_slot
+
+        dialog_rows: list[DeductRow] = []
+        for usage in build_slot_usage_plan(
+            state,
+            fname,
+            cfs_slots,
+            file_entry=file_entry,
+            loaded_slot_index=prefer_slot,
+        ):
+            sp = find_spool_for_deduct(
+                self.inventory,
+                cfs_slots,
+                usage.slot_index,
+                usage.spec,
+                gcode_path=fname,
+            )
+            if sp is None:
+                continue
+            cfs_name = ""
+            if usage.slot_index < len(cfs_slots):
+                sl = cfs_slots[usage.slot_index]
+                cfs_name = f"{sl.vendor} {sl.name}".strip() or sl.material_type or ""
+            dialog_rows.append(
+                DeductRow(
+                    spool_id=sp.id,
+                    slot_label=usage.slot_label,
+                    spool_label=sp.label,
+                    color_hex=usage.spec.color_hex,
+                    material=usage.spec.material_type
+                    or material_hint_from_gcode_path(fname),
+                    default_grams=usage.grams,
+                    source=usage.source,
+                    cfs_filament=cfs_name,
+                )
+            )
+
+        if not dialog_rows and use_slot is not None and 0 <= use_slot < len(cfs_slots):
+            spec = gcode_map[1] if gcode_map else None
+            sp = find_spool_for_deduct(
+                self.inventory,
+                cfs_slots,
+                use_slot,
+                spec,
+                gcode_path=fname,
+            )
+            sl = cfs_slots[use_slot]
+            cfs_name = f"{sl.vendor} {sl.name}".strip() or sl.material_type or ""
+            slot_lbl = sl.label
+            if sp is not None:
+                default = self.settings.default_post_print_deduct_g
+                source_hint = ""
+                if state or fname:
+                    est = estimate_grams_for_slot(
+                        state,
+                        fname,
+                        sl.index,
+                        cfs_slots or None,
+                        file_entry=file_entry,
+                        local_path=local_gcode,
+                    )
+                    if est:
+                        default, source_hint = est
+                if default <= 0 and sp.remaining_g is not None:
+                    default = min(50, max(1, sp.remaining_g // 20))
+                dialog_rows.append(
+                    DeductRow(
+                        spool_id=sp.id,
+                        slot_label=slot_lbl,
+                        spool_label=sp.label,
+                        cfs_filament=cfs_name,
+                        color_hex=spec.color_hex if spec else None,
+                        material=(
+                            (spec.material_type if spec else None)
+                            or material_hint_from_gcode_path(fname)
+                        ),
+                        default_grams=default or 50,
+                        source=source_hint or "G-Code → Slot",
+                    )
+                )
+
+        if not dialog_rows and use_slot is not None and 0 <= use_slot < len(cfs_slots):
+            from creality_nfc.gcode_filament import total_job_filament_grams
+
+            sl = cfs_slots[use_slot]
+            sp = find_spool_for_deduct(
+                self.inventory,
+                cfs_slots,
+                use_slot,
+                gcode_map[1] if gcode_map else None,
+                gcode_path=fname,
+            )
+            est = total_job_filament_grams(
+                state,
+                fname,
+                file_entry=file_entry,
+                local_path=local_gcode,
+            )
+            default_g = int(est[0]) if est else 0
+            if default_g <= 0:
+                default_g = self.settings.default_post_print_deduct_g or 50
+            if sp is not None:
+                cfs_name = f"{sl.vendor} {sl.name}".strip() or sl.material_type or ""
+                spec = gcode_map[1] if gcode_map else None
+                dialog_rows.append(
+                    DeductRow(
+                        spool_id=sp.id,
+                        slot_label=sl.label,
+                        spool_label=sp.label,
+                        cfs_filament=cfs_name,
+                        color_hex=spec.color_hex if spec else None,
+                        material=(
+                            (spec.material_type if spec else None)
+                            or material_hint_from_gcode_path(fname)
+                        ),
+                        default_grams=default_g,
+                        source=est[1] if est else "Schätzung",
+                    )
+                )
+        return dialog_rows
+
+    def _apply_deductions_to_spools(
+        self,
+        deductions: list[tuple[str, int]],
+        *,
+        note: str,
+    ) -> None:
+        thr = self.settings.low_filament_threshold_g
+        low_msgs: list[str] = []
+        for spool_id, grams in deductions:
+            live = self.inventory.get(spool_id)
+            if not live or grams <= 0:
+                continue
+            deduct_grams(live, grams, note=note[:60])
+            self.inventory.update(live)
+            if is_low_filament(live, thr):
+                low_msgs.append(f"{live.label}: {live.remaining_g} g")
+        self.inventory.save()
+        self._spool_panel.reload()
+        self._refresh_spool_combo()
+        if low_msgs:
+            self.notify(
+                "Abgezogen. Rest niedrig:\n" + "\n".join(low_msgs),
+                "warn",
+            )
+            if getattr(self.settings, "alert_low_filament_toast", True):
+                from creality_nfc.desktop_notify import show_desktop_notification
+
+                show_desktop_notification(
+                    "Filament niedrig",
+                    "\n".join(low_msgs),
+                    settings=self.settings,
+                )
+        else:
+            self.notify(f"Verbrauch abgezogen ({len(deductions)} Spule(n)).", "ok")
+
+    def retroactive_deduct_from_history(self, record) -> None:
+        """Verbrauch für einen Historie-Eintrag nachträglich abziehen."""
+        from creality_nfc.cfs_adopt import SLOT_LABELS
+        from creality_nfc.print_history import PrintJobRecord
+
+        if not isinstance(record, PrintJobRecord):
+            return
+        fname = (record.filename or "").strip()
+        if not fname:
+            self.notify(
+                "Für diesen Eintrag ist kein Dateiname gespeichert — "
+                "Abzug bitte unter „Meine Spulen“ manuell.",
+                "warn",
+            )
+            return
+
+        state, cfs_slots = self._printer_cfs_context()
+        file_entry = self._gcode_entry_for_name(state, fname)
+        slot_hint = record.cfs_slot
+        dialog_rows = self._collect_post_print_deduct_rows(
+            fname,
+            state,
+            cfs_slots,
+            slot_hint=slot_hint,
+            file_entry=file_entry,
+        )
+
+        if not dialog_rows and record.spool_id:
+            sp = self.inventory.get(record.spool_id)
+            if sp is not None:
+                default = (
+                    record.estimated_total_g
+                    or self.settings.default_post_print_deduct_g
+                    or 50
+                )
+                slot_lbl = record.cfs_slot_label or (
+                    SLOT_LABELS[record.cfs_slot]
+                    if record.cfs_slot is not None
+                    else "—"
+                )
+                dialog_rows = [
+                    DeductRow(
+                        spool_id=sp.id,
+                        slot_label=slot_lbl,
+                        spool_label=sp.label,
+                        color_hex=sp.color_hex,
+                        material=sp.material_name or None,
+                        default_grams=int(default),
+                        source="Historie / Spule",
+                        cfs_filament="",
+                    )
+                ]
+
+        if not dialog_rows:
+            self._retroactive_deduct_pick_spool(record)
+            return
+
+        short = fname.replace("\\", "/").rsplit("/", 1)[-1]
+        title_hint = f" (bisher: {record.deducted_g} g)" if record.deducted_g else ""
+        deductions = ask_post_print_deductions(
+            self,
+            filename=f"{short}{title_hint}",
+            rows=dialog_rows,
+        )
+        if not deductions:
+            return
+        self._apply_retroactive_history_deduction(record, deductions)
+
+    def _retroactive_deduct_pick_spool(self, record) -> None:
+        """Manuell Spule + Gramm wählen, wenn G-Code/CFS keine Zeilen liefern."""
+        from creality_nfc.print_history import PrintJobRecord
+
+        spools = list(self.inventory.sorted_spools())
+        if not spools:
+            self.notify("Keine Spulen in „Meine Spulen“ — bitte zuerst anlegen.", "warn")
+            return
+
+        dlg = tk.Toplevel(self)
+        dlg.title("Verbrauch nachträglich")
+        prepare_toplevel(dlg, self, width=440, height=220, geometry_key="retro_deduct")
+        fname = (record.filename or "").replace("\\", "/").rsplit("/", 1)[-1]
+        ttk.Label(
+            dlg,
+            text=f"Druck: {fname or '—'}\n"
+            "Keine automatische Zuordnung — Spule und Gramm wählen:",
+            wraplength=400,
+        ).pack(anchor="w", padx=12, pady=(12, 8))
+
+        choices = [(s.id, s.display_name()) for s in spools]
+        id_map = {label: sid for sid, label in choices}
+        var = tk.StringVar()
+        if isinstance(record, PrintJobRecord) and record.spool_id:
+            sp0 = self.inventory.get(record.spool_id)
+            if sp0:
+                var.set(sp0.display_name())
+        elif choices:
+            var.set(choices[0][1])
+        combo = ttk.Combobox(
+            dlg,
+            textvariable=var,
+            values=[label for _, label in choices],
+            state="readonly",
+        )
+        combo.pack(fill="x", padx=12, pady=4)
+
+        grams_var = tk.StringVar(
+            value=str(
+                record.estimated_total_g
+                or self.settings.default_post_print_deduct_g
+                or 50
+            )
+        )
+        row_g = ttk.Frame(dlg)
+        row_g.pack(fill="x", padx=12, pady=8)
+        ttk.Label(row_g, text="Gramm:").pack(side="left")
+        ttk.Entry(row_g, textvariable=grams_var, width=10).pack(side="left", padx=8)
+
+        result: list[tuple[str, int]] | None = None
+
+        def _ok() -> None:
+            nonlocal result
+            sid = id_map.get(var.get())
+            if not sid:
+                self.notify("Bitte eine Spule wählen.", "warn")
+                return
+            try:
+                grams = int(grams_var.get().strip())
+            except ValueError:
+                self.notify("Bitte Gramm als Zahl eingeben.", "warn")
+                return
+            if grams <= 0:
+                self.notify("Gramm muss größer als 0 sein.", "warn")
+                return
+            result = [(sid, grams)]
+            dlg.destroy()
+
+        def _cancel() -> None:
+            dlg.destroy()
+
+        btn_row = ttk.Frame(dlg)
+        btn_row.pack(fill="x", padx=12, pady=12)
+        ttk.Button(btn_row, text="Abbrechen", command=_cancel).pack(side="left")
+        ttk.Button(btn_row, text="Abziehen", command=_ok, style="Accent.TButton").pack(
+            side="right"
+        )
+        dlg.wait_window()
+        if result:
+            self._apply_retroactive_history_deduction(record, result)
+
+    def _apply_retroactive_history_deduction(
+        self,
+        record,
+        deductions: list[tuple[str, int]],
+    ) -> None:
+        from creality_nfc.print_history import PrintJobRecord
+        from creality_nfc.spool_passport import touch_passport_after_print
+
+        if not isinstance(record, PrintJobRecord) or not deductions:
+            return
+        total_new = sum(g for _sid, g in deductions if g > 0)
+        if total_new <= 0:
+            return
+        fname = (record.filename or "").strip()
+        note_print = f"Historie: {fname[:36]}" if fname else "Historie (nachträglich)"
+        self._apply_deductions_to_spools(deductions, note=note_print)
+
+        prev = int(record.deducted_g or 0)
+        new_total = prev + total_new if prev else total_new
+        sid = deductions[0][0]
+        sp = self.inventory.get(sid)
+        hist_note = (record.note or "").strip()
+        if "nachträg" not in hist_note.lower():
+            hist_note = (
+                f"{hist_note} · Nachträglich abgezogen".strip(" ·")
+                if hist_note and hist_note != "—"
+                else "Nachträglich abgezogen"
+            )
+        if not self.print_history.update_record(
+            record,
+            deducted_g=new_total,
+            note=hist_note,
+            spool_id=sid,
+            spool_label=sp.label if sp else record.spool_label,
+        ):
+            self.notify(
+                "Verbrauch von der Spule abgezogen, aber der Historie-Eintrag "
+                "konnte nicht gespeichert werden — bitte App neu starten und erneut versuchen.",
+                "warn",
+            )
+            return
+        if sp:
+            touch_passport_after_print(
+                sp,
+                filename=fname,
+                deducted_g=total_new,
+            )
+            self.inventory.save()
+
     def on_print_job_finished(
         self,
         active_slot: int | None,
@@ -2405,17 +2823,20 @@ class TDFilamentStudioApp(AppTk):
         manual: bool,
     ) -> None:
         """Dialog nach Druck — state enthält frische retGcodeFileInfo2 vom Drucker."""
-        from creality_nfc.cfs_adopt import parse_cfs_slots
+        from creality_nfc.cfs_feed import find_loaded_flat_index
 
         fname = (filename or "").strip()
         cfs_slots: list[CfsSlotInfo] = []
         if hasattr(self, "_printer_device_panel"):
             cfs_slots = list(getattr(self._printer_device_panel, "_cfs_slots", []))
         if not cfs_slots and state:
-            cfs_slots = parse_cfs_slots(state)
+            from creality_nfc.cfs_layout import parse_cfs_layout
+
+            cfs_slots = parse_cfs_layout(state).all_slots()
         file_entry = self._gcode_entry_for_name(state, filename)
-        local_gcode = resolve_local_gcode_path(filename) if filename else None
-        loaded_slot = find_loaded_slot_index(state) if state else None
+        loaded_slot = (
+            find_loaded_flat_index(state, cfs_slots) if state and cfs_slots else None
+        )
         last_print_slot: int | None = None
         if hasattr(self, "_printer_device_panel"):
             last_print_slot = getattr(
@@ -2442,134 +2863,13 @@ class TDFilamentStudioApp(AppTk):
             else (prefer_slot if prefer_slot is not None else active_slot)
         )
 
-        dialog_rows: list[DeductRow] = []
-        if filename and cfs_slots:
-            for usage in build_slot_usage_plan(
-                state,
-                filename,
-                cfs_slots,
-                file_entry=file_entry,
-                loaded_slot_index=prefer_slot,
-            ):
-                sp = find_spool_for_deduct(
-                    self.inventory,
-                    cfs_slots,
-                    usage.slot_index,
-                    usage.spec,
-                    gcode_path=filename,
-                )
-                if sp is None:
-                    continue
-                cfs_name = ""
-                if usage.slot_index < len(cfs_slots):
-                    sl = cfs_slots[usage.slot_index]
-                    cfs_name = f"{sl.vendor} {sl.name}".strip() or sl.material_type or ""
-                dialog_rows.append(
-                    DeductRow(
-                        spool_id=sp.id,
-                        slot_label=usage.slot_label,
-                        spool_label=sp.label,
-                        color_hex=usage.spec.color_hex,
-                        material=usage.spec.material_type
-                        or material_hint_from_gcode_path(filename),
-                        default_grams=usage.grams,
-                        source=usage.source,
-                        cfs_filament=cfs_name,
-                    )
-                )
-
-        if not dialog_rows and slot_hint is not None and 0 <= slot_hint <= 3:
-            spec = gcode_map[1] if gcode_map else None
-            sp = find_spool_for_deduct(
-                self.inventory,
-                cfs_slots,
-                slot_hint,
-                spec,
-                gcode_path=filename,
-            )
-            cfs_name = ""
-            if slot_hint < len(cfs_slots):
-                sl = cfs_slots[slot_hint]
-                cfs_name = f"{sl.vendor} {sl.name}".strip() or sl.material_type or ""
-            if sp is not None:
-                default = self.settings.default_post_print_deduct_g
-                source_hint = ""
-                if state or filename:
-                    est = estimate_grams_for_slot(
-                        state,
-                        filename,
-                        slot_hint,
-                        cfs_slots or None,
-                        file_entry=file_entry,
-                        local_path=local_gcode,
-                    )
-                    if est:
-                        default, source_hint = est
-                if default <= 0 and sp.remaining_g is not None:
-                    default = min(50, max(1, sp.remaining_g // 20))
-                dialog_rows.append(
-                    DeductRow(
-                        spool_id=sp.id,
-                        slot_label=slot_label(slot_hint),
-                        spool_label=sp.label,
-                        cfs_filament=cfs_name,
-                        color_hex=spec.color_hex if spec else None,
-                        material=(
-                            (spec.material_type if spec else None)
-                            or material_hint_from_gcode_path(filename)
-                        ),
-                        default_grams=default or 50,
-                        source=source_hint or "G-Code → Slot",
-                    )
-                )
-            elif cfs_name and slot_hint is not None:
-                notify(
-                    self,
-                    f"Keine Spule für CFS {slot_label(slot_hint)} ({cfs_name}) verknüpft.\n"
-                    "Bitte unter „Meine Spulen“ die richtige Spule diesem Slot zuweisen.",
-                    "warn",
-                )
-
-        if not dialog_rows and slot_hint is not None and 0 <= slot_hint <= 3:
-            from creality_nfc.gcode_filament import total_job_filament_grams
-
-            sp = find_spool_for_deduct(
-                self.inventory,
-                cfs_slots,
-                slot_hint,
-                gcode_map[1] if gcode_map else None,
-                gcode_path=filename,
-            )
-            est = total_job_filament_grams(
-                state,
-                filename,
-                file_entry=file_entry,
-                local_path=local_gcode,
-            )
-            default_g = int(est[0]) if est else 0
-            if default_g <= 0:
-                default_g = self.settings.default_post_print_deduct_g or 50
-            if sp is not None:
-                cfs_name = ""
-                if slot_hint < len(cfs_slots):
-                    sl = cfs_slots[slot_hint]
-                    cfs_name = f"{sl.vendor} {sl.name}".strip() or sl.material_type or ""
-                spec = gcode_map[1] if gcode_map else None
-                dialog_rows.append(
-                    DeductRow(
-                        spool_id=sp.id,
-                        slot_label=slot_label(slot_hint),
-                        spool_label=sp.label,
-                        cfs_filament=cfs_name,
-                        color_hex=spec.color_hex if spec else None,
-                        material=(
-                            (spec.material_type if spec else None)
-                            or material_hint_from_gcode_path(filename)
-                        ),
-                        default_grams=default_g,
-                        source=est[1] if est else "Schätzung",
-                    )
-                )
+        dialog_rows = self._collect_post_print_deduct_rows(
+            fname,
+            state,
+            cfs_slots,
+            slot_hint=slot_hint,
+            file_entry=file_entry,
+        )
 
         if not dialog_rows:
             parts = [
@@ -2580,9 +2880,9 @@ class TDFilamentStudioApp(AppTk):
                 parts.append(
                     "CFS-Slots vom Drucker fehlen — Tab „Drucker“ verbunden lassen."
                 )
-            elif slot_hint is not None:
+            elif slot_hint is not None and 0 <= slot_hint < len(cfs_slots):
                 parts.append(
-                    f"Keine Spule mit CFS-Slot {slot_label(slot_hint)} verknüpft "
+                    f"Keine Spule mit CFS-Slot {cfs_slots[slot_hint].label} verknüpft "
                     "(„Meine Spulen“ → Spule bearbeiten → CFS-Slot)."
                 )
             else:
@@ -2601,47 +2901,27 @@ class TDFilamentStudioApp(AppTk):
 
         def _ask() -> None:
             self._post_print_prompted = True
-            deductions = ask_post_print_deductions(
-                self, filename=filename, rows=dialog_rows
-            )
-            self._post_print_prompted = False
-            self._record_print_history(
-                filename=filename,
-                deductions=deductions or [],
-                dialog_rows=dialog_rows,
-                state=state,
-            )
+            try:
+                deductions = ask_post_print_deductions(
+                    self, filename=filename, rows=dialog_rows
+                )
+            finally:
+                self._post_print_prompted = False
+            try:
+                self._record_print_history(
+                    filename=filename,
+                    deductions=deductions or [],
+                    dialog_rows=dialog_rows,
+                    state=state,
+                )
+            except Exception:
+                pass
+            # Dialog geschlossen (Abziehen oder Abbrechen) — nicht bei jedem Start erneut zeigen.
+            _remember_deduct_handled()
             if not deductions:
                 return
-            _remember_deduct_handled()
-            thr = self.settings.low_filament_threshold_g
-            low_msgs: list[str] = []
-            for spool_id, grams in deductions:
-                live = self.inventory.get(spool_id)
-                if not live:
-                    continue
-                note = f"Druck {filename or 'beendet'}"[:40]
-                deduct_grams(live, grams, note=note[:60])
-                self.inventory.update(live)
-                if is_low_filament(live, thr):
-                    low_msgs.append(f"{live.label}: {live.remaining_g} g")
-            self._spool_panel.reload()
-            self._refresh_spool_combo()
-            if low_msgs:
-                self.notify(
-                    "Abgezogen. Rest niedrig:\n" + "\n".join(low_msgs),
-                    "warn",
-                )
-                if getattr(self.settings, "alert_low_filament_toast", True):
-                    from creality_nfc.desktop_notify import show_desktop_notification
-
-                    show_desktop_notification(
-                        "Filament niedrig",
-                        "\n".join(low_msgs),
-                        settings=self.settings,
-                    )
-            else:
-                self.notify(f"Verbrauch abgezogen ({len(deductions)} Spule(n)).", "ok")
+            note = f"Druck {filename or 'beendet'}"[:40]
+            self._apply_deductions_to_spools(deductions, note=note)
 
         self.after(400, _ask)
 
@@ -2652,6 +2932,7 @@ class TDFilamentStudioApp(AppTk):
             self,
             self.print_history,
             threshold_g=self.settings.low_filament_threshold_g,
+            on_retro_deduct=self.retroactive_deduct_from_history,
         )
 
     def notify_print_finished(self, filename: str) -> None:
@@ -3914,6 +4195,37 @@ class TDFilamentStudioApp(AppTk):
     def open_settings(self) -> None:
         self.notebook.select(self.tab_settings)
         self.notify("Einstellungen — Tab „Einstellungen“ oben", "info")
+
+    def _printer_panel(self) -> PrinterDevicePanel | None:
+        return getattr(self, "_device_panel", None) or getattr(
+            self, "_printer_device_panel", None
+        )
+
+    def _toggle_cfs_preview(self) -> None:
+        """Menü-Haken: Zustand vom Panel (nicht vom Haken lesen — Tk-Reihenfolge-Bug)."""
+        panel = self._printer_panel()
+        if panel is None:
+            self._cfs_preview_var.set(False)
+            self.notify("Tab „Drucker“ ist noch nicht bereit — bitte kurz warten.", "warn")
+            return
+        if panel._cfs_preview_boxes:
+            self._cfs_preview_var.set(False)
+            panel.force_cfs_demo_off()
+            self.notify("CFS-Vorschau beendet — wieder echte CFS-Daten vom Drucker.", "ok")
+        else:
+            self._cfs_preview_var.set(True)
+            panel.set_cfs_preview(4)
+            self.notebook.select(self.tab_printer)
+            nb = getattr(panel, "_main_nb", None)
+            if nb is not None:
+                try:
+                    nb.select(2)
+                except tk.TclError:
+                    pass
+            self.notify(
+                "CFS-Vorschau aktiv. Erneut: Navigation-Haken oder „Demo beenden“ im Tab Filament.",
+                "info",
+            )
 
     def open_printer_manager(self) -> None:
         def apply_profile(p) -> None:

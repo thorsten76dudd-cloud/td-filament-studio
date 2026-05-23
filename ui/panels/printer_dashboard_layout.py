@@ -329,6 +329,7 @@ def build_creality_dashboard(panel: PrinterDevicePanel, outer: ttk.Frame) -> Non
         on_retract=panel._cfs_retract,
         on_bind_spool=panel._bind_cfs_spool_slot,
         on_batch_scan=panel.show_cfs_batch_scan,
+        on_preview_toggle=panel._toggle_cfs_preview_from_tab,
         inventory=panel.app.inventory,
     )
     panel.cfs_dashboard.pack(fill="both", expand=True)

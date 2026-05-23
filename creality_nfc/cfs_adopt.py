@@ -17,8 +17,11 @@ class CfsMeta:
     box_temp: float | None = None
     external: CfsSlotInfo | None = None
     active_index: int | None = None
-    loaded_index: int | None = None  # state==2 — Filament im Extruder
+    loaded_index: int | None = None  # state==2 — Filament im Extruder (material_id 0–3)
     feeding_index: int | None = None  # selected==1 — Zufuhr / aktiv gewählt
+    loaded_box_id: int | None = None
+    feeding_box_id: int | None = None
+    active_box_id: int | None = None
 
 
 @dataclass
@@ -201,8 +204,7 @@ def _fill_slot(slots: list[CfsSlotInfo], mat: dict[str, Any], sid: int) -> None:
     except (TypeError, ValueError):
         state_i = None
     empty = (not vendor and not name and not mtype) or name in ("?", "—", "-", "null", "None")
-    if state_i == 0:
-        empty = True
+    # state==0: Spule im Slot, nicht im Extruder — nicht als „leer“ werten (sonst falsche Farbzuordnung).
     box_id = int(slots[sid].box_id) if sid < len(slots) else 1
     slots[sid] = CfsSlotInfo(
         index=sid,
@@ -387,8 +389,7 @@ def parse_external_slot(state: dict[str, Any]) -> CfsSlotInfo:
 
 
 def parse_cfs_meta(state: dict[str, Any]) -> CfsMeta:
-    """Feuchtigkeit, aktiver Slot, externer Halter."""
-    slots = parse_cfs_slots(state)
+    """Feuchtigkeit, aktiver Slot (inkl. CFS-Box 1–4), externer Halter."""
     meta = CfsMeta(external=parse_external_slot(state))
     bi = _find_boxs_info(state)
     if not isinstance(bi, dict):
@@ -396,43 +397,55 @@ def parse_cfs_meta(state: dict[str, Any]) -> CfsMeta:
     for box in _material_boxes(bi, state):
         if box.get("type") != 0:
             continue
+        try:
+            box_id = int(box.get("id", 1) or 1)
+        except (TypeError, ValueError):
+            box_id = 1
+        if box_id < 1 or box_id > 4:
+            continue
         hum = box.get("humidity")
         try:
-            meta.humidity = int(round(float(hum))) if hum is not None else None
+            if hum is not None and meta.humidity is None:
+                meta.humidity = int(round(float(hum)))
         except (TypeError, ValueError):
             pass
         temp = box.get("temp")
         try:
-            meta.box_temp = float(temp) if temp is not None else None
+            if temp is not None and meta.box_temp is None:
+                meta.box_temp = float(temp)
         except (TypeError, ValueError):
             pass
         mats = box.get("materials") or []
-        if isinstance(mats, list):
-            for idx, mat in enumerate(mats):
-                if not isinstance(mat, dict):
-                    continue
-                sid = _slot_id_from_material(mat, idx)
-                if sid is None or sid < 0 or sid >= len(slots):
-                    continue
-                if slots[sid].empty:
-                    continue
-                try:
-                    if int(mat.get("selected", 0)) == 1:
-                        meta.feeding_index = sid
-                except (TypeError, ValueError):
-                    pass
-                try:
-                    st = int(mat.get("state", 0))
-                    if st == 2:
-                        meta.loaded_index = sid
-                    elif st == 1 and meta.feeding_index is None:
-                        meta.feeding_index = sid
-                except (TypeError, ValueError):
-                    pass
+        if not isinstance(mats, list):
+            continue
+        for idx, mat in enumerate(mats):
+            if not isinstance(mat, dict):
+                continue
+            sid = _slot_id_from_material(mat, idx)
+            if sid is None or sid < 0 or sid > 3:
+                continue
+            try:
+                if int(mat.get("selected", 0)) == 1:
+                    meta.feeding_index = sid
+                    meta.feeding_box_id = box_id
+            except (TypeError, ValueError):
+                pass
+            try:
+                st = int(mat.get("state", 0))
+                if st == 2:
+                    meta.loaded_index = sid
+                    meta.loaded_box_id = box_id
+                elif st == 1 and meta.feeding_index is None:
+                    meta.feeding_index = sid
+                    meta.feeding_box_id = box_id
+            except (TypeError, ValueError):
+                pass
     if meta.loaded_index is not None:
         meta.active_index = meta.loaded_index
+        meta.active_box_id = meta.loaded_box_id or 1
     elif meta.feeding_index is not None:
         meta.active_index = meta.feeding_index
+        meta.active_box_id = meta.feeding_box_id or 1
     return meta
 
 

@@ -2,7 +2,7 @@
 
 import unittest
 
-from creality_nfc.app_settings import AppSettings
+from creality_nfc.app_settings import AppSettings, normalize_print_job_filename
 
 
 class PostPrintHandledTests(unittest.TestCase):
@@ -12,6 +12,15 @@ class PostPrintHandledTests(unittest.TestCase):
         s.remember_post_print_deduct("job.gcode")
         self.assertTrue(s.is_post_print_deduct_handled("job.gcode"))
         self.assertFalse(s.is_post_print_deduct_handled("other.gcode"))
+
+    def test_normalize_path(self) -> None:
+        self.assertEqual(
+            normalize_print_job_filename("/mnt/UDISK/gcodes/1A.stl_PETG.gcode"),
+            "1A.stl_PETG.gcode",
+        )
+        s = AppSettings()
+        s.remember_post_print_deduct("/mnt/UDISK/gcodes/job.gcode")
+        self.assertTrue(s.is_post_print_deduct_handled("job.gcode"))
 
     def test_cap_list(self) -> None:
         s = AppSettings()

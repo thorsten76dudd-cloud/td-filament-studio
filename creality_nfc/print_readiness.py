@@ -71,8 +71,8 @@ def check_print_readiness(
             from creality_nfc.cfs_layout import parse_cfs_layout
 
             layout = parse_cfs_layout(state)
-    slots = layout.primary_slots()
-    all_slots = layout.all_slots()
+    slots = layout.all_slots()
+    all_slots = slots
 
     entry = file_entry if file_entry else find_gcode_file_info(state, fn)
     job = total_job_filament_grams(state, fn, file_entry=entry, local_path=local_gcode)
@@ -225,7 +225,7 @@ def check_print_readiness(
             0,
             ReadinessLine(
                 "info",
-                f"{layout.box_count()} CFS-Einheiten erkannt — Check nutzt primär Box 1 (1A–1D).",
+                f"{layout.box_count()} CFS-Einheiten erkannt (Slots 1A–{layout.box_count()}D).",
             ),
         )
 

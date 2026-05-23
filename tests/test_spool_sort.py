@@ -14,3 +14,5 @@ def test_sorted_spools_cfs_first_then_alpha():
         ]
         ordered = [s.id for s in inv.sorted_spools()]
         assert ordered == ["d", "b", "c", "a"]
+        assert len(inv.all()) == 4
+        assert inv.all()[0].id == "a"

@@ -113,10 +113,11 @@ class CfsSpoolLinkTests(unittest.TestCase):
                 material_type="PLA",
                 weight_g=2.0,
             )
+            # Flacher Index 0 = 1B (Blau), nicht Index 1 = 1D (Weiß)
             sp = find_spool_for_deduct(
                 inv,
                 slots,
-                1,
+                0,
                 spec,
                 gcode_path="Körper_PETG_7m.gcode",
             )

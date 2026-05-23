@@ -323,6 +323,10 @@ class SpoolInventory:
     def new_id() -> str:
         return uuid.uuid4().hex[:12]
 
+    def all(self) -> list[Spool]:
+        """Alle Spulen (Kopie der Liste)."""
+        return list(self.spools)
+
     def sorted_spools(self) -> list[Spool]:
         """CFS-Slots 1A–1D zuerst (im Einsatz), danach alphabetisch nach Bezeichnung."""
 

@@ -2,7 +2,7 @@
 ; Kompilieren: iscc installer\setup.iss  (Inno Setup 6)
 
 #define MyAppName "TD Filament Studio"
-#define MyAppVersion "1.5.93"
+#define MyAppVersion "1.5.116"
 #define MyAppPublisher "TD"
 #define MyAppExeName "TD Filament Studio.exe"
 
@@ -36,16 +36,16 @@ Name: "desktopicon"; Description: "Verknüpfung auf dem Desktop"; GroupDescripti
 [Files]
 Source: "..\dist\TD Filament Studio\*"; DestDir: "{app}"; Flags: ignoreversion recursesubdirs createallsubdirs
 Source: "..\assets\icons\app_icon.ico"; DestDir: "{app}"; Flags: ignoreversion
-Source: "..\data\*"; DestDir: "{app}\data"; Flags: ignoreversion onlyifdoesntexist recursesubdirs createallsubdirs
+; Keine leeren Nutzerdaten überschreiben (Spulen/Historie bleiben beim Update erhalten)
+Source: "..\data\*"; DestDir: "{app}\data"; Flags: ignoreversion onlyifdoesntexist recursesubdirs createallsubdirs; Excludes: "spools.json,print_history.json"
 
 [Icons]
 Name: "{group}\{#MyAppName}"; Filename: "{app}\{#MyAppExeName}"; IconFilename: "{app}\app_icon.ico"
 Name: "{autodesktop}\{#MyAppName}"; Filename: "{app}\{#MyAppExeName}"; IconFilename: "{app}\app_icon.ico"; Tasks: desktopicon
 
 [Run]
-Filename: "{app}\{#MyAppExeName}"; Description: "{#MyAppName} starten"; Flags: nowait postinstall skipifsilent
-; Hintergrund-Waechter (Creality Print Autostart) — auch ohne einmal App oeffnen
-Filename: "{app}\{#MyAppExeName}"; Parameters: "--watch-creality"; Flags: nowait runhidden
+; Standard: nicht automatisch starten (Haken nur bei bewusster Auswahl)
+Filename: "{app}\{#MyAppExeName}"; Description: "{#MyAppName} starten"; Flags: nowait postinstall skipifsilent unchecked
 
 [Code]
 function PrepareToInstall(var NeedsRestart: Boolean): String;

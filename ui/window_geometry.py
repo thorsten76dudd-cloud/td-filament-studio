@@ -46,6 +46,20 @@ def format_geometry(
     return f"{width}x{height}+{x}+{y}"
 
 
+_SCREEN_MARGIN = 48
+_TABLE_DIALOG_KEYS = frozenset({"print_history", "spool_location"})
+
+
+def clear_table_dialog_geometries(store: dict[str, str]) -> bool:
+    """Kaputte gespeicherte Tabellen-Dialoge entfernen (Inhalt war unsichtbar)."""
+    changed = False
+    for key in _TABLE_DIALOG_KEYS:
+        if key in store:
+            del store[key]
+            changed = True
+    return changed
+
+
 def clamp_geometry(
     geom: str,
     *,
@@ -58,13 +72,55 @@ def clamp_geometry(
     if not parsed:
         return geom
     w, h, x, y = parsed
-    w = max(min_w, min(w, max(screen_w, min_w)))
-    h = max(min_h, min(h, max(screen_h, min_h)))
+    max_w = max(min_w, screen_w - _SCREEN_MARGIN)
+    max_h = max(min_h, screen_h - _SCREEN_MARGIN)
+    w = max(min_w, min(w, max_w))
+    h = max(min_h, min(h, max_h))
     if x is not None and y is not None:
         x = max(0, min(x, max(0, screen_w - w)))
         y = max(0, min(y, max(0, screen_h - h)))
         return format_geometry(w, h, x, y)
     return format_geometry(w, h)
+
+
+def repair_stored_window_geometries(
+    store: dict[str, str],
+    *,
+    screen_w: int,
+    screen_h: int,
+) -> bool:
+    """Zu breite/hohe oder teilweise unsichtbare Dialoge auf den Bildschirm bringen."""
+    changed = False
+    for key in list(store.keys()):
+        geom = store.get(key) or ""
+        parsed = parse_geometry(geom)
+        if not parsed:
+            continue
+        w, h, x, y = parsed
+        max_w = max(320, screen_w - _SCREEN_MARGIN)
+        max_h = max(200, screen_h - _SCREEN_MARGIN)
+        cap_w = 920 if key in _TABLE_DIALOG_KEYS else max_w
+        off_screen = (
+            w > max_w
+            or w > cap_w
+            or h > max_h
+            or (x is not None and x + w > screen_w)
+            or (y is not None and y + h > screen_h)
+            or (x is not None and x < 0)
+        )
+        if off_screen:
+            store[key] = clamp_geometry(
+                geom,
+                screen_w=screen_w,
+                screen_h=screen_h,
+                min_w=min(320, cap_w),
+            )
+            if key in _TABLE_DIALOG_KEYS:
+                p2 = parse_geometry(store[key])
+                if p2 and p2[0] > cap_w:
+                    store[key] = format_geometry(cap_w, p2[1], p2[2], p2[3])
+            changed = True
+    return changed
 
 
 class WindowGeometryManager:
@@ -140,6 +196,8 @@ class WindowGeometryManager:
         min_width: int = 0,
         min_height: int = 0,
     ) -> None:
+        win._td_geom_min_w = max(0, min_width)  # type: ignore[attr-defined]
+        win._td_geom_min_h = max(0, min_height)  # type: ignore[attr-defined]
         if min_width > 0 or min_height > 0:
             win.minsize(max(0, min_width), max(0, min_height))
         self.restore_toplevel(win, key, default_width, default_height)
@@ -177,15 +235,23 @@ class WindowGeometryManager:
         default_width: int,
         default_height: int,
     ) -> None:
+        min_w = int(getattr(win, "_td_geom_min_w", 0) or 0) or default_width
+        min_h = int(getattr(win, "_td_geom_min_h", 0) or 0) or default_height
         geom = self.settings.window_geometry.get(key)
         if geom and parse_geometry(geom):
+            parsed = parse_geometry(geom)
+            assert parsed is not None
+            w, h, _x, _y = parsed
+            if w < min_w or h < min_h:
+                center_toplevel(win, width=default_width, height=default_height)
+                return
             win.geometry(
                 clamp_geometry(
                     geom,
                     screen_w=win.winfo_screenwidth(),
                     screen_h=win.winfo_screenheight(),
-                    min_w=default_width // 3,
-                    min_h=default_height // 3,
+                    min_w=min_w,
+                    min_h=min_h,
                 )
             )
             return
@@ -196,7 +262,7 @@ class WindowGeometryManager:
         if not parsed:
             return
         w, h, x, y = parsed
-        if w < 200 or h < 120:
+        if w < 320 or h < 200:
             return
         store = self.settings.window_geometry
         store[key] = format_geometry(w, h, x, y)

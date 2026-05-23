@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import tkinter as tk
 from collections.abc import Callable
+from tkinter import ttk
 
 from ui.app_icon import apply_window_icon
 from ui.rounded_widgets import rounded_button
@@ -37,12 +38,14 @@ def prepare_toplevel(
     min_width: int = 0,
     min_height: int = 0,
     modal: bool = True,
+    remember_geometry: bool = True,
 ) -> None:
     """Theme + optional modal + gespeicherte oder zentrierte Geometrie."""
     from ui.window_geometry import get_window_geometry_manager
 
     theme_dialog(win)
     apply_window_icon(win)
+    win.configure(bg=BG)
     if parent is not None:
         win.transient(parent)
     if modal:
@@ -53,7 +56,7 @@ def prepare_toplevel(
     mgr = get_window_geometry_manager()
     dw = width or 480
     dh = height or 360
-    if mgr and geometry_key:
+    if remember_geometry and mgr and geometry_key:
         mgr.attach_toplevel(
             win,
             geometry_key,
@@ -63,7 +66,140 @@ def prepare_toplevel(
             min_height=min_height,
         )
     elif width and height:
+        win.minsize(max(0, min_width), max(0, min_height))
         win.after_idle(lambda: center_toplevel(win, width=width, height=height))
+
+
+def dialog_root(parent: tk.Misc) -> tk.Misc:
+    """Toplevel-Parent: immer Hauptfenster (Frame als Parent bricht Dialoge auf Windows)."""
+    return parent.winfo_toplevel()
+
+
+def begin_table_dialog(
+    parent: tk.Misc,
+    *,
+    title: str,
+    width: int,
+    height: int,
+    min_width: int = 640,
+    min_height: int = 400,
+) -> tuple[tk.Toplevel, ttk.Frame, tk.Frame]:
+    """
+    Tabellen-Dialog anlegen (versteckt), Inhalt per pack in body/footer einfügen,
+    danach show_table_dialog() aufrufen.
+    """
+    root = dialog_root(parent)
+    dlg = tk.Toplevel(root)
+    dlg.withdraw()
+    dlg.title(title)
+    theme_dialog(dlg)
+    apply_window_icon(dlg)
+    dlg.configure(bg=BG)
+    dlg.minsize(max(320, min_width), max(200, min_height))
+    footer = tk.Frame(dlg, bg=BG)
+    footer.pack(side="bottom", fill="x", padx=14, pady=12)
+    body = ttk.Frame(dlg)
+    body.pack(side="top", fill="both", expand=True)
+    dlg._td_table_size = (width, height, min_width, min_height)  # type: ignore[attr-defined]
+    return dlg, body, footer
+
+
+def show_table_dialog(dlg: tk.Toplevel) -> None:
+    """Nach dem Aufbau: Größe setzen und sichtbar machen."""
+    width, height, min_width, min_height = getattr(  # type: ignore[misc]
+        dlg, "_td_table_size", (820, 520, 640, 400)
+    )
+    dlg.update_idletasks()
+    _apply_dialog_geometry(
+        dlg, width=width, height=height, min_width=min_width, min_height=min_height
+    )
+    try:
+        dlg.deiconify()
+    except tk.TclError:
+        pass
+    dlg.lift()
+    try:
+        dlg.focus_force()
+    except tk.TclError:
+        pass
+
+
+def pack_dialog_shell(
+    dlg: tk.Toplevel,
+    *,
+    footer: tk.Frame | None = None,
+) -> ttk.Frame:
+    """
+    Body oben (expand), Footer unten — per grid, damit der Inhalt nicht auf Höhe 0 fällt.
+    """
+    dlg.grid_rowconfigure(0, weight=1)
+    dlg.grid_columnconfigure(0, weight=1)
+    body = ttk.Frame(dlg)
+    body.grid(row=0, column=0, sticky="nsew")
+    if footer is not None:
+        footer.grid(row=1, column=0, sticky="ew")
+    return body
+
+
+def finalize_dialog_size(
+    dlg: tk.Toplevel,
+    *,
+    width: int,
+    height: int,
+    min_width: int = 0,
+    min_height: int = 0,
+) -> None:
+    """Nach dem Aufbau: zu kleine oder zu große Geometrie korrigieren."""
+    _apply_dialog_geometry(dlg, width=width, height=height, min_width=min_width, min_height=min_height)
+    dlg.lift()
+    try:
+        dlg.focus_force()
+    except tk.TclError:
+        pass
+
+
+def _apply_dialog_geometry(
+    dlg: tk.Toplevel,
+    *,
+    width: int,
+    height: int,
+    min_width: int = 0,
+    min_height: int = 0,
+) -> None:
+    dlg.update_idletasks()
+    sw = dlg.winfo_screenwidth()
+    sh = dlg.winfo_screenheight()
+    margin = 48
+    mw = max(320, min(min_width or width, sw - margin))
+    mh = max(200, min(min_height or height, sh - margin))
+    tw = max(mw, min(width, sw - margin))
+    th = max(mh, min(height, sh - margin))
+    try:
+        dlg.minsize(mw, mh)
+    except tk.TclError:
+        pass
+    center_toplevel(dlg, width=tw, height=th)
+    dlg.update_idletasks()
+
+
+def finalize_table_dialog(
+    dlg: tk.Toplevel,
+    *,
+    width: int,
+    height: int,
+    min_width: int = 640,
+    min_height: int = 400,
+) -> None:
+    """Tabellen-Dialog: Größe erzwingen (nach Map, falls Windows Layout verzögert)."""
+    def _apply() -> None:
+        _apply_dialog_geometry(
+            dlg, width=width, height=height, min_width=min_width, min_height=min_height
+        )
+        dlg.lift()
+
+    _apply()
+    dlg.after_idle(_apply)
+    dlg.after(80, _apply)
 
 
 def add_dialog_footer(

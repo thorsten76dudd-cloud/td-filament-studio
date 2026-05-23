@@ -92,16 +92,29 @@ class AppSettings:
     _MAX_POST_PRINT_HANDLED = 40
 
     def is_post_print_deduct_handled(self, filename: str) -> bool:
-        fn = (filename or "").strip()
-        return bool(fn) and fn in self.post_print_deduct_handled
+        fn = normalize_print_job_filename(filename)
+        if not fn:
+            return False
+        norm_handled = {normalize_print_job_filename(x) for x in self.post_print_deduct_handled}
+        return fn in norm_handled
 
     def remember_post_print_deduct(self, filename: str) -> None:
-        fn = (filename or "").strip()
+        fn = normalize_print_job_filename(filename)
         if not fn:
             return
-        kept = [x for x in self.post_print_deduct_handled if x != fn]
-        kept.insert(0, fn)
-        self.post_print_deduct_handled = kept[: self._MAX_POST_PRINT_HANDLED]
+        norm_handled = [
+            normalize_print_job_filename(x)
+            for x in self.post_print_deduct_handled
+            if normalize_print_job_filename(x) and normalize_print_job_filename(x) != fn
+        ]
+        norm_handled.insert(0, fn)
+        self.post_print_deduct_handled = norm_handled[: self._MAX_POST_PRINT_HANDLED]
+
+
+def normalize_print_job_filename(filename: str) -> str:
+    """Drucker-Pfad und lokaler Pfad auf denselben Dateinamen bringen."""
+    fn = (filename or "").strip().replace("\\", "/")
+    return fn.rsplit("/", 1)[-1] if fn else ""
 
 
 def _default_settings_path() -> Path:

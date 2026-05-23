@@ -19,7 +19,8 @@ from creality_nfc.printer_ssh import (
     normalize_host,
 )
 from ui.dialog_theme import theme_dialog
-from ui.theme import BG_SUBTLE, apply_text_area_style
+from ui.rounded_widgets import rounded_button
+from ui.theme import BG, BG_SUBTLE, apply_text_area_style
 from ui.tooltip import tip
 from ui.messaging import confirm, notify
 
@@ -50,10 +51,12 @@ class PrinterDashboardPanel(ttk.LabelFrame):
             style="Muted.TLabel",
         ).pack(anchor="w", pady=(0, 8))
 
-        btns = ttk.Frame(top)
-        btns.pack(fill="x")
+        btns = tk.Frame(top, bg=BG)
+        btns.pack(fill="x", pady=(0, 4))
         def _open_print_check() -> None:
-            panel = getattr(self.app, "_printer_device_panel", None)
+            panel = getattr(self.app, "_device_panel", None) or getattr(
+                self.app, "_printer_device_panel", None
+            )
             if panel is None:
                 return
             self.app.notebook.select(self.app.tab_printer)
@@ -74,18 +77,19 @@ class PrinterDashboardPanel(ttk.LabelFrame):
             ("Options vom Drucker", self.pull_options, "Material-Options-Datei vom Drucker laden (nur Lesen)."),
         ):
             tip(
-                ttk.Button(btns, text=text, command=cmd, style="Secondary.TButton"),
+                rounded_button(btns, text, cmd, variant="secondary", compact=True),
                 help_txt,
-            ).pack(side="left", padx=(0, 6), pady=2)
+            ).pack(side="left", padx=(0, 8), pady=4)
         tip(
-            ttk.Button(
+            rounded_button(
                 btns,
-                text="→ Tab Drucker",
-                command=lambda: self.app.notebook.select(self.app.tab_printer),
-                style="Secondary.TButton",
+                "→ Tab Drucker",
+                lambda: self.app.notebook.select(self.app.tab_printer),
+                variant="secondary",
+                compact=True,
             ),
             "Zum Tab Drucker wechseln (Live-Steuerung, G-Code, CFS).",
-        ).pack(side="left", padx=(12, 0))
+        ).pack(side="left", padx=(8, 0), pady=4)
 
         self.compare_text = scrolledtext.ScrolledText(
             self, height=3, font=("Consolas", 9), wrap="word"

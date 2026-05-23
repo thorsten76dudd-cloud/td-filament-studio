@@ -78,7 +78,7 @@ def rounded_button(
 ) -> tk.Button:
     """Flacher tk-Button mit hohem Kontrast (Windows: weicher als eckiges ttk)."""
     colors = _variant_colors(variant)
-    pad = (10, 5) if compact else RADIUS_PAD
+    pad = (12, 8) if compact else RADIUS_PAD
     try:
         parent_bg = str(parent.cget("bg"))
     except tk.TclError:

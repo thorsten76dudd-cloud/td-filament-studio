@@ -2,10 +2,10 @@
 # Creates latest stable release and removes the previous stable release tag.
 
 param(
-    [string]$Version = "1.5.88",
-    [string]$Tag = "v1.5.88-stable",
+    [string]$Version = "1.5.116",
+    [string]$Tag = "v1.5.116-stable",
     [string]$Repo = "thorsten76dudd-cloud/td-filament-studio",
-    [string]$RemoveTag = "v1.5.87-stable",
+    [string]$RemoveTag = "v1.5.88-stable",
     [switch]$DeleteAllOldReleases
 )
 
@@ -32,12 +32,16 @@ $notes = @(
     "## TD Filament Studio $Version",
     "",
     "### Neu",
-    "* Fenstergroesse und -position werden gespeichert (Hauptfenster + Dialoge)",
+    "* Druck-Historie: Verbrauch nachtraeglich abziehen",
+    "* Historie: Abzug wird zuverlaessig gespeichert und angezeigt",
+    "* 4x CFS Demo: kompakte 4x4-Uebersicht",
+    "* Standort-Uebersicht: Farbfeld pro Spule",
     "",
-    "### Enthalten ab 1.5.87",
-    "* CFS Alle Slots Layout, Historie, G-Code",
+    "### Enthalten",
+    "* G-Code Mehrfarben / Footer, Druck-Check, Fenster speichern",
     "",
-    "Setup ausfuehren (ueberschreibt alte Installation)."
+    "Setup ausfuehren (ueberschreibt alte Installation).",
+    "Details: STABLE-v1.5.116.md im Repository."
 ) -join [Environment]::NewLine
 Set-Content -Path $NotesFile -Value $notes -Encoding UTF8
 

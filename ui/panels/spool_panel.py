@@ -11,6 +11,7 @@ from typing import TYPE_CHECKING, Callable
 from app.constants import printer_int_to_display
 from creality_nfc.cfs_adopt import SLOT_LABELS
 from creality_nfc.cfs_layout import cfs_slot_label
+from creality_nfc.cfs_ui_options import cfs_box_count_from_app, cfs_slot_combobox_values
 from creality_nfc.printer_store import load_printers
 from creality_nfc.materials import FilamentProfile
 from creality_nfc.spool_inventory import Spool, SpoolInventory, parse_cfs_slot_index
@@ -125,12 +126,13 @@ class SpoolEditPanel(ttk.LabelFrame):
         ).pack(fill="x", **pad)
 
         ttk.Label(form, text="CFS-Slot (am Drucker)", style="Muted.TLabel").pack(anchor="w", **pad)
-        ttk.Combobox(
+        self._cfs_slot_combo = ttk.Combobox(
             form,
             textvariable=self.cfs_slot_var,
-            values=["", *[cfs_slot_label(1, i) for i in range(4)]],
+            values=cfs_slot_combobox_values(1),
             state="readonly",
-        ).pack(fill="x", **pad)
+        )
+        self._cfs_slot_combo.pack(fill="x", **pad)
 
         ttk.Label(form, text="Standort (physisch)", style="Muted.TLabel").pack(anchor="w", **pad)
         loc_vals = [""] + [p.name for p in load_printers()] + ["Lager / Regal"]
@@ -237,6 +239,18 @@ class SpoolEditPanel(ttk.LabelFrame):
 
     def _set_full_weight(self) -> None:
         self.remaining_var.set(str(weight_class_to_grams(self.weight_var.get())))
+
+    def refresh_cfs_slot_choices(self, app: "TDFilamentStudioApp") -> None:
+        """Dropdown: nur Slots der erkannten CFS (1 Einheit → nur 1A–1D)."""
+        combo = getattr(self, "_cfs_slot_combo", None)
+        if combo is None:
+            return
+        n = cfs_box_count_from_app(app)
+        vals = cfs_slot_combobox_values(n)
+        combo["values"] = vals
+        cur = self.cfs_slot_var.get().strip().upper()
+        if cur and cur not in vals:
+            self.cfs_slot_var.set("")
 
     def _parse_cfs_slot(self) -> tuple[int | None, int | None]:
         from creality_nfc.cfs_layout import parse_slot_key
@@ -656,11 +670,7 @@ class SpoolManagerPanel(ttk.Frame):
 
     def _spool_cell(self, sp: Spool, col: str) -> str:
         if col == "cfs":
-            lab = sp.cfs_slot_label()
-            loc = sp.location_display()
-            if lab and loc:
-                return f"{lab} · {loc[:24]}"
-            return lab or loc[:28] or ""
+            return sp.cfs_slot_label() or ""
         if col == "label":
             return sp.label
         if col == "brand":
@@ -693,11 +703,12 @@ class SpoolManagerPanel(ttk.Frame):
                 if cell:
                     samples.append(cell)
             caps = {
-                "cfs": 52,
+                "cfs": 64,
                 "weight": 88,
                 "rest": 72,
                 "serial": 80,
                 "uid": 260,
+                "label": 320,
             }
             w = self._measure_col_width(samples, max_w=caps.get(col, 280))
             stretch = col == self._stretch_col
@@ -802,8 +813,11 @@ class SpoolManagerPanel(ttk.Frame):
         if is_low_filament(sp, thr):
             msg += f" — Rest niedrig ({sp.remaining_g} g)"
         self.app._refresh_spool_combo()
-        if hasattr(self.app, "_printer_device_panel"):
-            self.app._printer_device_panel.cfs_dashboard.set_inventory(self.app.inventory)
+        panel = getattr(self.app, "_device_panel", None) or getattr(
+            self.app, "_printer_device_panel", None
+        )
+        if panel is not None:
+            panel.cfs_dashboard.set_inventory(self.app.inventory)
         self.reload()
         self.tree.selection_set(sp.id)
         notify(self, msg, "warn" if is_low_filament(sp, thr) else "ok")

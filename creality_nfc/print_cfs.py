@@ -148,22 +148,30 @@ def build_color_match_list(
     gcode_mappings: list[tuple[int, GcodeFilamentSpec]] | None = None,
 ) -> list[dict[str, Any]]:
     """Farbe aus G-Code → CFS-Slot (ein- oder mehrfarbig)."""
+    from creality_nfc.cfs_layout import parse_cfs_layout
+
     if box_id is None:
-        box_id = get_cfs_box_id(state)
-    slots = parse_cfs_slots(state)
+        box_id = getattr(slot, "box_id", None) or get_cfs_box_id(state)
+    all_slots = parse_cfs_layout(state).all_slots()
     if gcode_mappings:
         out: list[dict[str, Any]] = []
-        for idx, spec in gcode_mappings:
-            if 0 <= idx < len(slots):
+        for flat_idx, spec in gcode_mappings:
+            if 0 <= flat_idx < len(all_slots):
+                s = all_slots[flat_idx]
                 out.append(
-                    slot_color_match_entry(idx, slots[idx], box_id=box_id, gcode_spec=spec)
+                    slot_color_match_entry(
+                        s.index,
+                        s,
+                        box_id=getattr(s, "box_id", None) or box_id,
+                        gcode_spec=spec,
+                    )
                 )
         if out:
             return out
     spec = None
     if gcode_mappings:
-        for idx, sp in gcode_mappings:
-            if idx == slot_index:
+        for flat_idx, sp in gcode_mappings:
+            if flat_idx < len(all_slots) and all_slots[flat_idx].index == slot_index:
                 spec = sp
                 break
     return [slot_color_match_entry(slot_index, slot, box_id=box_id, gcode_spec=spec)]
@@ -207,7 +215,9 @@ def resolve_print_slot(
     gcode_path: str | None = None,
     file_entry: dict[str, Any] | None = None,
 ) -> tuple[int, CfsSlotInfo, list[tuple[int, GcodeFilamentSpec]]]:
-    slots = parse_cfs_slots(state)
+    from creality_nfc.cfs_layout import parse_cfs_layout
+
+    slots = parse_cfs_layout(state).all_slots()
     meta = parse_cfs_meta(state)
     gcode_maps: list[tuple[int, GcodeFilamentSpec]] = []
     if gcode_path:
@@ -228,7 +238,7 @@ def resolve_print_slot(
     idx = pick_filament_slot(slots, preferred=pick, active_index=meta.active_index)
     if idx is None:
         raise PrinterControlError(
-            "Kein Filament im CFS — Slot mit Material wählen (1A–1D) oder Spule einlegen."
+            "Kein Filament im CFS — Slot mit Material wählen (z. B. 1A oder 3B) oder Spule einlegen."
         )
     if not gcode_maps and gcode_path:
         gcode_maps = resolve_slots_from_gcode(
@@ -268,15 +278,16 @@ def build_print_steps(
             "normal",
         )
 
-    idx, slot, gcode_maps = resolve_print_slot(
+    flat_idx, slot, gcode_maps = resolve_print_slot(
         state, preferred=slot_index, gcode_path=path, file_entry=file_entry
     )
-    box_id = get_cfs_box_id(state)
+    box_id = getattr(slot, "box_id", None) or get_cfs_box_id(state)
+    material_id = slot.index
     steps: list[dict[str, Any]] = []
     if int(state.get("materialStatus", 0) or 0) == 1:
         steps.append({"repoPlrStatus": 0})
 
-    need_feed = not filament_ready_in_extruder(state, idx)
+    need_feed = not filament_ready_in_extruder(state, material_id, box_id=box_id)
     if need_feed and auto_feed:
         steps.append(
             {
@@ -291,7 +302,7 @@ def build_print_steps(
         steps.extend(build_preheat_params(info, gcode_path=path))
 
     match_list = build_color_match_list(
-        state, path, idx, slot, box_id=box_id, gcode_mappings=gcode_maps
+        state, path, material_id, slot, box_id=box_id, gcode_mappings=gcode_maps
     )
     steps.append({"colorMatch": {"path": path, "list": match_list}})
 
@@ -301,12 +312,12 @@ def build_print_steps(
             {
                 "feedInOrOut": {
                     "boxId": box_id,
-                    "materialId": idx,
+                    "materialId": material_id,
                     "isFeed": 1,
                 }
             }
         )
-        steps.append({_WAIT_FILAMENT_KEY: idx})
+        steps.append({_WAIT_FILAMENT_KEY: {"boxId": box_id, "materialId": material_id}})
 
     if use_multicolor_print(state, match_list):
         steps.append({"multiColorPrint": {"gcode": path, "enableSelfTest": enable_self_test}})
@@ -315,14 +326,19 @@ def build_print_steps(
         steps.append({"opGcodeFile": f"printprt:{path}", "enableSelfTest": enable_self_test})
         mode = "normal"
 
-    return steps, idx, slot.label, mode
+    return steps, flat_idx, slot.label, mode
 
 
-def cfs_feed_required_before_print(state: dict[str, Any], slot_index: int) -> bool:
+def cfs_feed_required_before_print(
+    state: dict[str, Any],
+    slot_index: int,
+    *,
+    box_id: int = 1,
+) -> bool:
     """True wenn Zufuhr aus CFS nötig ist (nicht im G-Code enthalten)."""
     if not cfs_connected(state):
         return False
-    return not filament_ready_in_extruder(state, slot_index)
+    return not filament_ready_in_extruder(state, slot_index, box_id=box_id)
 
 
 def execute_print_steps(
@@ -341,7 +357,15 @@ def execute_print_steps(
     for i, params in enumerate(steps):
         wait_slot = params.get(_WAIT_FILAMENT_KEY)
         if wait_slot is not None:
-            wait_filament_ready(int(wait_slot), provider, timeout_s=90.0)
+            if isinstance(wait_slot, dict):
+                wait_filament_ready(
+                    int(wait_slot.get("materialId", 0)),
+                    provider,
+                    timeout_s=90.0,
+                    box_id=int(wait_slot.get("boxId", 1) or 1),
+                )
+            else:
+                wait_filament_ready(int(wait_slot), provider, timeout_s=90.0)
             time.sleep(1.0)
             continue
         if conn is not None and getattr(conn, "connected", False):

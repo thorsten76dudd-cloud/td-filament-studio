@@ -112,7 +112,7 @@ def apply_theme(root: tk.Misc) -> None:
 
     style.configure(
         "TButton",
-        padding=(18, 11),
+        padding=(16, 10),
         font=F_BODY,
         background=BTN_SECONDARY_BG,
         foreground=TEXT,
@@ -145,12 +145,27 @@ def apply_theme(root: tk.Misc) -> None:
 
     style.configure(
         "Secondary.TButton",
-        padding=(18, 11),
+        padding=(16, 10),
         background=BTN_SECONDARY_BG,
         foreground=TEXT,
         bordercolor=BORDER,
         font=F_BODY,
         focusthickness=0,
+    )
+    style.configure(
+        "Dashboard.TButton",
+        padding=(14, 10),
+        background=BTN_SECONDARY_BG,
+        foreground=TEXT,
+        bordercolor=BORDER,
+        font=F_BODY,
+        focusthickness=0,
+    )
+    style.map(
+        "Dashboard.TButton",
+        background=[("active", BTN_SECONDARY_HOVER), ("pressed", BORDER_STRONG)],
+        foreground=[("disabled", MUTED), ("!disabled", TEXT)],
+        bordercolor=[("focus", ACCENT)],
     )
     style.map(
         "Secondary.TButton",
@@ -294,7 +309,7 @@ def apply_theme(root: tk.Misc) -> None:
         background=CARD,
         fieldbackground=CARD,
         foreground=TEXT,
-        rowheight=32,
+        rowheight=34,
         bordercolor=BORDER,
         relief="flat",
         font=F_BODY,
@@ -306,6 +321,7 @@ def apply_theme(root: tk.Misc) -> None:
         foreground=TEXT,
         relief="flat",
         borderwidth=1,
+        padding=(10, 8),
     )
     style.map(
         "Treeview",
@@ -319,7 +335,7 @@ def apply_theme(root: tk.Misc) -> None:
         background=CARD,
         fieldbackground=CARD,
         foreground=TEXT,
-        rowheight=34,
+        rowheight=36,
         font=F_BODY,
         bordercolor=BORDER,
     )
@@ -329,6 +345,7 @@ def apply_theme(root: tk.Misc) -> None:
         foreground=TEXT,
         relief="flat",
         borderwidth=1,
+        padding=(10, 8),
     )
     style.map(
         "Spool.Treeview",

@@ -2,7 +2,12 @@
 
 import unittest
 
-from creality_nfc.cfs_feed import filament_ready_in_extruder, find_loaded_slot_index
+from creality_nfc.cfs_adopt import parse_cfs_slots
+from creality_nfc.cfs_feed import (
+    filament_ready_in_extruder,
+    find_loaded_slot_index,
+    resolve_live_filament_slot_index,
+)
 from creality_nfc.gcode_filament import gcode_uses_external_spool
 from creality_nfc.print_cfs import build_print_steps, cfs_feed_required_before_print
 
@@ -27,6 +32,69 @@ class FilamentReadyTests(unittest.TestCase):
         }
         self.assertEqual(find_loaded_slot_index(state), 0)
         self.assertTrue(filament_ready_in_extruder(state, 0))
+
+    def test_live_slot_prefers_gcode_over_wrong_loaded(self) -> None:
+        """Firmware meldet 1D geladen, G-Code verbraucht vor allem Orange (1A)."""
+        state = {
+            "cfsConnect": 1,
+            "boxsInfo": {
+                "enable": 1,
+                "materialBoxs": [
+                    {
+                        "type": 0,
+                        "id": 1,
+                        "materials": [
+                            {
+                                "vendor": "Creality",
+                                "name": "Orange",
+                                "type": "PETG",
+                                "color": "FF8000",
+                                "state": 0,
+                            },
+                            {
+                                "vendor": "Creality",
+                                "name": "Blau",
+                                "type": "PETG",
+                                "color": "0000FF",
+                                "state": 0,
+                            },
+                            {
+                                "vendor": "Creality",
+                                "name": "Grau",
+                                "type": "PETG",
+                                "color": "808080",
+                                "state": 0,
+                            },
+                            {
+                                "vendor": "Creality",
+                                "name": "Weiss",
+                                "type": "PLA",
+                                "color": "FFFFFF",
+                                "state": 2,
+                            },
+                        ],
+                    }
+                ],
+            },
+            "retGcodeFileInfo2": [
+                {
+                    "name": "1A.stl_PETG_6m38s.gcode",
+                    "materialColors": "#ff8000;#0000ff;;",
+                    "material": "PETG;PETG;;",
+                    "filamentWeight": "2.29, 0.66, 0.00, 0.00",
+                }
+            ],
+        }
+        slots = parse_cfs_slots(state)
+        self.assertEqual(find_loaded_slot_index(state), 3)
+        self.assertEqual(
+            resolve_live_filament_slot_index(
+                state,
+                "1A.stl_PETG_6m38s.gcode",
+                slots,
+            ),
+            0,
+        )
 
 
 class ExternalSpoolGcodeTests(unittest.TestCase):

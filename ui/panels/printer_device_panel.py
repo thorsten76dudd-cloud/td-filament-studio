@@ -126,6 +126,7 @@ class PrinterDevicePanel(ttk.Frame):
         self._was_connected = False
         self._cfs_slots: list[CfsSlotInfo] = []
         self._cfs_layout = None
+        self._cfs_preview_boxes: int | None = None
         self._cfs_empty_polls = 0
         self._gcode_polls = 0
         self._gcode_ssh_tried = False
@@ -778,33 +779,59 @@ class PrinterDevicePanel(ttk.Frame):
             self.gcode_hint_text.tag_configure("curline", background="#3d3a2d")
             self.gcode_hint_text.see(h_start)
 
+    @staticmethod
+    def _gcode_job_basename(filename: str) -> str:
+        """Echter G-Code-Name (ohne UI-Präfix „Letzter Druck:“)."""
+        s = (filename or "").strip()
+        if s.lower().startswith("letzter druck:"):
+            s = s.split(":", 1)[-1].strip()
+        return PrinterDevicePanel._basename(s) if s else ""
+
     def _update_live_filament_hint(self, state: dict, filename: str, prog: int | None) -> None:
         if not hasattr(self, "_filament_live_var"):
             return
-        if not filename or prog is None:
+        if prog is None:
             self._filament_live_var.set("")
             return
-        from creality_nfc.cfs_feed import find_loaded_slot_index
+        from creality_nfc.cfs_feed import resolve_live_filament_slot_index
         from creality_nfc.cfs_spool_link import find_spool_for_slot
+        from creality_nfc.gcode_filament import resolve_local_gcode_path
         from creality_nfc.live_filament import format_live_filament_status
+        from creality_nfc.printer_state import print_job_phase
 
-        slot_idx = find_loaded_slot_index(state)
+        job_name = self._gcode_job_basename(
+            str(print_status(state).get("file") or self._last_print_filename or filename or "")
+        )
+        if not job_name or job_name == "—":
+            self._filament_live_var.set("")
+            return
+        eff_prog = int(prog) if prog is not None else 0
+        phase = print_job_phase(state)
+        if eff_prog < 1 and phase in ("complete", "idle"):
+            eff_prog = 100
+        cache = self._gcode_cache_path
+        if cache is None or not cache.is_file():
+            cache = resolve_local_gcode_path(job_name)
+        flat_idx = resolve_live_filament_slot_index(
+            state,
+            job_name,
+            self._cfs_slots or [],
+        )
         sp_rem = None
         box_id = 1
-        if slot_idx is not None and self._cfs_slots:
-            idx = slot_idx
-            if 0 <= idx < len(self._cfs_slots):
-                cfs_slot = self._cfs_slots[idx]
-                box_id = getattr(cfs_slot, "box_id", 1) or 1
-                sp = find_spool_for_slot(self.app.inventory, cfs_slot)
-                if sp and sp.remaining_g is not None:
-                    sp_rem = sp.remaining_g
-        cache = self._gcode_cache_path
+        material_id: int | None = None
+        if flat_idx is not None and self._cfs_slots and 0 <= flat_idx < len(self._cfs_slots):
+            cfs_slot = self._cfs_slots[flat_idx]
+            box_id = getattr(cfs_slot, "box_id", 1) or 1
+            material_id = cfs_slot.index
+            sp = find_spool_for_slot(self.app.inventory, cfs_slot)
+            if sp and sp.remaining_g is not None:
+                sp_rem = sp.remaining_g
         text = format_live_filament_status(
             state,
-            filename=filename,
-            progress_pct=prog,
-            active_slot=slot_idx,
+            filename=job_name,
+            progress_pct=eff_prog,
+            active_slot=material_id,
             cfs_slots=self._cfs_slots,
             local_gcode=cache,
             spool_remaining_g=sp_rem,
@@ -896,7 +923,10 @@ class PrinterDevicePanel(ttk.Frame):
     def show_spool_locations(self) -> None:
         from ui.spool_location_dialog import show_spool_location_dialog
 
-        show_spool_location_dialog(self, self.app.inventory)
+        try:
+            show_spool_location_dialog(self, self.app.inventory)
+        except Exception as exc:
+            notify(self, f"Spulen-Standort:\n{exc}", "error")
 
     def show_cfs_batch_scan(self) -> None:
         if not self._conn:
@@ -1104,8 +1134,12 @@ class PrinterDevicePanel(ttk.Frame):
                 if now - self._last_telemetry_req >= 2.0:
                     self._last_telemetry_req = now
                     self._conn.request_get(ReqPrinterPara=1, reqPrintObjects=1)
-            if self._conn.connected or snap:
+            if self._conn.connected:
                 self._apply_live_status(snap or {})
+            elif snap and self._was_connected:
+                self.conn_var.set(
+                    f"Keine Live-Daten von {self._conn.host} — „Verbinden“ erneut"
+                )
             if self._conn.connected and now - self._last_full_poll >= 1.0:
                 self._last_full_poll = now
                 self._apply_state(snap or self._conn.snapshot())
@@ -1383,16 +1417,13 @@ class PrinterDevicePanel(ttk.Frame):
         return False
 
     def _request_post_print_deduct(self, s: dict, ps: dict, *, manual: bool = False) -> None:
-        fname = str(ps.get("file") or self._last_print_filename or "").strip()
-        if not manual and fname:
-            try:
-                self.app._record_print_history(
-                    filename=fname,
-                    deductions=[],
-                    state=s,
-                )
-            except Exception:
-                pass
+        from creality_nfc.app_settings import normalize_print_job_filename
+
+        fname = normalize_print_job_filename(
+            str(ps.get("file") or self._last_print_filename or "")
+        )
+        if not manual and fname and self.app.settings.is_post_print_deduct_handled(fname):
+            return
         try:
             snap = self._conn.snapshot() if self._conn else s
             loaded = find_loaded_slot_index(snap)
@@ -1497,7 +1528,16 @@ class PrinterDevicePanel(ttk.Frame):
         if fname:
             self._last_print_filename = fname
         self._last_print_phase = phase
-        fname = self._basename(ps["file"]) if ps["file"] else "—"
+        base = self._basename(ps["file"]) if ps["file"] else "—"
+        if (
+            phase in ("complete", "idle")
+            and prog is not None
+            and int(prog) >= 99
+            and base != "—"
+        ):
+            fname = f"Letzter Druck: {base}"
+        else:
+            fname = base
         self.print_file_var.set(fname)
         if fname and fname != "—":
             self._sync_listbox_to_filename(fname)
@@ -1547,7 +1587,7 @@ class PrinterDevicePanel(ttk.Frame):
             time_bits.append(left_txt)
 
         self.print_time_var.set(" · ".join(time_bits) if time_bits else "")
-        self._update_live_filament_hint(s, fname, prog)
+        self._update_live_filament_hint(s, base if base != "—" else fname, prog)
         self._update_print_controls(s, phase=phase)
 
     def _manual_post_print_deduct(self) -> None:
@@ -1869,30 +1909,133 @@ class PrinterDevicePanel(ttk.Frame):
     def _start_live_camera(self) -> None:
         self._ensure_live_camera(force=True)
 
+    def force_cfs_demo_off(self) -> None:
+        """Demo sicher aus (Menü + Tab + nach Neustart)."""
+        self._cfs_preview_boxes = None
+        if hasattr(self.app, "_cfs_preview_var"):
+            self.app._cfs_preview_var.set(False)
+        self.cfs_dashboard.set_preview_active(False)
+        self.cfs_dashboard._box_filter = None
+        self.cfs_dashboard._layout_sig = ()
+        self.cfs_dashboard._status_var.set(
+            "Slot wählen, dann Zufuhr oder Zurückziehen"
+            if self.cfs_dashboard._creality
+            else "Slot wählen · → RFID übernimmt Material in den Editor"
+        )
+        snap: dict = {}
+        if self._conn:
+            try:
+                snap = self._conn.snapshot()
+            except Exception:
+                snap = {}
+        self._update_cfs_ui(snap)
+        if self._conn and self._conn.connected:
+            try:
+                self._conn.request_get(boxsInfo=1)
+            except Exception:
+                pass
+            self.after(500, self._refresh_cfs_after_preview_off)
+
+    def _toggle_cfs_preview_from_tab(self) -> None:
+        if self._cfs_preview_boxes:
+            self.force_cfs_demo_off()
+            notify(self, "4× CFS Demo beendet — wieder echte CFS-Daten.", "ok")
+        else:
+            self.set_cfs_preview(4)
+            if hasattr(self.app, "_cfs_preview_var"):
+                self.app._cfs_preview_var.set(True)
+            notify(
+                self,
+                "Demo aktiv: 4 CFS — „Demo beenden“ oder Navigation-Haken zum Ausschalten.",
+                "info",
+            )
+
+    def set_cfs_preview(self, box_count: int | None) -> None:
+        """4-CFS-UI-Vorschau ein/aus (keine echten Druckerdaten für CFS)."""
+        if box_count is not None and box_count < 2:
+            box_count = None
+        self._cfs_preview_boxes = box_count
+        self.cfs_dashboard.set_preview_active(bool(box_count))
+        self.cfs_dashboard._box_filter = None
+        self.cfs_dashboard._layout_sig = ()
+        snap: dict = {}
+        if self._conn:
+            try:
+                snap = self._conn.snapshot()
+            except Exception:
+                snap = {}
+        self._update_cfs_ui(snap)
+        if box_count is None and self._conn and self._conn.connected:
+            try:
+                self._conn.request_get(boxsInfo=1)
+            except Exception:
+                pass
+            self.after(400, self._refresh_cfs_after_preview_off)
+
+    def _refresh_cfs_after_preview_off(self) -> None:
+        if self._cfs_preview_boxes:
+            return
+        snap: dict = {}
+        if self._conn:
+            try:
+                snap = self._conn.snapshot()
+            except Exception:
+                snap = {}
+        self._update_cfs_ui(snap)
+
     def _update_cfs_ui(self, state: dict) -> None:
         from creality_nfc.cfs_adopt import parse_cfs_meta
         from creality_nfc.cfs_layout import parse_cfs_layout
+        from creality_nfc.cfs_simulate import merge_cfs_preview_state
         from creality_nfc.spool_location import update_last_seen_from_layout
 
         self.cfs_dashboard.set_inventory(self.app.inventory)
-        self.cfs_dashboard.update_from_state(state)
-        self._cfs_layout = parse_cfs_layout(state)
-        self._cfs_slots = list(self._cfs_layout.primary_slots())
-        meta = parse_cfs_meta(state)
+        ui_state = merge_cfs_preview_state(state, preview_boxes=self._cfs_preview_boxes)
+        self._cfs_layout = parse_cfs_layout(ui_state)
+        self._cfs_slots = list(self._cfs_layout.all_slots())
+        meta = parse_cfs_meta(ui_state)
         self._cfs_active_index = meta.active_index
+        self.cfs_dashboard.update_from_state(ui_state, slots=self._cfs_slots)
+        nbox = self._cfs_layout.box_count()
+        if self._cfs_preview_boxes:
+            n = self._cfs_preview_boxes
+            self.cfs_dashboard.set_mode_hint(
+                f"Demo: {n} CFS — Übersicht (Zeilen CFS 1–{n}, Spalten A–D)"
+            )
+            self.cfs_dashboard._active_var.set(f"Vorschau: {n} CFS (Demo-Daten)")
+            self.cfs_dashboard._status_var.set(
+                "Nur UI-Test — Zufuhr/RFID nicht an den Drucker. "
+                "Navigation → CFS-Vorschau beenden."
+            )
+        elif nbox <= 1:
+            self.cfs_dashboard.set_mode_hint("1 CFS am Drucker (1A–1D)")
+            self.cfs_dashboard._status_var.set(
+                "Slot wählen, dann Zufuhr oder Zurückziehen"
+                if self.cfs_dashboard._creality
+                else "Slot wählen · → RFID übernimmt Material in den Editor"
+            )
+        else:
+            self.cfs_dashboard.set_mode_hint(f"{nbox} CFS am Drucker — CFS 1…{nbox} oben wählen")
         pname = ""
         if hasattr(self.app, "printer_var"):
             pname = self.app.printer_var.get().strip()
         if not pname and hasattr(self.app, "ssh_host_var"):
             pname = self.app.ssh_host_var.get().strip() or "K2"
-        n = update_last_seen_from_layout(
-            self.app.inventory, self._cfs_layout, printer_name=pname
-        )
-        if n > 0:
+        sp = getattr(self.app, "_spool_panel", None)
+        if sp is not None and hasattr(sp, "edit_panel"):
             try:
-                self.app.inventory.save()
+                sp.edit_panel.refresh_cfs_slot_choices(self.app)
             except Exception:
                 pass
+        if not self._cfs_preview_boxes:
+            n = update_last_seen_from_layout(
+                self.app.inventory, self._cfs_layout, printer_name=pname
+            )
+            if n > 0:
+                try:
+                    self.app.inventory.save()
+                except Exception:
+                    pass
 
     def _fetch_cfs_snapshot_async(self) -> None:
         if self._cfs_fetch_pending:
@@ -1957,16 +2100,20 @@ class PrinterDevicePanel(ttk.Frame):
             return
         sel = self.cfs_dashboard._selected
         if sel is None:
-            notify(self, "Bitte zuerst einen CFS-Slot (1A–1D) wählen.", "warn")
+            notify(self, "Bitte zuerst einen CFS-Slot wählen (z. B. 1A oder 2C).", "warn")
             return
-        snap = self._conn.snapshot() if self._conn else {}
-        box_id = get_cfs_box_id(snap)
+        if sel < 0 or sel >= len(self._cfs_slots):
+            notify(self, "Ungültiger Slot — CFS aktualisieren.", "warn")
+            return
+        slot = self._cfs_slots[sel]
+        box_id = getattr(slot, "box_id", 1) or 1
+        material_id = slot.index
 
         def work() -> None:
-            feed_filament(host, box_id, sel, self._conn)
+            feed_filament(host, box_id, material_id, self._conn)
             self.app.after(
                 0,
-                lambda: notify(self, f"Zufuhr gestartet — Slot {SLOT_LABELS[sel]}", "ok"),
+                lambda: notify(self, f"Zufuhr gestartet — Slot {slot.label}", "ok"),
             )
 
         self._run_bg("CFS Zufuhr", work)
@@ -1979,14 +2126,18 @@ class PrinterDevicePanel(ttk.Frame):
         if sel is None:
             notify(self, "Bitte zuerst einen CFS-Slot wählen.", "warn")
             return
-        snap = self._conn.snapshot() if self._conn else {}
-        box_id = get_cfs_box_id(snap)
+        if sel < 0 or sel >= len(self._cfs_slots):
+            notify(self, "Ungültiger Slot — CFS aktualisieren.", "warn")
+            return
+        slot = self._cfs_slots[sel]
+        box_id = getattr(slot, "box_id", 1) or 1
+        material_id = slot.index
 
         def work() -> None:
-            retract_filament(host, box_id, sel, self._conn)
+            retract_filament(host, box_id, material_id, self._conn)
             self.app.after(
                 0,
-                lambda: notify(self, f"Zurückziehen — Slot {SLOT_LABELS[sel]}", "ok"),
+                lambda: notify(self, f"Zurückziehen — Slot {slot.label}", "ok"),
             )
 
         self._run_bg("CFS Zurück", work)

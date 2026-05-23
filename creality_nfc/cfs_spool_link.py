@@ -56,7 +56,25 @@ def find_spool_for_slot(
     return None
 
 
-def _spool_allowed_for_slot(sp: Spool, slot_index: int) -> bool:
+def _spool_allowed_for_slot(
+    sp: Spool,
+    slot_index: int,
+    *,
+    cfs_slots: list[CfsSlotInfo] | None = None,
+) -> bool:
+    """slot_index = flacher Index in cfs_slots (Multi-CFS) oder material_id 0–3."""
+    if cfs_slots and 0 <= slot_index < len(cfs_slots):
+        slot = cfs_slots[slot_index]
+        key = sp.effective_cfs_key()
+        if key:
+            return key == (
+                getattr(slot, "box_id", 1) or 1,
+                slot.index,
+            )
+        eff = sp.effective_cfs_slot()
+        if eff is None:
+            return True
+        return eff == slot.index and (sp.cfs_box_id or 1) == (getattr(slot, "box_id", 1) or 1)
     eff = sp.effective_cfs_slot()
     if eff is None:
         return True
@@ -72,18 +90,23 @@ def find_spool_for_deduct(
     gcode_path: str = "",
 ) -> Spool | None:
     """Spule für Abzug: nur passender CFS-Slot, nicht „irgendeine“ verknüpfte Spule."""
-    sp = inventory.find_by_cfs_slot(slot_index)
-    if sp is not None:
-        return sp
     if 0 <= slot_index < len(cfs_slots):
         sp = find_spool_for_slot(inventory, cfs_slots[slot_index])
-        if sp is not None and _spool_allowed_for_slot(sp, slot_index):
+        if sp is not None and _spool_allowed_for_slot(
+            sp, slot_index, cfs_slots=cfs_slots
+        ):
+            return sp
+    elif 0 <= slot_index <= 3:
+        sp = inventory.find_by_cfs_slot(slot_index)
+        if sp is not None:
             return sp
     hint = material_hint_from_gcode_path(gcode_path)
     want_mat = (hint or (spec.material_type if spec else "") or "").strip().upper()
     if want_mat:
         for candidate in inventory.spools:
-            if not _spool_allowed_for_slot(candidate, slot_index):
+            if not _spool_allowed_for_slot(
+                candidate, slot_index, cfs_slots=cfs_slots
+            ):
                 continue
             blob = f"{candidate.material_name} {candidate.label} {candidate.brand}".upper()
             if want_mat == "PLA" and "PLA" not in blob:
@@ -98,7 +121,9 @@ def find_spool_for_deduct(
         best: Spool | None = None
         best_d = 1e9
         for candidate in inventory.spools:
-            if not _spool_allowed_for_slot(candidate, slot_index):
+            if not _spool_allowed_for_slot(
+                candidate, slot_index, cfs_slots=cfs_slots
+            ):
                 continue
             sp_hex = creality_color_to_hex(candidate.color_hex)
             if sp_hex:

@@ -5,7 +5,13 @@ import unittest
 from pathlib import Path
 
 from creality_nfc.app_settings import AppSettings
-from ui.window_geometry import clamp_geometry, format_geometry, parse_geometry
+from ui.window_geometry import (
+    clamp_geometry,
+    clear_table_dialog_geometries,
+    format_geometry,
+    parse_geometry,
+    repair_stored_window_geometries,
+)
 
 
 class WindowGeometryTests(unittest.TestCase):
@@ -18,10 +24,36 @@ class WindowGeometryTests(unittest.TestCase):
         p = parse_geometry(out)
         self.assertIsNotNone(p)
         w, h, x, y = p  # type: ignore[misc]
-        self.assertLessEqual(w, 1920)
-        self.assertLessEqual(h, 1080)
+        self.assertLessEqual(w, 1920 - 48)
+        self.assertLessEqual(h, 1080 - 48)
         self.assertLessEqual(x or 0, 1920)
         self.assertLessEqual(y or 0, 1080)
+
+    def test_clamp_wide_dialog_off_screen(self) -> None:
+        out = clamp_geometry("1514x420+920+510", screen_w=1920, screen_h=1080)
+        p = parse_geometry(out)
+        self.assertIsNotNone(p)
+        w, h, x, y = p  # type: ignore[misc]
+        self.assertLessEqual(w, 1920 - 48)
+        self.assertLessEqual((x or 0) + w, 1920)
+
+    def test_repair_stored_geometries(self) -> None:
+        store = {"print_history": "1514x420+920+510"}
+        self.assertTrue(
+            repair_stored_window_geometries(store, screen_w=1920, screen_h=1080)
+        )
+        p = parse_geometry(store["print_history"])
+        self.assertIsNotNone(p)
+        w, h, x, y = p  # type: ignore[misc]
+        self.assertLessEqual(w, 920)
+        self.assertLessEqual((x or 0) + w, 1920)
+
+    def test_clear_table_dialog_geometries(self) -> None:
+        store = {"print_history": "900x500", "spool_location": "800x520", "main": "1280x800"}
+        self.assertTrue(clear_table_dialog_geometries(store))
+        self.assertNotIn("print_history", store)
+        self.assertNotIn("spool_location", store)
+        self.assertIn("main", store)
 
     def test_settings_roundtrip(self) -> None:
         with tempfile.TemporaryDirectory() as tmp:

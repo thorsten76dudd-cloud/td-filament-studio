@@ -1132,8 +1132,11 @@ def resolve_local_gcode_path(
     extra_dirs: list[Path] | None = None,
 ) -> Path | None:
     """Lokale G-Code-Datei für Verbrauchsschätzung (Cache, Downloads)."""
-    bare = Path(str(gcode_name or "").replace("\\", "/").split("/")[-1])
-    if not bare.name:
+    raw = str(gcode_name or "").strip()
+    if raw.lower().startswith("letzter druck:"):
+        raw = raw.split(":", 1)[-1].strip()
+    bare = Path(raw.replace("\\", "/").split("/")[-1])
+    if not bare.name or bare.name == "—":
         return None
     dirs: list[Path] = []
     if extra_dirs:
@@ -1298,10 +1301,12 @@ def build_slot_usage_plan(
         grams = int(round(g))
         if grams < 1 and g >= 0.15:
             grams = 1
+        from creality_nfc.cfs_slot_index import usage_slot_label
+
         out.append(
             GcodeSlotUsage(
                 slot_index=slot_idx,
-                slot_label=SLOT_LABELS[slot_idx],
+                slot_label=usage_slot_label(slots, slot_idx),
                 spec=spec,
                 grams=grams,
                 source=_usage_source_label(gcode_path, spec),

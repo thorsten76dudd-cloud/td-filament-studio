@@ -5,19 +5,30 @@ from __future__ import annotations
 import tkinter as tk
 import webbrowser
 from tkinter import filedialog, ttk
+from collections.abc import Callable
 from typing import TYPE_CHECKING, Any
 
 from creality_nfc.cfs_adopt import CfsMeta, CfsSlotInfo, parse_cfs_meta, parse_cfs_slots
 from creality_nfc.cfs_layout import cfs_slot_label, parse_cfs_layout
 from creality_nfc.cfs_spool_link import find_spool_for_slot
 from creality_nfc.filament_alerts import find_low_filament_spools
-from creality_nfc.print_history import PrintHistoryStore
+from creality_nfc.print_history import (
+    PrintHistoryStore,
+    PrintJobRecord,
+    normalize_history_note,
+)
 from creality_nfc.spool_usage import is_low_filament
-from ui.dialog_theme import prepare_toplevel, theme_dialog
+from ui.dialog_theme import begin_table_dialog, pack_dialog_shell, prepare_toplevel, show_table_dialog
 from ui.messaging import notify
+from ui.rounded_widgets import rounded_button
+from ui.theme import BG
 
 if TYPE_CHECKING:
     from creality_nfc.spool_inventory import SpoolInventory
+
+
+def _gcode_basename(path: str) -> str:
+    return (path or "").replace("\\", "/").rsplit("/", 1)[-1] or path
 
 
 def show_print_history_dialog(
@@ -25,24 +36,21 @@ def show_print_history_dialog(
     store: PrintHistoryStore,
     *,
     threshold_g: int = 200,
+    on_retro_deduct: Callable[[PrintJobRecord], None] | None = None,
 ) -> None:
-    dlg = tk.Toplevel(parent)
-    dlg.title("Druck-Historie")
-    prepare_toplevel(
-        dlg,
+    _ = threshold_g  # reserviert für spätere Spalten-Hinweise
+    store.load()
+    dlg, body, footer = begin_table_dialog(
         parent,
-        width=720,
-        height=420,
-        geometry_key="print_history",
-        min_width=520,
-        min_height=300,
+        title=f"Druck-Historie ({len(store.list_entries())})",
+        width=1020,
+        height=540,
+        min_width=860,
+        min_height=420,
     )
 
-    top = ttk.Frame(dlg, padding=8)
-    top.pack(fill="x")
-    ttk.Label(top, text="Abgeschlossene Drucke (lokal gespeichert)", style="Muted.TLabel").pack(
-        side="left"
-    )
+    foot_inner = tk.Frame(footer, bg=BG)
+    foot_inner.pack(fill="x")
 
     def _export_csv() -> None:
         path = filedialog.asksaveasfilename(
@@ -60,60 +68,133 @@ def show_print_history_dialog(
         except OSError as exc:
             notify(dlg, str(exc), "error")
 
-    ttk.Button(top, text="CSV exportieren…", command=_export_csv).pack(side="right")
+    _empty_labels: list[ttk.Label] = []
+
+    def _fill_tree() -> None:
+        for item in tree.get_children():
+            tree.delete(item)
+        for lbl in _empty_labels:
+            lbl.destroy()
+        _empty_labels.clear()
+        entries = store.list_entries()
+        if not entries:
+            empty = ttk.Label(
+                body,
+                text=(
+                    "Noch keine Einträge.\n\n"
+                    "Die Historie füllt sich, wenn ein Druck auf dem K2 endet und der "
+                    "Tab Drucker verbunden ist — auch wenn du den Filament-Dialog "
+                    "überspringst.\n\n"
+                    "Einstellungen: „Nach Druckende: Verbrauch abfragen“ kann aus sein; "
+                    "der Eintrag wird trotzdem gespeichert."
+                ),
+                style="Muted.TLabel",
+                wraplength=760,
+                justify="left",
+            )
+            empty.pack(anchor="w", padx=12, pady=(0, 6))
+            _empty_labels.append(empty)
+            return
+        for e in entries:
+            if e.deducted_g is not None and e.deducted_g > 0:
+                ded = f"{e.deducted_g} g"
+            elif e.estimated_total_g is not None and e.estimated_total_g > 0:
+                ded = f"~{e.estimated_total_g} g"
+            else:
+                ded = "—"
+            short = _gcode_basename(e.filename)
+            note = normalize_history_note(e)
+            iid = PrintHistoryStore.tree_iid(e)
+            tree.insert(
+                "",
+                tk.END,
+                iid=iid,
+                values=(
+                    e.ts.replace("T", " ")[:19],
+                    short,
+                    ded,
+                    e.cfs_slot_label or "—",
+                    e.spool_label or "—",
+                    note,
+                ),
+            )
+
+    def _retro_deduct() -> None:
+        if not on_retro_deduct:
+            return
+        sel = tree.selection()
+        if not sel:
+            notify(dlg, "Bitte zuerst einen Druck in der Liste wählen.", "warn")
+            return
+        entry = store.get(sel[0])
+        if entry is None:
+            notify(dlg, "Eintrag nicht gefunden.", "warn")
+            return
+        on_retro_deduct(entry)
+        store.load()
+        _fill_tree()
+        keep = PrintHistoryStore.tree_iid(entry)
+        if tree.exists(keep):
+            tree.selection_set(keep)
+            tree.see(keep)
+        elif tree.get_children():
+            tree.selection_set(tree.get_children()[0])
+
+    rounded_button(
+        foot_inner, "CSV exportieren…", _export_csv, variant="secondary", compact=True
+    ).pack(side="left")
+    if on_retro_deduct:
+        tip_retro = (
+            "Verbrauch für den gewählten Druck nachträglich von der Spule abziehen "
+            "(gleicher Dialog wie nach Druckende)."
+        )
+        rounded_button(
+            foot_inner,
+            "Verbrauch nachträglich…",
+            _retro_deduct,
+            variant="secondary",
+            compact=True,
+        ).pack(side="left", padx=(8, 0))
+    rounded_button(foot_inner, "Schließen", dlg.destroy, variant="accent", compact=True).pack(
+        side="right"
+    )
+
+    top = ttk.Frame(body, padding=10)
+    top.pack(fill="x")
+    hint = "Abgeschlossene Drucke (lokal gespeichert)"
+    if on_retro_deduct:
+        hint += " — Zeile wählen → „Verbrauch nachträglich…“"
+    ttk.Label(top, text=hint, style="Muted.TLabel").pack(anchor="w")
+
+    tree_wrap = ttk.Frame(body)
+    tree_wrap.pack(fill="both", expand=True, padx=10, pady=(4, 8))
+    tree_wrap.grid_rowconfigure(0, weight=1)
+    tree_wrap.grid_columnconfigure(0, weight=1)
 
     cols = ("ts", "file", "deducted", "slot", "spool", "note")
-    tree = ttk.Treeview(dlg, columns=cols, show="headings", height=14)
+    tree = ttk.Treeview(tree_wrap, columns=cols, show="headings", height=18)
     tree.heading("ts", text="Zeit")
     tree.heading("file", text="Datei")
     tree.heading("deducted", text="Abgezogen")
     tree.heading("slot", text="Slot")
     tree.heading("spool", text="Spule")
     tree.heading("note", text="Notiz")
-    tree.column("ts", width=140)
-    tree.column("file", width=180)
-    tree.column("deducted", width=70)
-    tree.column("slot", width=50)
-    tree.column("spool", width=120)
-    tree.column("note", width=140)
-    sy = ttk.Scrollbar(dlg, orient="vertical", command=tree.yview)
-    tree.configure(yscrollcommand=sy.set)
-    tree.pack(side="left", fill="both", expand=True, padx=(8, 0), pady=8)
-    sy.pack(side="right", fill="y", pady=8, padx=(0, 8))
+    tree.column("ts", width=158, minwidth=140, stretch=False)
+    tree.column("file", width=280, minwidth=180, stretch=True)
+    tree.column("deducted", width=100, minwidth=96, stretch=False)
+    tree.column("slot", width=64, minwidth=56, stretch=False)
+    tree.column("spool", width=200, minwidth=140, stretch=True)
+    tree.column("note", width=280, minwidth=160, stretch=True)
+    sy = ttk.Scrollbar(tree_wrap, orient="vertical", command=tree.yview)
+    sx = ttk.Scrollbar(tree_wrap, orient="horizontal", command=tree.xview)
+    tree.configure(yscrollcommand=sy.set, xscrollcommand=sx.set)
+    tree.grid(row=0, column=0, sticky="nsew")
+    sy.grid(row=0, column=1, sticky="ns")
+    sx.grid(row=1, column=0, sticky="ew")
 
-    entries = store.list_entries()
-    if not entries:
-        ttk.Label(
-            dlg,
-            text=(
-                "Noch keine Einträge.\n\n"
-                "Die Historie füllt sich, wenn ein Druck auf dem K2 endet und der "
-                "Tab Drucker verbunden ist — auch wenn du den Filament-Dialog "
-                "überspringst.\n\n"
-                "Einstellungen: „Nach Druckende: Verbrauch abfragen“ kann aus sein; "
-                "der Eintrag wird trotzdem gespeichert."
-            ),
-            style="Muted.TLabel",
-            wraplength=520,
-            justify="left",
-        ).pack(anchor="w", padx=12, pady=(0, 6))
+    _fill_tree()
 
-    for e in entries:
-        ded = f"{e.deducted_g} g" if e.deducted_g is not None else "—"
-        tree.insert(
-            "",
-            tk.END,
-            values=(
-                e.ts.replace("T", " ")[:19],
-                e.filename,
-                ded,
-                e.cfs_slot_label or "—",
-                e.spool_label or "—",
-                e.note,
-            ),
-        )
-
-    ttk.Button(dlg, text="Schließen", command=dlg.destroy).pack(pady=8)
+    show_table_dialog(dlg)
 
 
 def show_cfs_batch_dialog(
@@ -127,24 +208,35 @@ def show_cfs_batch_dialog(
 ) -> None:
     dlg = tk.Toplevel(parent)
     dlg.title("CFS — alle Slots")
+    dlg.configure(bg=BG)
     prepare_toplevel(
         dlg,
         parent,
         width=920,
-        height=380,
+        height=440,
         geometry_key="cfs_all_slots",
         min_width=760,
-        min_height=300,
+        min_height=340,
+        modal=False,
     )
 
+    foot = tk.Frame(dlg, bg=BG)
+    foot_inner = tk.Frame(foot, bg=BG)
+    foot_inner.pack(fill="x", padx=14, pady=12)
+    rounded_button(foot_inner, "Schließen", dlg.destroy, variant="accent", compact=True).pack(
+        side="right"
+    )
+
+    body = pack_dialog_shell(dlg, footer=foot)
+
     ttk.Label(
-        dlg,
+        body,
         text="Live vom Drucker (WebSocket). RFID-Chips am PC: Tab RFID-Tag.",
         style="Muted.TLabel",
         wraplength=860,
     ).pack(anchor="w", padx=12, pady=(10, 6))
 
-    tree_wrap = ttk.Frame(dlg)
+    tree_wrap = ttk.Frame(body)
     tree_wrap.pack(fill="both", expand=True, padx=12, pady=4)
     tree_wrap.grid_rowconfigure(0, weight=1)
     tree_wrap.grid_columnconfigure(0, weight=1)
@@ -152,17 +244,17 @@ def show_cfs_batch_dialog(
     cols = ("cfs", "slot", "mat", "color", "rfid", "spool", "rest", "status")
     tree = ttk.Treeview(tree_wrap, columns=cols, show="headings", height=8)
     for c, t, w, stretch in (
-        ("cfs", "CFS", 40, False),
-        ("slot", "Slot", 44, False),
-        ("mat", "Material", 72, False),
-        ("color", "Farbe", 76, False),
-        ("rfid", "RFID", 88, False),
-        ("spool", "Meine Spule", 240, True),
-        ("rest", "Rest", 72, False),
-        ("status", "Status", 110, False),
+        ("cfs", "CFS", 48, False),
+        ("slot", "Slot", 52, False),
+        ("mat", "Material", 88, False),
+        ("color", "Farbe", 88, False),
+        ("rfid", "RFID", 100, False),
+        ("spool", "Meine Spule", 260, True),
+        ("rest", "Rest", 80, False),
+        ("status", "Status", 130, True),
     ):
         tree.heading(c, text=t)
-        tree.column(c, width=w, minwidth=w // 2, stretch=stretch)
+        tree.column(c, width=w, minwidth=max(44, w // 2), stretch=stretch)
     sy = ttk.Scrollbar(tree_wrap, orient="vertical", command=tree.yview)
     sx = ttk.Scrollbar(tree_wrap, orient="horizontal", command=tree.xview)
     tree.configure(yscrollcommand=sy.set, xscrollcommand=sx.set)
@@ -229,17 +321,17 @@ def show_cfs_batch_dialog(
     low = find_low_filament_spools(inventory, threshold_g)
     if low:
         msg = "Niedriger Rest: " + ", ".join(s.label for s, _ in low[:4])
-        ttk.Label(dlg, text=msg, foreground="#c9a227").pack(anchor="w", padx=12, pady=4)
+        ttk.Label(body, text=msg, foreground="#c9a227").pack(anchor="w", padx=12, pady=4)
 
     if not has_box and all(s.empty for s in slot_list):
         ttk.Label(
-            dlg,
+            body,
             text="Tipp: Tab Filament muss CFS-Daten zeigen — dann ↻ oder neu verbinden.",
             style="Muted.TLabel",
             wraplength=560,
         ).pack(anchor="w", padx=12, pady=4)
 
-    ttk.Button(dlg, text="Schließen", command=dlg.destroy).pack(pady=10)
+    finalize_dialog_size(dlg, width=920, height=440, min_width=760, min_height=340)
 
 
 def _find_boxs_info_key(state: dict[str, Any]) -> bool:
