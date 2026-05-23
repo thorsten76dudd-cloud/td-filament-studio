@@ -901,24 +901,48 @@ class PrinterDevicePanel(ttk.Frame):
         if not fname:
             notify(self, "Dateiname unbekannt — Liste aktualisieren.", "warn")
             return
-        from creality_nfc.cfs_layout import parse_cfs_layout
-        from creality_nfc.print_readiness import check_print_readiness
-        from ui.print_check_dialog import show_print_check_dialog
+        host = self._host()
+        if not host:
+            return
+        notify(self, "Druck-Check wird vorbereitet …", "info")
 
-        snap = self._conn.snapshot()
-        layout = getattr(self, "_cfs_layout", None) or parse_cfs_layout(snap)
-        local = self._local_gcode_for_entry(entry)
-        report = check_print_readiness(
-            snap,
-            fname,
-            self.app.inventory,
-            self._cfs_slots,
-            layout=layout,
-            local_gcode=local,
-            file_entry=entry,
-            low_threshold_g=self.app.settings.low_filament_threshold_g,
-        )
-        show_print_check_dialog(self, report)
+        def work() -> None:
+            from creality_nfc.cfs_layout import parse_cfs_layout
+            from creality_nfc.gcode_filament import ensure_local_gcode_path
+            from creality_nfc.print_readiness import check_print_readiness
+            from ui.print_check_dialog import show_print_check_dialog
+
+            local = self._local_gcode_for_entry(entry)
+            try:
+                cached = ensure_local_gcode_path(
+                    fname,
+                    entry,
+                    host,
+                    self._ssh_password(),
+                )
+                if cached:
+                    local = cached
+            except Exception:
+                pass
+            snap = self._conn.snapshot()
+            layout = getattr(self, "_cfs_layout", None) or parse_cfs_layout(snap)
+            report = check_print_readiness(
+                snap,
+                fname,
+                self.app.inventory,
+                self._cfs_slots,
+                layout=layout,
+                local_gcode=local,
+                file_entry=entry,
+                low_threshold_g=self.app.settings.low_filament_threshold_g,
+            )
+
+            def ui() -> None:
+                show_print_check_dialog(self, report)
+
+            self.app.after(0, ui)
+
+        threading.Thread(target=work, daemon=True).start()
 
     def show_spool_locations(self) -> None:
         from ui.spool_location_dialog import show_spool_location_dialog

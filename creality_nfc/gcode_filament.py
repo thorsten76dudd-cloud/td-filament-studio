@@ -50,6 +50,7 @@ class GcodeSlotUsage:
 
 
 _MAX_PLAUSIBLE_GRAMS = 500.0
+_MAX_SLOT_GRAMS = 2500.0
 _MIN_PLAUSIBLE_GRAMS = 4.0
 
 
@@ -121,7 +122,7 @@ def slot_filament_grams(val: float | None) -> float | None:
     """Pro CFS-Slot / Farbe — auch kleine Orca-Werte (z. B. 0,2 g Blau)."""
     if val is None or val <= 0.01:
         return None
-    if val > _MAX_PLAUSIBLE_GRAMS:
+    if val > _MAX_SLOT_GRAMS:
         return None
     if val >= _MIN_PLAUSIBLE_GRAMS:
         return val
@@ -586,12 +587,21 @@ def _parse_filament_fields_from_text(
         m_used = _RE_FILAMENT_USED_G_LIST.search(body) or _RE_FILAMENT_USED_G_ORCA.search(body)
         if m_used:
             vals = _parse_float_list(m_used.group(1))
-            plausible = [slot_filament_grams(v) for v in vals]
-            plausible = [p for p in plausible if p is not None]
-            if len(plausible) >= 2:
-                weights = plausible
-            elif len(plausible) == 1 and not weights:
-                weights = plausible
+            if len(vals) >= 2:
+                row: list[float] = []
+                for v in vals:
+                    if v <= 0.01:
+                        row.append(0.0)
+                    else:
+                        g = slot_filament_grams(v)
+                        row.append(g if g is not None else 0.0)
+                if any(w > 0.01 for w in row):
+                    weights = row
+            else:
+                plausible = [slot_filament_grams(v) for v in vals]
+                plausible = [p for p in plausible if p is not None]
+                if len(plausible) == 1 and not weights:
+                    weights = plausible
 
     if not weights and total_g is not None:
         return colors, materials, []
@@ -1074,6 +1084,56 @@ def parse_filament_grams_from_file(
         if tail_best is not None and (best is None or tail_best > best):
             best = tail_best
     return best
+
+
+def _entry_size_bytes(entry: dict[str, Any] | None) -> int | None:
+    if not entry:
+        return None
+    raw = entry.get("size")
+    if raw is None or raw == "":
+        return None
+    try:
+        return int(float(str(raw).replace(",", ".").strip()))
+    except (TypeError, ValueError):
+        return None
+
+
+def local_gcode_needs_download(
+    local: Path | None,
+    file_entry: dict[str, Any] | None,
+    *,
+    min_ratio: float = 0.85,
+) -> bool:
+    """True wenn keine lokale Datei oder nur Drucker-Vorschau (Kopf ohne Footer)."""
+    if local is None or not local.is_file():
+        return True
+    try:
+        got = local.stat().st_size
+    except OSError:
+        return True
+    if got < 64:
+        return True
+    expected = _entry_size_bytes(file_entry)
+    if expected and got < int(expected * min_ratio):
+        return True
+    return False
+
+
+def ensure_local_gcode_path(
+    gcode_name: str,
+    file_entry: dict[str, Any] | None,
+    host: str,
+    password: str,
+) -> Path | None:
+    """Cache/Downloads/Desktop oder per SSH vom Drucker — für Druck-Check/Verbrauch."""
+    local = resolve_local_gcode_path(gcode_name)
+    if not local_gcode_needs_download(local, file_entry):
+        return local
+    if file_entry and host and password:
+        cached = cache_gcode_from_printer(host, password, file_entry)
+        if cached and cached.is_file():
+            return cached
+    return local
 
 
 def cache_gcode_from_printer(

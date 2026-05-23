@@ -364,6 +364,32 @@ class GcodeFilamentTests(unittest.TestCase):
         finally:
             path.unlink(missing_ok=True)
 
+    def test_creality_print_footer_single_active_extruder(self) -> None:
+        """Einzelnes Filament mitten in der Extruder-Liste (z. B. T2 / Slot 1C)."""
+        footer = (
+            "END_PRINT\n"
+            "; filament used [g] = 0.00, 0.00, 502.88, 0.00\n"
+            "; filament_colour = #ff8000;#0000ff;#808080;#ffffff\n"
+            "; filament_type = PETG;PETG;PETG;PLA\n"
+        )
+        with tempfile.NamedTemporaryFile("wb", suffix=".gcode", delete=False) as f:
+            f.write(b"; HEADER\nG1 X0\n")
+            f.write(b"X" * 250_000)
+            f.write(footer.encode("utf-8"))
+            path = Path(f.name)
+        try:
+            specs = parse_filament_specs_from_gcode_file(path)
+            self.assertEqual(len(specs), 1)
+            self.assertEqual(specs[0].extruder_index, 2)
+            self.assertEqual(specs[0].color_hex, "#808080")
+            self.assertAlmostEqual(specs[0].weight_g or 0, 502.88, places=2)
+            total = parse_filament_grams_from_file(path)
+            self.assertIsNotNone(total)
+            assert total is not None
+            self.assertAlmostEqual(total, 502.88, places=2)
+        finally:
+            path.unlink(missing_ok=True)
+
     def test_prefer_slicer_file_over_wrong_printer_metadata(self) -> None:
         state = {
             "cfsConnect": 1,
