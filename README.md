@@ -2,15 +2,20 @@
 
 Deutsch · **[English](README.en.md)**
 
-Windows-App für **Creality K2 mit CFS**: RFID-Tags programmieren (MIFARE Classic 1K), Material-Datenbank verwalten, Spulen inventarisieren, Drucker per WebSocket ansteuern.
+**Windows-Software für Creality K2 + CFS (Creality Filament System):** RFID/NFC-Tags beschreiben, Spulen verwalten, Filament-Rest tracken, Drucker live steuern.
 
-**Unterstützte Modelle:** K2 Pro, K2 Plus, K2, K2 Max, K2 SE (kein K1 / Creality Hi).
+| | |
+|---|---|
+| **Download** | [Releases → TD-Filament-Studio-Setup.exe](https://github.com/thorsten76dudd-cloud/td-filament-studio/releases/latest) |
+| **Version** | 1.5.116 (`v1.5.116-stable`) |
+| **Plattform** | Windows 10/11 |
+| **Drucker** | K2 Pro, K2 Plus, K2, K2 Max, K2 SE + **CFS** (kein K1 / Hi) |
 
-Basiert auf dem offenen Creality-Tag-Format ([DnG-Crafts/K2-RFID](https://github.com/DnG-Crafts/K2-RFID)).
+Programmiert **MIFARE Classic 1K**-Tags im Creality-Format (kompatibel mit CFS-Erkennung am Drucker). Basiert auf Community-Reverse-Engineering: [DnG-Crafts/K2-RFID](https://github.com/DnG-Crafts/K2-RFID).
 
-**Aktuelle Version:** [v1.5.70-stable](https://github.com/thorsten76dudd-cloud/td-filament-studio/releases/latest) — Installer unter *Releases*.
+> **Suchbegriffe / Keywords:** Creality K2 RFID, K2 Pro CFS NFC, Filament Spulenverwaltung Windows, MIFARE Classic 1K Creality Tag schreiben, CFS Slot 1A–1D, Spool manager, filament inventory, post-print usage deduct, G-Code filament check.
 
-## Funktionen
+## Funktionen (Überblick)
 
 - **RFID**: Tags lesen/schreiben, Stapelmodus, Verifikation, Tag-Export (JSON), Farbe aus Foto
 - **Material-DB**: Import vom Drucker (SSH), Profil-Anzeige; Spulen mit Material-DB verknüpfen
