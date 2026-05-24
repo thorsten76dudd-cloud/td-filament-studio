@@ -9,10 +9,73 @@ from creality_nfc.print_history import (
     PrintJobRecord,
     normalize_history_note,
     repair_history_entry,
+    repair_history_slots_from_inventory,
+    resolve_history_deduct_meta,
 )
 
 
 class PrintHistoryTests(unittest.TestCase):
+    def test_resolve_history_deduct_meta_from_dialog(self) -> None:
+        from types import SimpleNamespace
+
+        from creality_nfc.spool_inventory import Spool
+
+        sp = Spool(id="grey", label="Creality — CR-PETG", cfs_slot=2, color_hex="808080")
+        rows = [
+            SimpleNamespace(
+                spool_id="grey",
+                slot_label="1C",
+                spool_label="Creality — CR-PETG",
+            )
+        ]
+        idx, lab, spool, sid = resolve_history_deduct_meta(
+            [("grey", 503)],
+            rows,
+            get_spool=lambda i: sp if i == "grey" else None,
+            fallback_slot=3,
+        )
+        self.assertEqual(idx, 2)
+        self.assertEqual(lab, "1C")
+        self.assertEqual(sid, "grey")
+        self.assertIn("1C", spool)
+
+    def test_resolve_history_ignores_wrong_fallback_slot(self) -> None:
+        from types import SimpleNamespace
+
+        from creality_nfc.spool_inventory import Spool
+
+        sp = Spool(id="grey", label="Creality — CR-PETG", cfs_slot=2)
+        idx, lab, _, _ = resolve_history_deduct_meta(
+            [("grey", 100)],
+            [SimpleNamespace(spool_id="grey", slot_label="1C", spool_label="Creality — CR-PETG")],
+            get_spool=lambda i: sp,
+            fallback_slot=3,
+        )
+        self.assertEqual(lab, "1C")
+        self.assertNotEqual(lab, "1D")
+
+    def test_repair_history_slots_from_inventory(self) -> None:
+        from creality_nfc.spool_inventory import Spool
+
+        rec = PrintJobRecord(
+            id="x",
+            ts="2026-05-24T10:23:42Z",
+            filename="Körper37.gcode",
+            deducted_g=503,
+            cfs_slot=3,
+            cfs_slot_label="1D",
+            spool_label="Creality — CR-PETG",
+            spool_id="grey1c",
+        )
+        sp = Spool(id="grey1c", label="Creality — CR-PETG", cfs_slot=2)
+        changed = repair_history_slots_from_inventory(
+            [rec], get_spool=lambda i: sp if i == "grey1c" else None
+        )
+        self.assertTrue(changed)
+        self.assertEqual(rec.cfs_slot_label, "1C")
+        self.assertEqual(rec.cfs_slot, 2)
+        self.assertIn("1C", rec.spool_label)
+
     def test_add_and_csv(self) -> None:
         with tempfile.TemporaryDirectory() as tmp:
             path = Path(tmp) / "hist.json"

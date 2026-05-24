@@ -7,7 +7,7 @@ Deutsch · **[English](README.en.md)**
 | | |
 |---|---|
 | **Download** | [Releases → TD-Filament-Studio-Setup.exe](https://github.com/thorsten76dudd-cloud/td-filament-studio/releases/latest) |
-| **Version** | 1.5.119 (`v1.5.119-stable`) |
+| **Version** | 1.5.120 (`v1.5.120-stable`) |
 | **Plattform** | Windows 10/11 |
 | **Drucker** | K2 Pro, K2 Plus, K2, K2 Max, K2 SE + **CFS** (kein K1 / Hi) |
 

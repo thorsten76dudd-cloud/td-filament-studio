@@ -2715,7 +2715,7 @@ class TDFilamentStudioApp(AppTk):
         record,
         deductions: list[tuple[str, int]],
     ) -> None:
-        from creality_nfc.print_history import PrintJobRecord
+        from creality_nfc.print_history import PrintJobRecord, resolve_history_deduct_meta
         from creality_nfc.spool_passport import touch_passport_after_print
 
         if not isinstance(record, PrintJobRecord) or not deductions:
@@ -2731,6 +2731,12 @@ class TDFilamentStudioApp(AppTk):
         new_total = prev + total_new if prev else total_new
         sid = deductions[0][0]
         sp = self.inventory.get(sid)
+        slot_idx, slot_label, spool_display, _ = resolve_history_deduct_meta(
+            deductions,
+            None,
+            get_spool=self.inventory.get,
+            fallback_slot=sp.cfs_slot if sp and sp.cfs_slot is not None else record.cfs_slot,
+        )
         hist_note = (record.note or "").strip()
         if "nachträg" not in hist_note.lower():
             hist_note = (
@@ -2743,7 +2749,9 @@ class TDFilamentStudioApp(AppTk):
             deducted_g=new_total,
             note=hist_note,
             spool_id=sid,
-            spool_label=sp.label if sp else record.spool_label,
+            spool_label=spool_display or (sp.label if sp else record.spool_label),
+            cfs_slot=slot_idx,
+            cfs_slot_label=slot_label or record.cfs_slot_label,
         ):
             self.notify(
                 "Verbrauch von der Spule abgezogen, aber der Historie-Eintrag "
@@ -2926,8 +2934,14 @@ class TDFilamentStudioApp(AppTk):
         self.after(400, _ask)
 
     def show_print_history(self) -> None:
+        from creality_nfc.print_history import repair_history_slots_from_inventory
         from ui.extras_dialogs import show_print_history_dialog
 
+        if repair_history_slots_from_inventory(
+            self.print_history.list_entries(),
+            get_spool=self.inventory.get,
+        ):
+            self.print_history.save()
         show_print_history_dialog(
             self,
             self.print_history,
@@ -2953,8 +2967,7 @@ class TDFilamentStudioApp(AppTk):
     ) -> None:
         import time
 
-        from creality_nfc.cfs_adopt import SLOT_LABELS
-        from creality_nfc.print_history import PrintJobRecord, _now
+        from creality_nfc.print_history import PrintJobRecord, _now, resolve_history_deduct_meta
 
         panel = getattr(self, "_printer_device_panel", None)
         duration_sec = None
@@ -2964,16 +2977,15 @@ class TDFilamentStudioApp(AppTk):
                 duration_sec = max(0, int(time.monotonic() - float(started)))
         ded = deductions or []
         total_g = sum(g for _sid, g in ded) if ded else None
-        slot_idx = None
-        spool_label = ""
-        spool_id = ""
-        if panel is not None:
-            slot_idx = getattr(panel, "_last_print_cfs_slot", None)
-        if ded:
-            spool_id = ded[0][0]
-            sp = self.inventory.get(spool_id)
-            if sp:
-                spool_label = sp.label
+        fallback_slot = (
+            getattr(panel, "_last_print_cfs_slot", None) if panel is not None else None
+        )
+        slot_idx, slot_label, spool_label, spool_id = resolve_history_deduct_meta(
+            ded,
+            dialog_rows,
+            get_spool=self.inventory.get,
+            fallback_slot=fallback_slot,
+        )
         est_g = None
         try:
             from creality_nfc.gcode_filament import total_job_filament_grams
@@ -2993,7 +3005,7 @@ class TDFilamentStudioApp(AppTk):
                 estimated_total_g=est_g,
                 deducted_g=total_g,
                 cfs_slot=slot_idx,
-                cfs_slot_label=SLOT_LABELS[slot_idx] if slot_idx is not None else "",
+                cfs_slot_label=slot_label,
                 spool_label=spool_label,
                 spool_id=spool_id,
                 note="Abzug bestätigt" if ded else "Druck beendet (kein Abzug)",

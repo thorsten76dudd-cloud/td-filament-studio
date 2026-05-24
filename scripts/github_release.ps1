@@ -2,10 +2,10 @@
 # Creates latest stable release and removes the previous stable release tag.
 
 param(
-    [string]$Version = "1.5.119",
-    [string]$Tag = "v1.5.119-stable",
+    [string]$Version = "1.5.120",
+    [string]$Tag = "v1.5.120-stable",
     [string]$Repo = "thorsten76dudd-cloud/td-filament-studio",
-    [string]$RemoveTag = "v1.5.118-stable",
+    [string]$RemoveTag = "v1.5.119-stable",
     [switch]$DeleteAllOldReleases
 )
 
@@ -32,14 +32,14 @@ $notes = @(
     "## TD Filament Studio $Version",
     "",
     "### Fix",
-    "* Monitor: 100 % und Filament-Abzug ohne Tab-Wechsel",
-    "* Heartbeats mit gleichem Fortschritt blockieren nicht mehr",
-    "* Ab 95 %: automatische Nachfrage beim Drucker",
+    "* Druck-Historie: korrekter CFS-Slot (Abzug-Dialog, nicht Drucker-Meldung)",
+    "* Alte Eintraege werden beim Oeffnen der Historie korrigiert",
+    "* Spule: 1C · Creality — CR-PETG bei mehreren PETG",
     "",
     "### Enthalten",
-    "* Druck-Check ueberall, Auto G-Code, Historie, 4x CFS",
+    "* Monitor 100 %, Druck-Check, Auto G-Code, 4x CFS",
     "",
-    "Details: STABLE-v1.5.119.md im Repository."
+    "Details: STABLE-v1.5.120.md im Repository."
 ) -join [Environment]::NewLine
 Set-Content -Path $NotesFile -Value $notes -Encoding UTF8
 

@@ -8,7 +8,9 @@ import uuid
 from dataclasses import asdict, dataclass, field
 from datetime import datetime, timezone
 from pathlib import Path
-from typing import Any
+from typing import Any, Callable
+
+from creality_nfc.cfs_adopt import SLOT_LABELS
 
 
 def _now() -> str:
@@ -110,6 +112,10 @@ class PrintHistoryStore:
                     prev.spool_label = record.spool_label
                 if record.spool_id:
                     prev.spool_id = record.spool_id
+                if record.cfs_slot_label:
+                    prev.cfs_slot_label = record.cfs_slot_label
+                if record.cfs_slot is not None:
+                    prev.cfs_slot = record.cfs_slot
                 self.save()
                 return
         self._entries.insert(0, record)
@@ -214,6 +220,84 @@ def _opt_int(val: Any) -> int | None:
         return int(val)
     except (TypeError, ValueError):
         return None
+
+
+def resolve_history_deduct_meta(
+    deductions: list[tuple[str, int]],
+    dialog_rows: list[Any] | None,
+    *,
+    get_spool: Callable[[str], Any],
+    fallback_slot: int | None = None,
+) -> tuple[int | None, str, str, str]:
+    """
+    Slot/Spule für Historie aus Abzug-Dialog — nicht den zuletzt gemeldeten CFS-Slot.
+    Rückgabe: (slot_index, slot_label, spool_label, spool_id).
+    """
+    if not deductions:
+        return fallback_slot, "", "", ""
+    deduct_ids = {sid for sid, grams in deductions if grams > 0}
+    if not deduct_ids:
+        deduct_ids = {deductions[0][0]}
+    spool_id = next(iter(deduct_ids))
+    sp = get_spool(spool_id)
+    slot_idx: int | None = None
+    if sp is not None and getattr(sp, "cfs_slot", None) is not None:
+        slot_idx = int(sp.cfs_slot)
+    slot_label = ""
+    spool_label = str(getattr(sp, "label", "") or "") if sp is not None else ""
+    matched = None
+    for row in dialog_rows or []:
+        rid = getattr(row, "spool_id", None)
+        if rid in deduct_ids:
+            matched = row
+            break
+    if matched is None and dialog_rows:
+        matched = dialog_rows[0]
+    if matched is not None:
+        slot_label = str(getattr(matched, "slot_label", "") or "").strip()
+        row_spool = str(getattr(matched, "spool_label", "") or "").strip()
+        if row_spool:
+            spool_label = row_spool
+        if slot_label in SLOT_LABELS:
+            slot_idx = SLOT_LABELS.index(slot_label)
+    if not slot_label and slot_idx is not None and 0 <= slot_idx < len(SLOT_LABELS):
+        slot_label = SLOT_LABELS[slot_idx]
+    if not slot_label and fallback_slot is not None and 0 <= fallback_slot < len(SLOT_LABELS):
+        slot_idx = fallback_slot
+        slot_label = SLOT_LABELS[fallback_slot]
+    if slot_label and spool_label and not spool_label.startswith(f"{slot_label}"):
+        spool_label = f"{slot_label} · {spool_label}"
+    return slot_idx, slot_label, spool_label, spool_id
+
+
+def repair_history_slots_from_inventory(
+    entries: list[PrintJobRecord],
+    *,
+    get_spool: Callable[[str], Any],
+) -> bool:
+    """Alte Einträge: Slot aus verknüpfter Spule (spool_id), nicht Drucker-Meldung."""
+    changed = False
+    for rec in entries:
+        if not rec.spool_id:
+            continue
+        sp = get_spool(rec.spool_id)
+        if sp is None or getattr(sp, "cfs_slot", None) is None:
+            continue
+        idx = int(sp.cfs_slot)
+        if not (0 <= idx < len(SLOT_LABELS)):
+            continue
+        lab = SLOT_LABELS[idx]
+        if rec.cfs_slot == idx and rec.cfs_slot_label == lab:
+            continue
+        rec.cfs_slot = idx
+        rec.cfs_slot_label = lab
+        base = str(getattr(sp, "label", "") or rec.spool_label or "").strip()
+        if base and not base.startswith(f"{lab}"):
+            rec.spool_label = f"{lab} · {base}"
+        elif base:
+            rec.spool_label = base
+        changed = True
+    return changed
 
 
 def normalize_history_note(record: PrintJobRecord) -> str:
