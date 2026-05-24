@@ -237,6 +237,20 @@ def _is_heating_for_print(state: dict[str, Any]) -> bool:
     return False
 
 
+def print_state_signature(state: dict[str, Any]) -> tuple[Any, ...]:
+    """Kompakte Druck-Telemetrie — nur bei Änderung als frischer Print-Refresh zählen."""
+    ps = print_status(state)
+    return (
+        print_device_state_code(state),
+        int(state.get("aiPausePrint", 0) or 0),
+        ps.get("file"),
+        ps.get("progress"),
+        ps.get("cur_layer"),
+        ps.get("total_layer"),
+        ps.get("left_sec"),
+    )
+
+
 def print_job_phase(state: dict[str, Any]) -> str:
     """
     Drucker-Job-Phase für Steuer-Buttons (K2 WebSocket state / deviceState).

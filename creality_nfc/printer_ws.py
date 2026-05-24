@@ -16,6 +16,7 @@ from creality_nfc.printer_state import (
     payload_has_live_ui_update,
     payload_has_meaningful_refresh,
     payload_has_print_refresh,
+    print_state_signature,
 )
 
 WS_PORT = 9999
@@ -55,6 +56,7 @@ class PrinterConnection:
         self._last_state_at = 0.0
         self._last_meaningful_at = 0.0
         self._last_print_at = 0.0
+        self._print_signature: tuple[Any, ...] | None = None
 
     @property
     def connected(self) -> bool:
@@ -362,7 +364,10 @@ class PrinterConnection:
         if payload_has_meaningful_refresh(merged):
             self._last_meaningful_at = now
         if payload_has_print_refresh(merged):
-            self._last_print_at = now
+            sig = print_state_signature(self.snapshot())
+            if sig != self._print_signature:
+                self._last_print_at = now
+                self._print_signature = sig
         self._notify_listeners(live=True)
 
     def _mark_recv(self) -> None:

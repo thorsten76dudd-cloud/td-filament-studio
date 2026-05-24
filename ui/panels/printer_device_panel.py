@@ -132,6 +132,9 @@ class PrinterDevicePanel(ttk.Frame):
         self._gcode_ssh_tried = False
         self._live_snap_queue: queue.Queue[dict] = queue.Queue(maxsize=1)
         self._last_full_poll = 0.0
+        self._last_endprint_fetch = 0.0
+        self._endprint_watch_sig: tuple[Any, ...] | None = None
+        self._endprint_watch_since = 0.0
         self._last_telemetry_req = 0.0
         self._fan_drag = False
         self._cam_worker: K2CameraWorker | None = None
@@ -231,6 +234,7 @@ class PrinterDevicePanel(ttk.Frame):
         self._refresh_print_strip()
         if self._conn and self._conn.connected:
             self._conn.request_get(reqPrintObjects=1, ReqPrinterPara=1)
+            self._pull_live_snapshot_async()
             self.after(600, self._refresh_print_strip)
 
     def _try_auto_connect(self) -> None:
@@ -1196,7 +1200,42 @@ class PrinterDevicePanel(ttk.Frame):
             if self._conn.connected and now - self._last_full_poll >= 1.0:
                 self._last_full_poll = now
                 self._apply_state(snap or self._conn.snapshot())
+            self._maybe_refresh_stuck_print(now, snap)
         self._poll_id = self.after(450, self._poll)
+
+    def _maybe_refresh_stuck_print(self, now: float, snap: dict | None) -> None:
+        """Druckende: Firmware sendet oft weiter 98 % — frisch abfragen."""
+        if not self._conn or not self._conn.connected:
+            return
+        from creality_nfc.printer_state import (
+            print_job_phase,
+            print_state_signature,
+            print_status,
+        )
+
+        state = snap or self._conn.snapshot()
+        phase = print_job_phase(state)
+        if phase not in ("printing", "paused"):
+            self._endprint_watch_sig = None
+            return
+        ps = print_status(state)
+        prog = ps.get("progress")
+        if prog is None or int(prog) < 95:
+            self._endprint_watch_sig = None
+            return
+        sig = print_state_signature(state)
+        if sig != self._endprint_watch_sig:
+            self._endprint_watch_sig = sig
+            self._endprint_watch_since = now
+            return
+        stale_for = now - self._endprint_watch_since
+        idle = self._conn.print_idle_seconds()
+        need_fetch = stale_for >= 5.0 or idle >= 4.0
+        if not need_fetch or now - self._last_endprint_fetch < 3.0:
+            return
+        self._last_endprint_fetch = now
+        self._conn.request_get(reqPrintObjects=1, ReqPrinterPara=1)
+        self._pull_live_snapshot_async()
 
     def _set_fan_drag(self, dragging: bool) -> None:
         self._fan_drag = dragging

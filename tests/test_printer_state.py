@@ -31,6 +31,15 @@ class MeaningfulRefreshTests(unittest.TestCase):
 
 
 class PrintJobPhaseTests(unittest.TestCase):
+    def test_print_state_signature_changes_with_progress(self) -> None:
+        from creality_nfc.printer_state import print_state_signature
+
+        a = print_state_signature({"state": 1, "printProgress": 98, "printFileName": "x.gcode"})
+        b = print_state_signature({"state": 2, "printProgress": 100, "printFileName": "x.gcode"})
+        self.assertNotEqual(a, b)
+        c = print_state_signature({"state": 1, "printProgress": 98, "printFileName": "x.gcode"})
+        self.assertEqual(a, c)
+
     def test_stale_100_percent_with_time_left_is_printing(self) -> None:
         """Neuer Druck: Fortschritt noch 100 % vom alten Job, aber Restzeit > 0."""
         phase = print_job_phase(
