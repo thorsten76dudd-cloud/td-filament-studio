@@ -1230,7 +1230,7 @@ class PrinterDevicePanel(ttk.Frame):
         stale_for = now - self._endprint_watch_since
         idle = self._conn.print_idle_seconds()
         # Fortschritt/Layer stehen — Restzeit zählt oft weiter (Heartbeats).
-        need_fetch = stale_for >= 20.0 or idle >= 4.0
+        need_fetch = stale_for >= 12.0 or idle >= 3.0
         if not need_fetch or now - self._last_endprint_fetch < 3.0:
             return
         self._last_endprint_fetch = now
@@ -1456,13 +1456,29 @@ class PrinterDevicePanel(ttk.Frame):
         return f"noch ca. {m}min"
 
     @staticmethod
-    def printer_job_looks_finished(state: dict, ps: dict, phase: str) -> bool:
+    def printer_job_looks_finished(
+        state: dict,
+        ps: dict,
+        phase: str,
+        *,
+        peak_progress: int = 0,
+        last_progress: int = 0,
+    ) -> bool:
         """Druck wirkt beendet (z. B. App-Neustart/Update während Drucker schon fertig)."""
         if phase == "complete":
             return True
+        fname = str(ps.get("file") or "").strip()
+        try:
+            prog = ps.get("progress")
+            p = int(prog) if prog is not None else 0
+        except (TypeError, ValueError):
+            p = 0
+        peak = max(int(peak_progress), int(last_progress), p)
+        if phase in ("printing", "paused") and fname and peak >= 10 and p <= 2:
+            return True
         if phase != "idle":
             return False
-        if not str(ps.get("file") or "").strip():
+        if not fname:
             return False
         try:
             prog = ps.get("progress")
@@ -1504,7 +1520,28 @@ class PrinterDevicePanel(ttk.Frame):
         if prev_phase in ("printing", "paused") and phase == "idle":
             prog = progress if progress is not None else last_progress
             peak = max(last_progress, peak_progress, prog if prog is not None else 0)
-            if peak >= 99 and (filename.strip() or last_filename.strip()):
+            has_name = bool(filename.strip() or last_filename.strip())
+            if not has_name:
+                return False
+            try:
+                p = int(prog) if prog is not None else 0
+            except (TypeError, ValueError):
+                p = 0
+            if peak >= 99:
+                return True
+            if peak >= 10 and p <= 2:
+                return True
+        if prev_phase in ("printing", "paused") and phase in ("printing", "paused"):
+            try:
+                p = int(progress) if progress is not None else int(last_progress or 0)
+            except (TypeError, ValueError):
+                p = 0
+            peak = max(last_progress, peak_progress, p)
+            if (
+                peak >= 10
+                and p <= 2
+                and (filename.strip() or last_filename.strip())
+            ):
                 return True
         return False
 
@@ -1573,7 +1610,13 @@ class PrinterDevicePanel(ttk.Frame):
         prog = ps.get("progress")
         prev_phase = self._last_print_phase
         if not self._print_phase_synced:
-            if self.printer_job_looks_finished(s, ps, phase):
+            if self.printer_job_looks_finished(
+                s,
+                ps,
+                phase,
+                peak_progress=self._peak_print_progress,
+                last_progress=self._last_print_progress,
+            ):
                 self._request_post_print_deduct(s, ps)
             self._last_print_phase = phase
             self._print_phase_synced = True
@@ -1582,7 +1625,6 @@ class PrinterDevicePanel(ttk.Frame):
                 prev_phase, phase, s, filename=fname, progress=prog
             )
         if phase == "printing":
-            self.app._post_print_prompted = False
             if fname and fname != self._last_print_filename:
                 self.app._post_print_deduct_file = ""
                 self._peak_print_progress = 0

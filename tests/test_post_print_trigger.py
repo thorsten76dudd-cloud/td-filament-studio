@@ -97,6 +97,41 @@ class PostPrintTriggerTests(unittest.TestCase):
       PrinterDevicePanel.printer_job_looks_finished({}, {"file": ""}, "idle")
     )
 
+  def test_printing_stuck_at_zero_triggers_deduct(self) -> None:
+    self.assertTrue(
+      PrinterDevicePanel.should_trigger_post_print_deduct(
+        "printing",
+        "printing",
+        progress=0,
+        last_progress=74,
+        peak_progress=74,
+        filename="job.gcode",
+        last_filename="job.gcode",
+      )
+    )
+
+  def test_printing_stuck_not_at_job_start(self) -> None:
+    self.assertFalse(
+      PrinterDevicePanel.should_trigger_post_print_deduct(
+        "printing",
+        "printing",
+        progress=0,
+        last_progress=0,
+        peak_progress=0,
+        filename="job.gcode",
+        last_filename="job.gcode",
+      )
+    )
+
+  def test_printing_stuck_finished_heuristic(self) -> None:
+    state = {"state": 1, "printProgress": 0, "printFileName": "job.gcode"}
+    ps = {"file": "job.gcode", "progress": 0}
+    self.assertTrue(
+      PrinterDevicePanel.printer_job_looks_finished(
+        state, ps, "printing", peak_progress=74, last_progress=74
+      )
+    )
+
 
 if __name__ == "__main__":
   unittest.main()
