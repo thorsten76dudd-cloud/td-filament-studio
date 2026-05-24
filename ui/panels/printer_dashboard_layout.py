@@ -185,6 +185,11 @@ def _build_print_strip(panel: PrinterDevicePanel, parent: ttk.Frame) -> None:
         variant="secondary",
         compact=True,
     ).pack(side="left", padx=(0, 6))
+    tip(
+        hist_row,
+        "G-Code vs. CFS/Spulen — markierte Datei, zuletzt gewählt oder laufender Druck. "
+        "Lädt bei Bedarf die volle Datei automatisch vom Drucker.",
+    )
     rounded_button(
         hist_row,
         "Druck-Historie",
@@ -525,6 +530,11 @@ def build_creality_dashboard(panel: PrinterDevicePanel, outer: ttk.Frame) -> Non
         variant="accent",
         compact=True,
     ).pack(side="left", padx=(0, 8))
+    tip(
+        gcode_act,
+        "G-Code vs. CFS/Spulen — markierte Datei in der Liste. Lädt bei Bedarf "
+        "die volle Datei automatisch vom Drucker (SSH/Cache).",
+    )
     rounded_button(
         gcode_act,
         "Alles kopieren",
@@ -555,7 +565,7 @@ def build_creality_dashboard(panel: PrinterDevicePanel, outer: ttk.Frame) -> Non
     button_grid(
         tab_files,
         [
-            ("Druck-Check", panel.show_print_check, _BTN, "G-Code vs. CFS/Spulen-Rest prüfen (Datei wählen)."),
+            ("Druck-Check", panel.show_print_check, _BTN, "G-Code vs. CFS/Spulen — markierte Datei, zuletzt gewählt oder laufender Druck."),
             ("Aktualisieren", panel._refresh_gcode_list, _BTN, "Liste neu laden."),
             ("Hochladen…", panel._upload_gcode, _BTN, "Hochladen."),
             ("Herunterladen…", panel._download_gcode, _BTN, "G-Code komplett speichern."),

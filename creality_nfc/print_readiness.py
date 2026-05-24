@@ -85,6 +85,7 @@ def check_print_readiness(
         slots,
         file_entry=entry,
         loaded_slot_index=None,
+        local_path=local_gcode,
     )
 
     if not plans:

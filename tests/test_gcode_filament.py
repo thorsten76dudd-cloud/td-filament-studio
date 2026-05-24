@@ -18,6 +18,7 @@ from creality_nfc.gcode_filament import (
     parse_gcode_print_temps,
     plausible_filament_grams,
     resolve_slots_from_gcode,
+    resolve_gcode_entry_for_check,
 )
 from creality_nfc.cfs_adopt import parse_cfs_slots
 
@@ -363,6 +364,33 @@ class GcodeFilamentTests(unittest.TestCase):
             self.assertAlmostEqual(total, 224.19, places=1)
         finally:
             path.unlink(missing_ok=True)
+
+    def test_resolve_gcode_entry_for_check(self) -> None:
+        state = {
+            "retGcodeFileInfo2": [
+                {"name": "job.gcode", "filamentWeight": "40", "material": "PETG"}
+            ]
+        }
+        files = [{"name": "other.gcode"}, {"name": "job.gcode", "path": "/gcodes/job.gcode"}]
+        entry, fn = resolve_gcode_entry_for_check(
+            state, selected_entry=files[1]
+        )
+        self.assertEqual(fn, "job.gcode")
+        self.assertEqual(entry.get("name"), "job.gcode")
+        entry, fn = resolve_gcode_entry_for_check(
+            state, last_entry=files[0]
+        )
+        self.assertEqual(fn, "other.gcode")
+        entry, fn = resolve_gcode_entry_for_check(
+            state, print_filename="job.gcode", cached_files=files
+        )
+        self.assertEqual(fn, "job.gcode")
+        entry, fn = resolve_gcode_entry_for_check(state, print_filename="job.gcode")
+        self.assertEqual(fn, "job.gcode")
+        self.assertEqual(entry.get("filamentWeight"), "40")
+        entry, fn = resolve_gcode_entry_for_check(state)
+        self.assertIsNone(entry)
+        self.assertEqual(fn, "")
 
     def test_creality_print_footer_single_active_extruder(self) -> None:
         """Einzelnes Filament mitten in der Extruder-Liste (z. B. T2 / Slot 1C)."""

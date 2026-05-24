@@ -842,6 +842,8 @@ def merge_gcode_filament_info(
     state: dict[str, Any],
     gcode_path: str,
     file_entry: dict[str, Any] | None = None,
+    *,
+    local_path: Path | None = None,
 ) -> dict[str, Any]:
     """Drucker-Metadaten + Dateiliste + Slicer-Kommentare im G-Code zusammenführen."""
     merged: dict[str, Any] = {}
@@ -902,7 +904,8 @@ def merge_gcode_filament_info(
                 file_colors[0] if len(file_colors) == 1 else ";".join(file_colors)
             )
 
-    local_path = resolve_local_gcode_path(gcode_path)
+    if local_path is None:
+        local_path = resolve_local_gcode_path(gcode_path)
     if local_path and local_path.is_file():
         file_specs = parse_filament_specs_from_gcode_file(local_path)
         if file_specs:
@@ -914,6 +917,54 @@ def merge_gcode_filament_info(
             elif not merged.get("filamentWeight") and any(s.weight_g for s in file_specs):
                 merged.update(_specs_to_info_fields(file_specs))
     return merged
+
+
+def resolve_gcode_entry_for_check(
+    state: dict[str, Any],
+    *,
+    selected_entry: dict[str, Any] | None = None,
+    last_entry: dict[str, Any] | None = None,
+    print_filename: str = "",
+    cached_files: list[dict[str, Any]] | None = None,
+) -> tuple[dict[str, Any] | None, str]:
+    """
+    G-Code-Eintrag für Druck-Check: markierte Datei → zuletzt gewählt → laufender Druck.
+    """
+    def _entry_name(entry: dict[str, Any]) -> str:
+        return str(entry.get("name") or entry.get("path") or "").strip()
+
+    for entry in (selected_entry, last_entry):
+        if entry:
+            fn = _entry_name(entry)
+            if fn:
+                return entry, fn
+
+    job = (print_filename or "").strip()
+    if job.lower().startswith("letzter druck:"):
+        job = job.split(":", 1)[-1].strip()
+    job = job.replace("\\", "/").rsplit("/", 1)[-1]
+    if not job or job in ("—", "-", "?"):
+        return None, ""
+
+    base = job.lower()
+    partial: dict[str, Any] | None = None
+    if cached_files:
+        for entry in cached_files:
+            fn = str(entry.get("name") or "").lower()
+            fp = str(entry.get("path") or "").replace("\\", "/").lower()
+            if fn == base or fp.endswith("/" + base) or fp == base:
+                name = _entry_name(entry)
+                return entry, name or job
+            if partial is None and base and (base in fn or fn in base or base in fp):
+                partial = entry
+        if partial is not None:
+            name = _entry_name(partial)
+            return partial, name or job
+
+    info = find_gcode_file_info(state, job)
+    if info:
+        return info, _entry_name(info) or job
+    return {"name": job}, job
 
 
 def find_gcode_file_info(state: dict[str, Any], gcode_path: str) -> dict[str, Any] | None:
@@ -1338,6 +1389,7 @@ def build_slot_usage_plan(
     *,
     file_entry: dict[str, Any] | None = None,
     loaded_slot_index: int | None = None,
+    local_path: Path | None = None,
 ) -> list[GcodeSlotUsage]:
     """
     Alle im G-Code genutzten Farben → CFS-Slot + Gramm (aus Slicer-Metadaten).
@@ -1348,6 +1400,7 @@ def build_slot_usage_plan(
         slots,
         file_entry=file_entry,
         loaded_slot_index=loaded_slot_index,
+        local_path=local_path,
     )
     out: list[GcodeSlotUsage] = []
     seen: set[int] = set()
@@ -1374,12 +1427,16 @@ def build_slot_usage_plan(
         )
 
     if not out:
-        job = total_job_filament_grams(state, gcode_path, file_entry=file_entry)
+        job = total_job_filament_grams(
+            state, gcode_path, file_entry=file_entry, local_path=local_path
+        )
         if job:
             grams_total, src = job
             targets = list(mappings)
             if not targets:
-                info = merge_gcode_filament_info(state, gcode_path, file_entry)
+                info = merge_gcode_filament_info(
+                    state, gcode_path, file_entry, local_path=local_path
+                )
                 specs = active_filament_specs(parse_filament_specs(info))
                 if specs:
                     spec0 = specs[0]
@@ -1462,12 +1519,15 @@ def resolve_slots_from_gcode(
     *,
     file_entry: dict[str, Any] | None = None,
     loaded_slot_index: int | None = None,
+    local_path: Path | None = None,
 ) -> list[tuple[int, GcodeFilamentSpec]]:
     """
     G-Code-Farben → CFS-Slot-Indizes.
     Rückgabe: [(slot_index, spec), …] für alle aktiven Extruder im G-Code.
     """
-    info = merge_gcode_filament_info(state, gcode_path, file_entry)
+    info = merge_gcode_filament_info(
+        state, gcode_path, file_entry, local_path=local_path
+    )
     if not info:
         return []
     specs = active_filament_specs(parse_filament_specs(info))

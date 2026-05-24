@@ -67,7 +67,7 @@ class PrinterDashboardPanel(ttk.LabelFrame):
             (
                 "Druck-Check",
                 _open_print_check,
-                "Markierte G-Code-Datei vs. CFS/Spulen (Tab Drucker → Dateien).",
+                "Markierte/zuletzt gewählte G-Code-Datei oder laufender Druck vs. CFS/Spulen (Tab Drucker).",
             ),
             (
                 "DB vergleigen",

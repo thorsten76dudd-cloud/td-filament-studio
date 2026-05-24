@@ -889,17 +889,46 @@ class PrinterDevicePanel(ttk.Frame):
             return cached
         return resolve_local_gcode_path(name)
 
+    def _prepare_local_gcode(self, fname: str, entry: dict | None, host: str) -> Path | None:
+        """Cache/Downloads oder SSH-Download für vollen G-Code (Footer/Mehrfarben)."""
+        from creality_nfc.gcode_filament import ensure_local_gcode_path
+
+        local = self._local_gcode_for_entry(entry)
+        try:
+            cached = ensure_local_gcode_path(
+                fname,
+                entry,
+                host,
+                self._ssh_password(),
+            )
+            if cached:
+                local = cached
+                base = fname.replace("\\", "/").rsplit("/", 1)[-1].lower()
+                if base and cached.name.lower() == base:
+                    self._gcode_cache_path = cached
+        except Exception:
+            pass
+        return local
+
+    def _resolve_gcode_for_print_check(self, snap: dict) -> tuple[dict | None, str]:
+        from creality_nfc.gcode_filament import resolve_gcode_entry_for_check
+        from creality_nfc.printer_state import print_status
+
+        ps = print_status(snap)
+        print_fn = self._gcode_job_basename(
+            str(ps.get("file") or self._last_print_filename or "")
+        )
+        return resolve_gcode_entry_for_check(
+            snap,
+            selected_entry=self._selected_gcode_entry(),
+            last_entry=self._last_gcode_entry,
+            print_filename=print_fn,
+            cached_files=self._gcode_files,
+        )
+
     def show_print_check(self) -> None:
         if not self._conn:
             notify(self, "Zuerst mit dem Drucker verbinden.", "warn")
-            return
-        entry = self._selected_gcode_entry()
-        if not entry:
-            notify(self, "Bitte zuerst eine G-Code-Datei in der Liste anklicken.", "warn")
-            return
-        fname = str(entry.get("name") or entry.get("path") or "").strip()
-        if not fname:
-            notify(self, "Dateiname unbekannt — Liste aktualisieren.", "warn")
             return
         host = self._host()
         if not host:
@@ -908,23 +937,23 @@ class PrinterDevicePanel(ttk.Frame):
 
         def work() -> None:
             from creality_nfc.cfs_layout import parse_cfs_layout
-            from creality_nfc.gcode_filament import ensure_local_gcode_path
             from creality_nfc.print_readiness import check_print_readiness
             from ui.print_check_dialog import show_print_check_dialog
 
-            local = self._local_gcode_for_entry(entry)
-            try:
-                cached = ensure_local_gcode_path(
-                    fname,
-                    entry,
-                    host,
-                    self._ssh_password(),
-                )
-                if cached:
-                    local = cached
-            except Exception:
-                pass
             snap = self._conn.snapshot()
+            entry, fname = self._resolve_gcode_for_print_check(snap)
+            if not entry or not fname:
+                self.app.after(
+                    0,
+                    lambda: notify(
+                        self,
+                        "Keine G-Code-Datei — in „Dateien“ wählen, zuletzt markierte "
+                        "Datei oder laufender Druck.",
+                        "warn",
+                    ),
+                )
+                return
+            local = self._prepare_local_gcode(fname, entry, host)
             layout = getattr(self, "_cfs_layout", None) or parse_cfs_layout(snap)
             report = check_print_readiness(
                 snap,
