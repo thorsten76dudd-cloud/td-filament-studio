@@ -1162,7 +1162,7 @@ class PrinterDevicePanel(ttk.Frame):
                     return
                 if not self._printer_tab_visible and recv_idle > 8.0:
                     self._soft_live_refresh()
-                if print_idle > 6.0 and now - self._last_auto_burst > 6.0:
+                if print_idle > 4.0 and now - self._last_auto_burst > 4.0:
                     self._pull_live_snapshot_async()
                     self._last_auto_burst = now
                 from creality_nfc.printer_state import payload_has_live_telemetry
@@ -1204,7 +1204,7 @@ class PrinterDevicePanel(ttk.Frame):
         self._poll_id = self.after(450, self._poll)
 
     def _maybe_refresh_stuck_print(self, now: float, snap: dict | None) -> None:
-        """Druckende: Firmware sendet oft weiter 98 % — frisch abfragen."""
+        """Druckende / hängender Fortschritt — frisch vom Drucker abfragen."""
         if not self._conn or not self._conn.connected:
             return
         from creality_nfc.printer_state import (
@@ -1219,8 +1219,7 @@ class PrinterDevicePanel(ttk.Frame):
             self._endprint_watch_sig = None
             return
         ps = print_status(state)
-        prog = ps.get("progress")
-        if prog is None or int(prog) < 95:
+        if not (ps.get("file") or self._last_print_filename):
             self._endprint_watch_sig = None
             return
         sig = print_state_signature(state)
@@ -1230,7 +1229,8 @@ class PrinterDevicePanel(ttk.Frame):
             return
         stale_for = now - self._endprint_watch_since
         idle = self._conn.print_idle_seconds()
-        need_fetch = stale_for >= 5.0 or idle >= 4.0
+        # Fortschritt/Layer stehen — Restzeit zählt oft weiter (Heartbeats).
+        need_fetch = stale_for >= 20.0 or idle >= 4.0
         if not need_fetch or now - self._last_endprint_fetch < 3.0:
             return
         self._last_endprint_fetch = now

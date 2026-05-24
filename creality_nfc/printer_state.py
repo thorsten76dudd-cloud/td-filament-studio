@@ -238,7 +238,10 @@ def _is_heating_for_print(state: dict[str, Any]) -> bool:
 
 
 def print_state_signature(state: dict[str, Any]) -> tuple[Any, ...]:
-    """Kompakte Druck-Telemetrie — nur bei Änderung als frischer Print-Refresh zählen."""
+    """
+    Druck-Telemetrie für Stale-Erkennung — ohne Restzeit/Verstrichene Zeit.
+    (Die läuft in Heartbeats weiter, obwohl Fortschritt/Layer stehen bleiben.)
+    """
     ps = print_status(state)
     return (
         print_device_state_code(state),
@@ -247,7 +250,6 @@ def print_state_signature(state: dict[str, Any]) -> tuple[Any, ...]:
         ps.get("progress"),
         ps.get("cur_layer"),
         ps.get("total_layer"),
-        ps.get("left_sec"),
     )
 
 
