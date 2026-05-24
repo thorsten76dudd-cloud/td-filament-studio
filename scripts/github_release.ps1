@@ -34,7 +34,7 @@ $notes = @(
     "### Fix",
     "* Druck-Historie: korrekter CFS-Slot (Abzug-Dialog, nicht Drucker-Meldung)",
     "* Alte Eintraege werden beim Oeffnen der Historie korrigiert",
-    "* Spule: 1C · Creality — CR-PETG bei mehreren PETG",
+    "* Spule mit Slot-Prefix (z. B. 1C + Creality CR-PETG)",
     "",
     "### Enthalten",
     "* Monitor 100 %, Druck-Check, Auto G-Code, 4x CFS",
