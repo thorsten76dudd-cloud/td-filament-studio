@@ -133,6 +133,7 @@ from ui.panels.printer_device_panel import PrinterDevicePanel
 from ui.panels.printer_panel import PrinterDashboardPanel
 from ui.panels.settings_panel import SettingsPanel
 from ui.panels.spool_panel import SpoolManagerPanel
+from ui.system_tray import BackgroundTray, tray_supported
 from ui.tooltip import tip
 from ui.theme import (
     ACCENT_DARK,
@@ -233,6 +234,8 @@ class TDFilamentStudioApp(AppTk):
         self._post_print_deduct_file = ""
         self._shutdown_done = False
         self._reader_poll_after: str | None = None
+        self._background_tray: BackgroundTray | None = None
+        self._tray_hidden = False
         migrate_legacy_settings()
 
         self.protocol("WM_DELETE_WINDOW", self._on_close)
@@ -290,7 +293,9 @@ class TDFilamentStudioApp(AppTk):
         m_file.add_command(label="Tag leeren…", command=self.format_tag_quick)
         m_file.add_command(label="Chip duplizieren…", command=self.duplicate_chip_start)
         m_file.add_separator()
-        m_file.add_command(label="Beenden", command=self._on_close)
+        m_file.add_command(label="In Hintergrund (Tray)", command=self._hide_to_tray)
+        m_file.add_separator()
+        m_file.add_command(label="Beenden", command=lambda: self._on_close(force=True))
 
         m_extra = tk.Menu(menubar, tearoff=0)
         menubar.add_cascade(label="Navigation", menu=m_extra)
@@ -1278,6 +1283,10 @@ class TDFilamentStudioApp(AppTk):
             self.serial_var.set(f"{self.settings.next_serial:06d}")
         self.notify("Einstellungen gespeichert", "ok")
         self._sync_creality_watcher()
+        if not settings.tray_run_in_background:
+            self._stop_background_tray()
+            if self._tray_hidden:
+                self._show_from_tray()
         if settings.check_updates:
             self._update_prompted_tag = ""
             self.after(1000, self._check_updates_quiet)
@@ -4642,7 +4651,67 @@ class TDFilamentStudioApp(AppTk):
 
         self._run_bg_job("Update-Download", work, on_ok=on_ok)
 
-    def _on_close(self) -> None:
+    def _get_background_tray(self) -> BackgroundTray:
+        if self._background_tray is None:
+            self._background_tray = BackgroundTray()
+        return self._background_tray
+
+    def _tray_mode_enabled(self) -> bool:
+        return bool(getattr(self.settings, "tray_run_in_background", False))
+
+    def _hide_to_tray(self) -> None:
+        if self._shutdown_done or self._tray_hidden:
+            return
+        if not self._tray_mode_enabled():
+            self.notify(
+                "Hintergrund (Tray) ist aus — unter Einstellungen aktivieren und speichern.",
+                "warn",
+            )
+            return
+        if not tray_supported():
+            self.notify(
+                "Tray nicht verfügbar (Windows + pystray). Siehe requirements.txt.",
+                "warn",
+            )
+            return
+        tray = self._get_background_tray()
+        if not tray.start(
+            on_show=self._show_from_tray,
+            on_quit=lambda: self.after(0, lambda: self._on_close(force=True)),
+            tooltip=f"{APP_NAME} — im Hintergrund",
+        ):
+            self.notify("Tray-Symbol konnte nicht gestartet werden.", "warn")
+            return
+        self._tray_hidden = True
+        try:
+            self.withdraw()
+        except tk.TclError:
+            pass
+        self._set_status("Im Hintergrund (Tray) — Doppelklick auf Symbol zum Öffnen", "ok")
+
+    def _show_from_tray(self) -> None:
+        try:
+            self.after(0, self._do_show_from_tray)
+        except tk.TclError:
+            pass
+
+    def _do_show_from_tray(self) -> None:
+        self._tray_hidden = False
+        try:
+            self.deiconify()
+            self.lift()
+            self.focus_force()
+        except tk.TclError:
+            pass
+
+    def _stop_background_tray(self) -> None:
+        if self._background_tray is not None:
+            self._background_tray.stop()
+
+    def _on_close(self, force: bool = False) -> None:
+        if not force and self._tray_mode_enabled() and tray_supported():
+            self._hide_to_tray()
+            return
         if self._shutdown_done:
             return
         self._shutdown_done = True
@@ -4659,6 +4728,7 @@ class TDFilamentStudioApp(AppTk):
         from creality_nfc.creality_watch import unregister_main_app
 
         unregister_main_app()
+        self._stop_background_tray()
         shutdown_application(self)
         hard_exit_frozen(0)
         try:

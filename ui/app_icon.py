@@ -44,6 +44,24 @@ def apply_window_icon(window: tk.Misc) -> None:
         pass
 
 
+def load_tray_pil_image():
+    """32×32 PNG für System-Tray (pystray)."""
+    path = _asset_path(_LOGO_32)
+    if not path.is_file():
+        path = _asset_path(_LOGO_48)
+    if not path.is_file():
+        return None
+    try:
+        from PIL import Image
+
+        im = Image.open(path).convert("RGBA")
+        if im.size != (32, 32):
+            im = im.resize((32, 32), Image.Resampling.LANCZOS)
+        return im
+    except Exception:
+        return None
+
+
 def load_header_logo(master: tk.Misc, *, size: int = 48) -> tk.PhotoImage | None:
     """Logo für die Kopfzeile (48 px)."""
     rel = _LOGO_48 if size >= 40 else _LOGO_32

@@ -89,6 +89,24 @@ class SettingsPanel(ttk.Frame):
             wraplength=520,
         ).pack(anchor="w", padx=8, pady=(0, 6))
 
+        tray = ttk.LabelFrame(inner, text="Hintergrund (Tray)")
+        tray.pack(fill="x", **frame_pad)
+        self.tray_run_in_background = tk.BooleanVar(value=settings.tray_run_in_background)
+        ttk.Checkbutton(
+            tray,
+            text="Bei Schließen (X) im Hintergrund weiterlaufen (Tray-Symbol)",
+            variable=self.tray_run_in_background,
+        ).pack(anchor="w", padx=8, pady=(4, 0))
+        ttk.Label(
+            tray,
+            text="Wenn aktiv: Fenster schließen minimiert in die Taskleiste neben der Uhr — Druck-Monitor "
+            "und Filament-Abzug laufen weiter. Doppelklick auf das Symbol öffnet die App. "
+            "Beenden: Rechtsklick auf Tray → Beenden, oder Datei → Beenden. "
+            "Nur Windows.",
+            style="Muted.TLabel",
+            wraplength=520,
+        ).pack(anchor="w", padx=8, pady=(0, 6))
+
         serial = ttk.LabelFrame(inner, text="Seriennummer")
         serial.pack(fill="x", **frame_pad)
         self.auto_serial = tk.BooleanVar(value=settings.auto_increment_serial)
@@ -291,4 +309,5 @@ class SettingsPanel(ttk.Frame):
         s.default_post_print_deduct_g = int(self.default_deduct_g.get())
         s.protect_tag_overwrite = self.protect_tag.get()
         s.launch_with_creality_print = self.launch_with_creality.get()
+        s.tray_run_in_background = self.tray_run_in_background.get()
         self._on_save(s)

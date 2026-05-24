@@ -31,6 +31,7 @@ hiddenimports += collect_submodules('smartcard')
 hiddenimports += collect_submodules('creality_nfc')
 hiddenimports += collect_submodules('ui')
 hiddenimports += collect_submodules('app')
+hiddenimports += collect_submodules('pystray')
 
 a = Analysis(
     ['main.py'],

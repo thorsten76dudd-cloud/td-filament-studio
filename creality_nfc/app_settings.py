@@ -39,6 +39,8 @@ class AppSettings:
     cfs_auto_feed_before_print: bool = False
     # Hintergrund-Wächter: TD Filament Studio starten, wenn Creality Print startet.
     launch_with_creality_print: bool = False
+    # Schließen (X) → Tray statt Beenden; Druck-Monitor läuft weiter (Windows).
+    tray_run_in_background: bool = False
     # Veraltet (ab 1.5.45): kein Upload mehr — nur Lesen vom Drucker.
     auto_push_db_to_printer: bool = False
     auto_push_options_with_db: bool = False
