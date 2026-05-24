@@ -32,7 +32,7 @@ $notes = @(
     "## TD Filament Studio $Version",
     "",
     "### Neu",
-    "* Hintergrund (Tray): optional in Einstellungen — bei X im Tray weiterlaufen",
+    "* Hintergrund (Tray): optional in Einstellungen - bei X im Tray weiterlaufen",
     "",
     "### Enthalten",
     "* Filament-Abzug ohne Tab-Wechsel (v1.5.122)",
