@@ -109,6 +109,8 @@ class PrinterDevicePanel(ttk.Frame):
         self._last_gcode_entry: dict | None = None
         self._last_print_phase: str = "idle"
         self._print_phase_synced: bool = False
+        self._print_phase_sync_started: float | None = None
+        self._post_print_deduct_offered_for: str = ""
         self._last_print_progress: int = 0
         self._peak_print_progress: int = 0
         self._last_print_filename: str = ""
@@ -412,6 +414,7 @@ class PrinterDevicePanel(ttk.Frame):
         if fresh:
             self._was_connected = False
             self._print_phase_synced = False
+            self._print_phase_sync_started = time.monotonic()
             self._gcode_polls = 0
             self._gcode_ssh_tried = False
         self._conn.start()
@@ -1136,6 +1139,7 @@ class PrinterDevicePanel(ttk.Frame):
         self._clear_gcode_text_display()
         self._was_connected = False
         self._print_phase_synced = False
+        self._print_phase_sync_started = None
         self._gcode_polls = 0
         self._gcode_ssh_tried = False
 
@@ -1603,6 +1607,61 @@ class PrinterDevicePanel(ttk.Frame):
             ),
         )
 
+    @staticmethod
+    def _print_snap_usable_for_sync(
+        *,
+        phase: str,
+        fname: str,
+        progress: int | None,
+        last_filename: str,
+    ) -> bool:
+        """Erster Snap nach Connect ist nur „aussagekräftig“, wenn Job-Daten erkennbar sind."""
+        if phase in ("printing", "paused", "complete", "error"):
+            return True
+        if fname.strip() or last_filename.strip():
+            return True
+        if progress is not None:
+            try:
+                if int(progress) > 0:
+                    return True
+            except (TypeError, ValueError):
+                return False
+        return False
+
+    def _print_phase_sync_timed_out(self, limit_s: float = 25.0) -> bool:
+        started = self._print_phase_sync_started
+        if started is None:
+            return True
+        return (time.monotonic() - started) >= limit_s
+
+    def _maybe_catch_up_post_print_deduct(
+        self,
+        s: dict,
+        ps: dict,
+        phase: str,
+        fname: str,
+    ) -> None:
+        """Job-fertig nach Sync: wenn Übergangserkennung verpasst, einmalig nachholen."""
+        from creality_nfc.app_settings import normalize_print_job_filename
+
+        candidate = normalize_print_job_filename(fname or self._last_print_filename)
+        if not candidate:
+            return
+        if self.app.settings.is_post_print_deduct_handled(candidate):
+            return
+        if self._post_print_deduct_offered_for == candidate:
+            return
+        if not self.printer_job_looks_finished(
+            s,
+            ps,
+            phase,
+            peak_progress=self._peak_print_progress,
+            last_progress=self._last_print_progress,
+        ):
+            return
+        self._post_print_deduct_offered_for = candidate
+        self._request_post_print_deduct(s, ps)
+
     def _apply_print_status(self, s: dict) -> None:
         ps = print_status(s)
         phase = print_job_phase(s)
@@ -1610,24 +1669,34 @@ class PrinterDevicePanel(ttk.Frame):
         prog = ps.get("progress")
         prev_phase = self._last_print_phase
         if not self._print_phase_synced:
-            if self.printer_job_looks_finished(
-                s,
-                ps,
-                phase,
-                peak_progress=self._peak_print_progress,
-                last_progress=self._last_print_progress,
-            ):
-                self._request_post_print_deduct(s, ps)
-            self._last_print_phase = phase
-            self._print_phase_synced = True
+            usable = self._print_snap_usable_for_sync(
+                phase=phase,
+                fname=fname,
+                progress=prog,
+                last_filename=self._last_print_filename,
+            )
+            forced = self._print_phase_sync_timed_out()
+            if usable or forced:
+                if self.printer_job_looks_finished(
+                    s,
+                    ps,
+                    phase,
+                    peak_progress=self._peak_print_progress,
+                    last_progress=self._last_print_progress,
+                ):
+                    self._request_post_print_deduct(s, ps)
+                self._last_print_phase = phase
+                self._print_phase_synced = True
         else:
             self._maybe_notify_print_phase(
                 prev_phase, phase, s, filename=fname, progress=prog
             )
+            self._maybe_catch_up_post_print_deduct(s, ps, phase, fname)
         if phase == "printing":
             if fname and fname != self._last_print_filename:
                 self.app._post_print_deduct_file = ""
                 self._peak_print_progress = 0
+                self._post_print_deduct_offered_for = ""
                 self._print_job_started_mono = time.monotonic()
                 self._warn_low_filament_for_job(s, fname)
             elif self._print_job_started_mono is None:
