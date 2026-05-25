@@ -2,10 +2,10 @@
 # Creates latest stable release and removes the previous stable release tag.
 
 param(
-    [string]$Version = "1.5.123",
-    [string]$Tag = "v1.5.123-stable",
+    [string]$Version = "1.5.124",
+    [string]$Tag = "v1.5.124-stable",
     [string]$Repo = "thorsten76dudd-cloud/td-filament-studio",
-    [string]$RemoveTag = "v1.5.122-stable",
+    [string]$RemoveTag = "v1.5.123-stable",
     [switch]$DeleteAllOldReleases
 )
 
@@ -31,14 +31,15 @@ if (-not (Test-Path $Setup)) {
 $notes = @(
     "## TD Filament Studio $Version",
     "",
-    "### Neu",
-    "* Hintergrund (Tray): optional in Einstellungen - bei X im Tray weiterlaufen",
+    "### Fix",
+    "* Kamera friert nicht mehr ein: WebRTC-Watchdog laedt das Bild bei Stillstand automatisch neu",
+    "* ICE-Disconnect/Closed loest sauberen Reconnect aus",
     "",
     "### Enthalten",
+    "* Hintergrund (Tray) optional (v1.5.123)",
     "* Filament-Abzug ohne Tab-Wechsel (v1.5.122)",
-    "* Monitor-Stale + Historie-Slot (v1.5.120/121)",
     "",
-    "Details: STABLE-v1.5.123.md im Repository."
+    "Details: STABLE-v1.5.124.md im Repository."
 ) -join [Environment]::NewLine
 Set-Content -Path $NotesFile -Value $notes -Encoding UTF8
 

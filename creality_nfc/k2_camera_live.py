@@ -38,6 +38,7 @@ _VIEWER_HTML = """<!DOCTYPE html>
   video { flex: 1; width: 100%; height: 100%; min-height: 0; background: #000; object-fit: contain; }
   #status.ok { color: #6ee7a8; }
   #status.err { color: #f87171; }
+  #status.warn { color: #f6c177; }
 </style>
 </head>
 <body>
@@ -47,14 +48,70 @@ _VIEWER_HTML = """<!DOCTYPE html>
 </div>
 <script>
 const HOST = "__HOST__";
+const STALL_LIMIT_MS = 8000;
+const RELOAD_LIMIT_MS = 12000;
 const statusEl = document.getElementById("status");
+const videoEl = document.getElementById("remoteVideos");
+let pc = null;
+let watchdogTimer = null;
+let lastFrameAt = 0;
+let lastVideoTime = -1;
+let gotFirstFrame = false;
+let reloading = false;
+
 function setStatus(msg, cls) {
   statusEl.textContent = msg;
   statusEl.className = cls || "";
 }
-const pc = new RTCPeerConnection({
-  iceServers: [{ urls: "stun:stun.l.google.com:19302" }]
-});
+
+function hardReload() {
+  if (reloading) return;
+  reloading = true;
+  setStatus("Video stockt — neu laden …", "warn");
+  try { if (pc) pc.close(); } catch (_) {}
+  setTimeout(() => { window.location.reload(); }, 250);
+}
+
+function markFrame() {
+  lastFrameAt = Date.now();
+  gotFirstFrame = true;
+}
+
+function startWatchdog() {
+  if (watchdogTimer) return;
+  lastFrameAt = Date.now();
+  if (typeof videoEl.requestVideoFrameCallback === "function") {
+    const cb = () => {
+      markFrame();
+      videoEl.requestVideoFrameCallback(cb);
+    };
+    videoEl.requestVideoFrameCallback(cb);
+  }
+  watchdogTimer = setInterval(() => {
+    if (reloading) return;
+    const idle = Date.now() - lastFrameAt;
+    if (typeof videoEl.requestVideoFrameCallback !== "function") {
+      const t = videoEl.currentTime || 0;
+      if (t !== lastVideoTime && t > 0) {
+        lastVideoTime = t;
+        markFrame();
+      }
+    }
+    if (!gotFirstFrame) {
+      if (idle > RELOAD_LIMIT_MS) hardReload();
+      else if (idle > STALL_LIMIT_MS) {
+        setStatus("Warte auf Video — Drucker zu beschäftigt?", "warn");
+      }
+      return;
+    }
+    if (idle > RELOAD_LIMIT_MS) {
+      hardReload();
+    } else if (idle > STALL_LIMIT_MS) {
+      setStatus("Video stockt — versuche Recovery …", "warn");
+    }
+  }, 1000);
+}
+
 function sendOfferToCall(sdp) {
   const body = btoa(JSON.stringify({ type: "offer", sdp: sdp }));
   fetch("/signal", {
@@ -73,30 +130,62 @@ function sendOfferToCall(sdp) {
       }
       throw new Error("Keine SDP-Antwort");
     })
-    .then(() => setStatus("WebRTC verbunden — warte auf Video …", "ok"))
-    .catch(e => setStatus("Kamera-Fehler: " + e, "err"));
+    .then(() => {
+      setStatus("WebRTC verbunden — warte auf Video …", "ok");
+      startWatchdog();
+    })
+    .catch(e => {
+      setStatus("Kamera-Fehler: " + e, "err");
+      setTimeout(hardReload, 4000);
+    });
 }
-pc.ontrack = (event) => {
-  const el = document.getElementById("remoteVideos");
-  el.srcObject = event.streams[0];
-  el.autoplay = true;
-  el.muted = true;
-  setStatus("Live · " + HOST, "ok");
-};
-pc.oniceconnectionstatechange = () => {
-  if (pc.iceConnectionState === "failed") {
-    setStatus("ICE fehlgeschlagen — nur ein Client gleichzeitig?", "err");
+
+function buildPeer() {
+  pc = new RTCPeerConnection({
+    iceServers: [{ urls: "stun:stun.l.google.com:19302" }]
+  });
+  pc.ontrack = (event) => {
+    videoEl.srcObject = event.streams[0];
+    videoEl.autoplay = true;
+    videoEl.muted = true;
+    setStatus("Live · " + HOST, "ok");
+    markFrame();
+  };
+  pc.oniceconnectionstatechange = () => {
+    const s = pc.iceConnectionState;
+    if (s === "failed") {
+      setStatus("ICE fehlgeschlagen — neu verbinden …", "err");
+      setTimeout(hardReload, 1500);
+    } else if (s === "disconnected") {
+      setStatus("Kamera getrennt — Recovery läuft …", "warn");
+      setTimeout(() => {
+        if (pc && pc.iceConnectionState !== "connected" && pc.iceConnectionState !== "completed") {
+          hardReload();
+        }
+      }, 6000);
+    } else if (s === "closed") {
+      hardReload();
+    }
+  };
+  pc.onicecandidate = (event) => {
+    if (event.candidate === null) {
+      sendOfferToCall(pc.localDescription.sdp);
+    }
+  };
+  pc.addTransceiver("video", { direction: "sendrecv" });
+  pc.createOffer()
+    .then((d) => pc.setLocalDescription(d))
+    .catch((e) => setStatus("Offer: " + e, "err"));
+}
+
+videoEl.addEventListener("playing", markFrame);
+videoEl.addEventListener("timeupdate", markFrame);
+window.addEventListener("focus", () => {
+  if (gotFirstFrame && Date.now() - lastFrameAt > STALL_LIMIT_MS) {
+    hardReload();
   }
-};
-pc.onicecandidate = (event) => {
-  if (event.candidate === null) {
-    sendOfferToCall(pc.localDescription.sdp);
-  }
-};
-pc.addTransceiver("video", { direction: "sendrecv" });
-pc.createOffer()
-  .then((d) => pc.setLocalDescription(d))
-  .catch((e) => setStatus("Offer: " + e, "err"));
+});
+buildPeer();
 </script>
 </body>
 </html>
