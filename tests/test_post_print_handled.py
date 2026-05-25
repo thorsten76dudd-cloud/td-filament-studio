@@ -28,6 +28,31 @@ class PostPrintHandledTests(unittest.TestCase):
             s.remember_post_print_deduct(f"f{i}.gcode")
         self.assertLessEqual(len(s.post_print_deduct_handled), AppSettings._MAX_POST_PRINT_HANDLED)
 
+    def test_forget_unlocks_for_new_print(self) -> None:
+        # Wenn derselbe G-Code zweimal gedruckt wird, muss der Lock vor dem 2. Druck entfernt werden,
+        # damit der Auto-Dialog am Ende erneut triggern kann.
+        s = AppSettings()
+        s.remember_post_print_deduct("Koerper1.gcode")
+        self.assertTrue(s.is_post_print_deduct_handled("Koerper1.gcode"))
+
+        removed = s.forget_post_print_deduct("Koerper1.gcode")
+        self.assertTrue(removed)
+        self.assertFalse(s.is_post_print_deduct_handled("Koerper1.gcode"))
+
+    def test_forget_path_normalised(self) -> None:
+        s = AppSettings()
+        s.remember_post_print_deduct("Koerper1.gcode")
+        self.assertTrue(s.is_post_print_deduct_handled("Koerper1.gcode"))
+
+        # Drucker liefert oft den vollen Pfad — Lock muss trotzdem fallen.
+        removed = s.forget_post_print_deduct("/mnt/UDISK/gcodes/Koerper1.gcode")
+        self.assertTrue(removed)
+        self.assertFalse(s.is_post_print_deduct_handled("Koerper1.gcode"))
+
+    def test_forget_returns_false_when_nothing_to_clear(self) -> None:
+        s = AppSettings()
+        self.assertFalse(s.forget_post_print_deduct("Koerper1.gcode"))
+
 
 if __name__ == "__main__":
     unittest.main()

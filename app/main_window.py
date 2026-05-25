@@ -2906,7 +2906,26 @@ class TDFilamentStudioApp(AppTk):
                 parts.append(
                     "G-Code ohne Filament-Gewicht und kein aktiver CFS-Slot erkannt."
                 )
+            parts.append(
+                "Tipp: Spule manuell abziehen oder in der Druck-Historie "
+                "„Verbrauch nachträglich…“ verwenden."
+            )
             self.notify("\n".join(parts), "warn")
+            try:
+                self._record_print_history(
+                    filename=filename,
+                    deductions=[],
+                    dialog_rows=[],
+                    state=state,
+                )
+            except Exception:
+                pass
+            try:
+                self.settings.remember_post_print_deduct(fname)
+                self.settings.save(DEFAULT_SETTINGS_PATH)
+                self._post_print_deduct_file = fname
+            except Exception:
+                pass
             return
 
         def _remember_deduct_handled() -> None:

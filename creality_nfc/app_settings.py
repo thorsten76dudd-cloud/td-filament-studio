@@ -112,6 +112,17 @@ class AppSettings:
         norm_handled.insert(0, fn)
         self.post_print_deduct_handled = norm_handled[: self._MAX_POST_PRINT_HANDLED]
 
+    def forget_post_print_deduct(self, filename: str) -> bool:
+        """Beim Start eines neuen Drucks Filename-Lock loeschen, damit der naechste Druck wieder triggert."""
+        fn = normalize_print_job_filename(filename)
+        if not fn:
+            return False
+        before = list(self.post_print_deduct_handled)
+        self.post_print_deduct_handled = [
+            x for x in before if normalize_print_job_filename(x) != fn
+        ]
+        return len(self.post_print_deduct_handled) != len(before)
+
 
 def normalize_print_job_filename(filename: str) -> str:
     """Drucker-Pfad und lokaler Pfad auf denselben Dateinamen bringen."""

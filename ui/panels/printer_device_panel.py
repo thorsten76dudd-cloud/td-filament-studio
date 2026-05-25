@@ -1693,12 +1693,23 @@ class PrinterDevicePanel(ttk.Frame):
             )
             self._maybe_catch_up_post_print_deduct(s, ps, phase, fname)
         if phase == "printing":
-            if fname and fname != self._last_print_filename:
+            phase_change_into_print = self._last_print_phase != "printing"
+            new_filename = bool(fname) and fname != self._last_print_filename
+            if new_filename or phase_change_into_print:
                 self.app._post_print_deduct_file = ""
                 self._peak_print_progress = 0
                 self._post_print_deduct_offered_for = ""
-                self._print_job_started_mono = time.monotonic()
-                self._warn_low_filament_for_job(s, fname)
+                if new_filename:
+                    self._print_job_started_mono = time.monotonic()
+                    self._warn_low_filament_for_job(s, fname)
+                if fname:
+                    try:
+                        if self.app.settings.forget_post_print_deduct(fname):
+                            from app.paths import DEFAULT_SETTINGS_PATH
+
+                            self.app.settings.save(DEFAULT_SETTINGS_PATH)
+                    except Exception:
+                        pass
             elif self._print_job_started_mono is None:
                 self._print_job_started_mono = time.monotonic()
             loaded_now = find_loaded_slot_index(s)
