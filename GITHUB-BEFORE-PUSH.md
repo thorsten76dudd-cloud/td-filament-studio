@@ -1,6 +1,6 @@
 # GitHub — Kurz-Checkliste
 
-**Aktuelle Version:** `1.5.129` · Release-Tag: `v1.5.129-stable`  
+**Aktuelle Version:** `1.5.130` · Release-Tag: `v1.5.130-stable`  
 **Repo:** `thorsten76dudd-cloud/td-filament-studio`
 
 ## Vor dem Push
@@ -16,7 +16,7 @@ build_setup.bat
 powershell -File scripts\github_release.ps1
 ```
 
-Lädt `installer_output\TD-Filament-Studio-Setup.exe` hoch und setzt **Latest**. Altes `-stable`-Release wird entfernt (Standard: vorheriges Tag in `scripts/github_release.ps1`).
+Lädt `installer_output\TD-Filament-Studio-Setup.exe` hoch und setzt **Latest**. Alte `-stable`-Releases bleiben auf GitHub erhalten. Optional: `-RemoveTag <tag>` löscht ein bestimmtes altes Release, `-DeleteAllOldReleases` löscht alles außer dem aktuellen.
 
 ## Nicht ins Git
 
@@ -25,4 +25,4 @@ Lädt `installer_output\TD-Filament-Studio-Setup.exe` hoch und setzt **Latest**.
 | `data/printers.json`, `spools.json`, … | Persönlich / Passwörter |
 | `dist/`, `build/`, `installer_output/` | Build-Artefakte |
 
-Details zum aktuellen Stand: [STABLE-v1.5.129.md](STABLE-v1.5.129.md)
+Details zum aktuellen Stand: [STABLE-v1.5.130.md](STABLE-v1.5.130.md)

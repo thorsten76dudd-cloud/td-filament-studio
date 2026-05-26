@@ -1,11 +1,13 @@
 # Usage: gh auth login  (once)
-# Creates latest stable release and removes the previous stable release tag.
+# Creates new stable release. Previous releases stay on GitHub.
+# Use -RemoveTag <tag> to delete a single old release explicitly,
+# or -DeleteAllOldReleases to wipe everything except the current $Tag.
 
 param(
-    [string]$Version = "1.5.129",
-    [string]$Tag = "v1.5.129-stable",
+    [string]$Version = "1.5.130",
+    [string]$Tag = "v1.5.130-stable",
     [string]$Repo = "thorsten76dudd-cloud/td-filament-studio",
-    [string]$RemoveTag = "v1.5.128-stable",
+    [string]$RemoveTag = "",
     [switch]$DeleteAllOldReleases
 )
 
@@ -32,18 +34,18 @@ $notes = @(
     "## TD Filament Studio $Version",
     "",
     "### Fix",
-    "* Doppel-Dialog beim Neu-Verbinden mit fertigem Druck verhindert",
-    "* _post_print_deduct_offered_for wird direkt im _request_post_print_deduct gesetzt",
-    "* Catch-up triggert nicht mehr direkt nach Initial-Sync-Dialog",
+    "* Tippfehler in Drucker-Dashboard: 'DB vergleigen' -> 'DB vergleichen'",
+    "* Release-Skript: alte Versionen bleiben jetzt standardmaessig auf GitHub erhalten",
     "",
     "### Enthalten",
+    "* Doppel-Dialog beim Reconnect verhindert (v1.5.129)",
     "* Filename-Lock-Reset im Initial-Sync (v1.5.128)",
     "* Anzeige bei 0 %-Glitch zeigt Peak (v1.5.127)",
     "* Sync-Pfad mit Catch-up (v1.5.125)",
     "* Kamera-Watchdog (v1.5.124)",
     "* Hintergrund (Tray) optional (v1.5.123)",
     "",
-    "Details: STABLE-v1.5.129.md im Repository."
+    "Details: STABLE-v1.5.130.md im Repository."
 ) -join [Environment]::NewLine
 Set-Content -Path $NotesFile -Value $notes -Encoding UTF8
 

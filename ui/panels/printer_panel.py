@@ -70,7 +70,7 @@ class PrinterDashboardPanel(ttk.LabelFrame):
                 "Markierte/zuletzt gewählte G-Code-Datei oder laufender Druck vs. CFS/Spulen (Tab Drucker).",
             ),
             (
-                "DB vergleigen",
+                "DB vergleichen",
                 self.compare_db,
                 "Lokale und Drucker-Datenbank vergleichen (Unterschiede anzeigen).",
             ),
