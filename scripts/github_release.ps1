@@ -2,10 +2,10 @@
 # Creates latest stable release and removes the previous stable release tag.
 
 param(
-    [string]$Version = "1.5.127",
-    [string]$Tag = "v1.5.127-stable",
+    [string]$Version = "1.5.128",
+    [string]$Tag = "v1.5.128-stable",
     [string]$Repo = "thorsten76dudd-cloud/td-filament-studio",
-    [string]$RemoveTag = "v1.5.126-stable",
+    [string]$RemoveTag = "v1.5.127-stable",
     [switch]$DeleteAllOldReleases
 )
 
@@ -32,17 +32,18 @@ $notes = @(
     "## TD Filament Studio $Version",
     "",
     "### Fix",
-    "* Doppel-Dialog nach Druckende verhindert (kein Reset bei Phase-Flicker)",
-    "* Kein faelschlicher Abzug-Dialog beim Druckstart (Stuck-at-Zero aus Vorgaengerdruck)",
-    "* Anzeige bei 0 %-Firmware-Glitch: Peak wird angezeigt, ~99 % (Drucker meldet 0 %)",
+    "* Abzug-Dialog kommt auch nach App-Update mitten im Druck zuverlaessig",
+    "* Filename-Lock wird auch beim Verbinden mit laufendem Druck aufgeloest",
+    "* Initial-Sync auf bereits fertigen Druck: Lock fallenlassen, Dialog anbieten",
     "",
     "### Enthalten",
-    "* Filename-Lock-Reset bei neuem Druck (v1.5.126)",
+    "* Anzeige bei 0 %-Glitch zeigt Peak (v1.5.127)",
+    "* Doppel-Dialog verhindert (v1.5.127)",
     "* Sync-Pfad mit Catch-up (v1.5.125)",
     "* Kamera-Watchdog (v1.5.124)",
     "* Hintergrund (Tray) optional (v1.5.123)",
     "",
-    "Details: STABLE-v1.5.127.md im Repository."
+    "Details: STABLE-v1.5.128.md im Repository."
 ) -join [Environment]::NewLine
 Set-Content -Path $NotesFile -Value $notes -Encoding UTF8
 

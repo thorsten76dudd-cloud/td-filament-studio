@@ -1684,6 +1684,21 @@ class PrinterDevicePanel(ttk.Frame):
                     peak_progress=self._peak_print_progress,
                     last_progress=self._last_print_progress,
                 ):
+                    # Erster Snap nach App-Start zeigt einen bereits fertigen Druck:
+                    # Filename-Lock aus settings entfernen, damit der Dialog auch dann kommt,
+                    # wenn die App in einer fruheren Session denselben Filename schon verarbeitet hatte.
+                    try:
+                        from creality_nfc.app_settings import normalize_print_job_filename
+
+                        sync_fname = normalize_print_job_filename(
+                            fname or self._last_print_filename
+                        )
+                        if sync_fname and self.app.settings.forget_post_print_deduct(sync_fname):
+                            from app.paths import DEFAULT_SETTINGS_PATH
+
+                            self.app.settings.save(DEFAULT_SETTINGS_PATH)
+                    except Exception:
+                        pass
                     self._request_post_print_deduct(s, ps)
                 self._last_print_phase = phase
                 self._print_phase_synced = True
@@ -1699,7 +1714,19 @@ class PrinterDevicePanel(ttk.Frame):
                 cur_p = int(prog) if prog is not None else None
             except (TypeError, ValueError):
                 cur_p = None
-            # Echter Druckstart: neuer G-Code ODER (Phase frisch aus idle/complete + Fortschritt klein).
+            # Persistenten Filename-Lock immer aufloesen, sobald wir einen Druck mit diesem
+            # Filename laufen sehen: ein aktiv laufender Druck darf am Ende nicht durch einen
+            # Lock aus einer fruheren Session blockiert werden.
+            if (phase_change_from_idle or new_filename) and fname:
+                try:
+                    if self.app.settings.forget_post_print_deduct(fname):
+                        from app.paths import DEFAULT_SETTINGS_PATH
+
+                        self.app.settings.save(DEFAULT_SETTINGS_PATH)
+                except Exception:
+                    pass
+            # Session-Reset (peak / offered_for / _last_print_progress) nur bei echtem Start:
+            # neuer G-Code ODER (Phase frisch aus idle/complete + Fortschritt klein).
             # Phase-Flicker mitten im Druck (printing<->idle bei hohem Fortschritt) loest KEINEN Reset aus.
             fresh_print_start = new_filename or (
                 phase_change_from_idle
@@ -1714,14 +1741,6 @@ class PrinterDevicePanel(ttk.Frame):
                 if new_filename:
                     self._print_job_started_mono = time.monotonic()
                     self._warn_low_filament_for_job(s, fname)
-                if fname:
-                    try:
-                        if self.app.settings.forget_post_print_deduct(fname):
-                            from app.paths import DEFAULT_SETTINGS_PATH
-
-                            self.app.settings.save(DEFAULT_SETTINGS_PATH)
-                    except Exception:
-                        pass
             elif self._print_job_started_mono is None:
                 self._print_job_started_mono = time.monotonic()
             loaded_now = find_loaded_slot_index(s)

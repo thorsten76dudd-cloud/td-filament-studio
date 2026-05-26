@@ -1,6 +1,6 @@
 APP_NAME = "TD Filament Studio"
 APP_SHORT = "TD Studio"
-APP_VERSION = "1.5.127"
+APP_VERSION = "1.5.128"
 APP_TAGLINE = "Creality K2 / CFS — RFID-Tags & Filament-Verwaltung"
 APP_AUTHOR = "TD"
 
