@@ -2,10 +2,10 @@
 # Creates latest stable release and removes the previous stable release tag.
 
 param(
-    [string]$Version = "1.5.128",
-    [string]$Tag = "v1.5.128-stable",
+    [string]$Version = "1.5.129",
+    [string]$Tag = "v1.5.129-stable",
     [string]$Repo = "thorsten76dudd-cloud/td-filament-studio",
-    [string]$RemoveTag = "v1.5.127-stable",
+    [string]$RemoveTag = "v1.5.128-stable",
     [switch]$DeleteAllOldReleases
 )
 
@@ -32,18 +32,18 @@ $notes = @(
     "## TD Filament Studio $Version",
     "",
     "### Fix",
-    "* Abzug-Dialog kommt auch nach App-Update mitten im Druck zuverlaessig",
-    "* Filename-Lock wird auch beim Verbinden mit laufendem Druck aufgeloest",
-    "* Initial-Sync auf bereits fertigen Druck: Lock fallenlassen, Dialog anbieten",
+    "* Doppel-Dialog beim Neu-Verbinden mit fertigem Druck verhindert",
+    "* _post_print_deduct_offered_for wird direkt im _request_post_print_deduct gesetzt",
+    "* Catch-up triggert nicht mehr direkt nach Initial-Sync-Dialog",
     "",
     "### Enthalten",
+    "* Filename-Lock-Reset im Initial-Sync (v1.5.128)",
     "* Anzeige bei 0 %-Glitch zeigt Peak (v1.5.127)",
-    "* Doppel-Dialog verhindert (v1.5.127)",
     "* Sync-Pfad mit Catch-up (v1.5.125)",
     "* Kamera-Watchdog (v1.5.124)",
     "* Hintergrund (Tray) optional (v1.5.123)",
     "",
-    "Details: STABLE-v1.5.128.md im Repository."
+    "Details: STABLE-v1.5.129.md im Repository."
 ) -join [Environment]::NewLine
 Set-Content -Path $NotesFile -Value $notes -Encoding UTF8
 

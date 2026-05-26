@@ -1557,6 +1557,11 @@ class PrinterDevicePanel(ttk.Frame):
         )
         if not manual and fname and self.app.settings.is_post_print_deduct_handled(fname):
             return
+        # Sofort markieren, dass fuer diese Datei der Dialog ausgeloest wurde: verhindert,
+        # dass ein nachfolgender Snap (Initial-Sync gefolgt von Catch-up oder Reconnect-Snaps)
+        # den Dialog ein zweites Mal startet.
+        if fname:
+            self._post_print_deduct_offered_for = fname
         try:
             snap = self._conn.snapshot() if self._conn else s
             loaded = find_loaded_slot_index(snap)
