@@ -132,6 +132,41 @@ class PostPrintTriggerTests(unittest.TestCase):
       )
     )
 
+  def test_print_restart_with_clean_state(self) -> None:
+    """Frischer Druck: Reset hat last_progress + peak auf 0 gesetzt -> kein False-Trigger.
+
+    Ohne den fresh_print_start-Reset waere last_progress=100 (vom Vorgaengerdruck)
+    und peak=100, dann wuerde 'stuck-at-zero' beim Start sofort ausloesen.
+    """
+    self.assertFalse(
+      PrinterDevicePanel.should_trigger_post_print_deduct(
+        "printing",
+        "printing",
+        progress=0,
+        last_progress=0,
+        peak_progress=0,
+        filename="job.gcode",
+        last_filename="job.gcode",
+      )
+    )
+
+  def test_print_restart_without_reset_would_falsely_trigger(self) -> None:
+    """Ohne fresh_print_start-Reset wuerde der Trigger faelschlich feuern.
+
+    Dieser Test dokumentiert, warum der Reset in _apply_print_status noetig ist.
+    """
+    self.assertTrue(
+      PrinterDevicePanel.should_trigger_post_print_deduct(
+        "printing",
+        "printing",
+        progress=0,
+        last_progress=100,
+        peak_progress=0,
+        filename="job.gcode",
+        last_filename="job.gcode",
+      )
+    )
+
 
 if __name__ == "__main__":
   unittest.main()

@@ -1693,11 +1693,23 @@ class PrinterDevicePanel(ttk.Frame):
             )
             self._maybe_catch_up_post_print_deduct(s, ps, phase, fname)
         if phase == "printing":
-            phase_change_into_print = self._last_print_phase != "printing"
+            phase_change_from_idle = self._last_print_phase in ("idle", "complete")
             new_filename = bool(fname) and fname != self._last_print_filename
-            if new_filename or phase_change_into_print:
+            try:
+                cur_p = int(prog) if prog is not None else None
+            except (TypeError, ValueError):
+                cur_p = None
+            # Echter Druckstart: neuer G-Code ODER (Phase frisch aus idle/complete + Fortschritt klein).
+            # Phase-Flicker mitten im Druck (printing<->idle bei hohem Fortschritt) loest KEINEN Reset aus.
+            fresh_print_start = new_filename or (
+                phase_change_from_idle
+                and (cur_p is None or cur_p <= 5)
+                and self._peak_print_progress < 10
+            )
+            if fresh_print_start:
                 self.app._post_print_deduct_file = ""
                 self._peak_print_progress = 0
+                self._last_print_progress = 0  # verhindert Stuck-at-Zero-Trigger aus dem Vorgaengerdruck
                 self._post_print_deduct_offered_for = ""
                 if new_filename:
                     self._print_job_started_mono = time.monotonic()
@@ -1756,11 +1768,26 @@ class PrinterDevicePanel(ttk.Frame):
         if fname and fname != "—":
             self._sync_listbox_to_filename(fname)
         prog = ps["progress"]
+        # Stuck-at-Zero: Drucker meldet beim Druckende oft 0 % obwohl Job fast fertig ist.
+        # Zeige in dem Fall den Peak und markiere die Firmware-Anomalie, damit der User nicht denkt,
+        # der Druck startet neu.
+        stuck_at_zero = (
+            phase in ("printing", "paused")
+            and prog is not None
+            and int(prog) <= 2
+            and self._peak_print_progress >= 10
+        )
         if prog is not None:
-            pct = max(0, min(100, prog))
-            self._prog_bar.configure(maximum=100)
-            self._prog_bar["value"] = pct
-            prog_txt = f"{pct} %"
+            if stuck_at_zero:
+                pct = max(0, min(100, int(self._peak_print_progress)))
+                self._prog_bar.configure(maximum=100)
+                self._prog_bar["value"] = pct
+                prog_txt = f"~{pct} % (Drucker meldet 0 %)"
+            else:
+                pct = max(0, min(100, int(prog)))
+                self._prog_bar.configure(maximum=100)
+                self._prog_bar["value"] = pct
+                prog_txt = f"{pct} %"
         else:
             self._prog_bar["value"] = 0
             prog_txt = "—"

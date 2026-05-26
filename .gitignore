@@ -37,3 +37,4 @@ tools/go2rtc.exe
 # OS
 Thumbs.db
 Desktop.ini
+build.log
