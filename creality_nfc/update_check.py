@@ -11,6 +11,7 @@ from dataclasses import dataclass
 from creality_nfc.config import GITHUB_RELEASES_REPO
 
 RELEASE_API = f"https://api.github.com/repos/{GITHUB_RELEASES_REPO}/releases/latest"
+RELEASES_LIST_API = f"https://api.github.com/repos/{GITHUB_RELEASES_REPO}/releases?per_page=8"
 _USER_AGENT = "TD-Filament-Studio"
 
 
@@ -45,22 +46,37 @@ def release_stats_lines(info: ReleaseInfo) -> list[str]:
     return lines
 
 
-def fetch_latest_release() -> ReleaseInfo | None:
-    """Neuestes GitHub-Release (Tag, Seite, optional direkter EXE/Setup-Download)."""
+def _github_get_json(url: str, *, timeout: int = 12) -> object | None:
     try:
         req = urllib.request.Request(
-            RELEASE_API,
+            url,
             headers={"Accept": "application/vnd.github+json", "User-Agent": _USER_AGENT},
         )
-        with urllib.request.urlopen(req, timeout=12) as resp:
-            data = json.loads(resp.read().decode("utf-8"))
-    except urllib.error.HTTPError as exc:
-        if exc.code == 404:
-            return None
-        return None
+        with urllib.request.urlopen(req, timeout=timeout) as resp:
+            return json.loads(resp.read().decode("utf-8"))
     except Exception:
         return None
-    return _parse_release_payload(data)
+
+
+def fetch_latest_release() -> ReleaseInfo | None:
+    """Neuestes GitHub-Release (Tag, Seite, optional direkter EXE/Setup-Download)."""
+    data = _github_get_json(RELEASE_API)
+    if isinstance(data, dict):
+        parsed = _parse_release_payload(data)
+        if parsed:
+            return parsed
+    items = _github_get_json(RELEASES_LIST_API)
+    if not isinstance(items, list):
+        return None
+    for item in items:
+        if not isinstance(item, dict):
+            continue
+        if item.get("draft") or item.get("prerelease"):
+            continue
+        parsed = _parse_release_payload(item)
+        if parsed:
+            return parsed
+    return None
 
 
 def fetch_latest_release_tag() -> str | None:

@@ -10,6 +10,7 @@ from creality_nfc.app_update import (
     default_setup_download_path,
     kill_all_app_processes,
     stage_setup_for_install,
+    unblock_setup_file,
     validate_setup_exe,
     _schedule_windows_installer,
 )
@@ -43,8 +44,9 @@ class AppUpdateTests(unittest.TestCase):
         self.assertIn("Updates", str(p))
 
     @patch("creality_nfc.app_update.subprocess.Popen")
+    @patch("creality_nfc.app_update.unblock_setup_file")
     @patch("creality_nfc.app_update.sys.platform", "win32")
-    def test_schedule_installer_uses_wscript(self, mock_popen) -> None:
+    def test_schedule_installer_uses_wscript(self, _mock_unblock, mock_popen) -> None:
         with tempfile.TemporaryDirectory() as tmp:
             setup = Path(tmp) / "TD-Filament-Studio-Setup.exe"
             setup.write_bytes(b"MZ" + b"\0" * 5_000_001)
@@ -56,6 +58,16 @@ class AppUpdateTests(unittest.TestCase):
             self.assertIn("FORCECLOSEAPPLICATIONS", text)
             mock_popen.assert_called_once()
             self.assertEqual(mock_popen.call_args[0][0][0], "wscript.exe")
+
+    @patch("creality_nfc.app_update.sys.platform", "win32")
+    @patch("creality_nfc.app_update.ctypes.windll")
+    def test_unblock_deletes_zone_identifier(self, mock_windll) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            setup = Path(tmp) / "TD-Filament-Studio-Setup.exe"
+            setup.write_bytes(b"MZ")
+            mock_windll.kernel32.DeleteFileW.return_value = 1
+            unblock_setup_file(setup)
+            mock_windll.kernel32.DeleteFileW.assert_called_once()
 
     def test_stage_setup_copies_to_updates(self) -> None:
         with tempfile.TemporaryDirectory() as tmp:

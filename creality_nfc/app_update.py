@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import ctypes
 import os
 import shutil
 import subprocess
@@ -33,6 +34,39 @@ def _update_log(message: str) -> None:
         pass
 
 
+def unblock_setup_file(setup_path: Path) -> None:
+    """Mark-of-the-Web entfernen (Browser-Download blockiert oft die Installation)."""
+    if sys.platform != "win32":
+        return
+    setup_path = setup_path.resolve()
+    try:
+        k32 = ctypes.windll.kernel32
+        stream = str(setup_path) + ":Zone.Identifier"
+        if k32.DeleteFileW(stream):
+            _update_log(f"Zone.Identifier entfernt: {setup_path}")
+            return
+    except Exception:
+        pass
+    try:
+        flags = getattr(subprocess, "CREATE_NO_WINDOW", 0)
+        subprocess.run(
+            [
+                "powershell",
+                "-NoProfile",
+                "-ExecutionPolicy",
+                "Bypass",
+                "-Command",
+                f"Unblock-File -LiteralPath '{setup_path}'",
+            ],
+            capture_output=True,
+            creationflags=flags,
+            timeout=30,
+        )
+        _update_log(f"Unblock-File: {setup_path}")
+    except (OSError, subprocess.SubprocessError) as exc:
+        _update_log(f"Unblock-File fehlgeschlagen: {exc}")
+
+
 def kill_all_app_processes() -> None:
     """
     Haupt-App und Wächter beenden.
@@ -41,13 +75,13 @@ def kill_all_app_processes() -> None:
     if sys.platform != "win32":
         return
     flags = getattr(subprocess, "CREATE_NO_WINDOW", 0)
-    for _ in range(2):
+    for _ in range(3):
         subprocess.run(
             ["taskkill", "/IM", "TD Filament Studio.exe", "/F"],
             capture_output=True,
             creationflags=flags,
         )
-        time.sleep(0.5)
+        time.sleep(0.6)
 
 
 def download_setup(
@@ -70,6 +104,7 @@ def download_setup(
             received += len(chunk)
             if on_progress:
                 on_progress(received, total)
+    unblock_setup_file(dest)
 
 
 def default_setup_download_path() -> Path:
@@ -111,11 +146,22 @@ def _shell_execute(file: str, params: str = "", *, show: int = 1) -> None:
         raise OSError(f"ShellExecute fehlgeschlagen (Code {ret})")
 
 
+def _launch_installer_exe(setup_path: Path) -> None:
+    """Installer direkt starten (Fallback wenn wscript blockiert ist)."""
+    setup_path = setup_path.resolve()
+    unblock_setup_file(setup_path)
+    args = [str(setup_path), _INNO_SETUP_ARGS]
+    flags = _DETACHED_PROCESS | _CREATE_NO_WINDOW | _CREATE_BREAKAWAY_FROM_JOB
+    subprocess.Popen(args, close_fds=True, creationflags=flags)
+    _update_log(f"Installer direkt gestartet: {setup_path}")
+
+
 def _schedule_windows_installer(setup_path: Path) -> None:
     """
     Installer per WScript starten — eigener Prozess, überlebt taskkill/os._exit.
     """
     setup_path = setup_path.resolve()
+    unblock_setup_file(setup_path)
     vbs_path = setup_path.parent / "_td_run_setup.vbs"
     run_cmd = f'"{setup_path}" {_INNO_SETUP_ARGS}'.replace('"', '""')
     vbs_path.write_text(
@@ -125,18 +171,23 @@ def _schedule_windows_installer(setup_path: Path) -> None:
         encoding="utf-8",
     )
     _update_log(f"VBS-Launcher geschrieben: {vbs_path}")
-    flags = _DETACHED_PROCESS | _CREATE_NO_WINDOW | _CREATE_BREAKAWAY_FROM_JOB
-    subprocess.Popen(
-        ["wscript.exe", "//B", str(vbs_path)],
-        close_fds=True,
-        creationflags=flags,
-    )
-    _update_log("wscript.exe gestartet (Installer in ~4 s)")
+    try:
+        flags = _DETACHED_PROCESS | _CREATE_NO_WINDOW | _CREATE_BREAKAWAY_FROM_JOB
+        subprocess.Popen(
+            ["wscript.exe", "//B", str(vbs_path)],
+            close_fds=True,
+            creationflags=flags,
+        )
+        _update_log("wscript.exe gestartet (Installer in ~4 s)")
+    except OSError as exc:
+        _update_log(f"wscript fehlgeschlagen ({exc}) — direkter Start")
+        _launch_installer_exe(setup_path)
 
 
 def install_downloaded_setup(setup_path: Path) -> None:
     """Installer starten und diesen Prozess sofort beenden (kein Datei-Lock)."""
     staged = stage_setup_for_install(setup_path)
+    unblock_setup_file(staged)
     validate_setup_exe(staged)
     _update_log(f"install_downloaded_setup: {staged}")
     if sys.platform == "win32":

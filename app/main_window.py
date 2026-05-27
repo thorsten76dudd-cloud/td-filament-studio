@@ -4482,9 +4482,11 @@ class TDFilamentStudioApp(AppTk):
         else:
             extra = "\n".join(release_stats_lines(info))
             self.notify(
-                f"Aktuell ({APP_VERSION}).\nNeuestes GitHub-Release: {info.tag}\n\n{extra}",
+                _t("mw.update.already_current", version=APP_VERSION, tag=info.tag)
+                + f"\n\n{extra}",
                 "ok",
             )
+            self._offer_update_download(info, allow_reinstall=True)
 
     def _focus_app_for_dialog(self) -> None:
         try:
@@ -4495,7 +4497,7 @@ class TDFilamentStudioApp(AppTk):
         except tk.TclError:
             pass
 
-    def _offer_update_download(self, info: ReleaseInfo) -> None:
+    def _offer_update_download(self, info: ReleaseInfo, *, allow_reinstall: bool = False) -> None:
         if getattr(self, "_update_dialog", None) is not None:
             try:
                 if self._update_dialog.winfo_exists():
@@ -4504,11 +4506,17 @@ class TDFilamentStudioApp(AppTk):
             except tk.TclError:
                 pass
 
-        lines = [
-            f"Neue Version: {info.tag}",
-            f"Installiert: {APP_VERSION}",
-            "",
-        ]
+        if allow_reinstall:
+            lines = [
+                _t("mw.update.reinstall_intro", version=APP_VERSION, tag=info.tag),
+                "",
+            ]
+        else:
+            lines = [
+                f"Neue Version: {info.tag}",
+                f"Installiert: {APP_VERSION}",
+                "",
+            ]
         if info.name and info.name != info.tag:
             lines.append(info.name)
             lines.append("")
@@ -4570,12 +4578,14 @@ class TDFilamentStudioApp(AppTk):
             side="right", padx=(8, 0)
         )
         if info.download_url:
-            rounded_button(btn_row, "Im Browser", on_browser, variant="secondary", compact=True).pack(
+            rounded_button(btn_row, _t("mw.update.browser_btn"), on_browser, variant="secondary", compact=True).pack(
                 side="right", padx=(8, 0)
             )
             rounded_button(
                 btn_row,
-                "Setup laden & installieren",
+                _t("mw.update.download_install")
+                if not allow_reinstall
+                else _t("mw.update.reinstall_setup"),
                 on_install,
                 variant="accent",
                 compact=True,

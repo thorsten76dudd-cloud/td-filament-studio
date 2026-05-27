@@ -841,6 +841,11 @@ STRINGS = {
     "mw.update.setup_saved": "Setup saved:\n{path}",
     "mw.update.installer_starting": "Installer starts in a few seconds \u2014 app will quit \u2026",
     "mw.update.installer_failed": "Installer could not be launched:\n{exc}\n\n",
+    "mw.update.already_current": "You already have the latest version ({version}).\nGitHub release: {tag}\n\nRe-download setup = repair install (e.g. after a failed browser download).",
+    "mw.update.reinstall_intro": "Version {version} is current (GitHub: {tag}).",
+    "mw.update.download_install": "Download & install setup",
+    "mw.update.reinstall_setup": "Re-download setup",
+    "mw.update.browser_btn": "In browser",
     "mw.tag.multiple_profiles": "ID {material_id}: multiple profiles ({names}{extra}).\n",
 
     # === printer_device_panel ===
