@@ -14,6 +14,7 @@ from typing import TYPE_CHECKING
 
 from app.paths import DATA_DIR
 from creality_nfc.config import APP_NAME
+from creality_nfc.i18n import t as _t
 from creality_nfc.data_backup import (
     backup_model_library,
     default_model_library_backup_name,
@@ -57,44 +58,44 @@ class ModelLibraryPanel(ttk.Frame):
         top = ttk.Frame(self)
         top.pack(fill="x", padx=8, pady=8)
         tip(
-            ttk.Button(top, text="Datei importieren…", command=self._import_copy, style="Accent.TButton"),
-            "Dateien oder ganze Ordner vom PC hierher ziehen (Unterordner werden übernommen).",
+            ttk.Button(top, text=_t("mlp.btn.import_file"), command=self._import_copy, style="Accent.TButton"),
+            _t("mlp.drop_hint"),
         ).pack(side="left", padx=(0, 6))
         tip(
-            ttk.Button(top, text="Ordner importieren…", command=self._import_folder_copy, style="Secondary.TButton"),
-            "Ganzen Ordner vom PC (mit Unterordnern) in die Bibliothek kopieren.",
+            ttk.Button(top, text=_t("mlp.btn.import_folder"), command=self._import_folder_copy, style="Secondary.TButton"),
+            _t("mlp.tip.import_folder"),
         ).pack(side="left", padx=(0, 6))
         tip(
-            ttk.Button(top, text="Verknüpfung…", command=self._import_link, style="Secondary.TButton"),
-            "Nur Pfad merken — Datei bleibt am ursprünglichen Ort.",
+            ttk.Button(top, text=_t("mlp.btn.link"), command=self._import_link, style="Secondary.TButton"),
+            _t("mlp.btn.link_tip"),
         ).pack(side="left", padx=(0, 6))
         tip(
-            ttk.Button(top, text="Datei löschen", command=self._delete_file, style="Secondary.TButton"),
-            "Ausgewählte Datei aus der Bibliothek entfernen.",
+            ttk.Button(top, text=_t("mlp.btn.delete_file"), command=self._delete_file, style="Secondary.TButton"),
+            _t("mlp.btn.delete_file_tip"),
         ).pack(side="left", padx=(0, 6))
         tip(
-            ttk.Button(top, text="Umbenennen…", command=self._rename_file, style="Secondary.TButton"),
-            "Anzeigename der ausgewählten Datei ändern.",
+            ttk.Button(top, text=_t("mlp.btn.rename"), command=self._rename_file, style="Secondary.TButton"),
+            _t("mlp.btn.rename_file_tip"),
         ).pack(side="left", padx=(0, 6))
         tip(
-            ttk.Button(top, text="In Ordner verschieben…", command=self._move_to_folder_dialog, style="Secondary.TButton"),
-            "Ausgewählte Datei(en) oder Ordner (links, Strg+Klick) in einen anderen Ordner verschieben.",
+            ttk.Button(top, text=_t("mlp.btn.move"), command=self._move_to_folder_dialog, style="Secondary.TButton"),
+            _t("mlp.btn.move_tip"),
         ).pack(side="left", padx=(0, 6))
         tip(
-            ttk.Button(top, text="Bibliothek sichern…", command=self._backup_library, style="Secondary.TButton"),
-            "Gesamte Modell-Bibliothek als ZIP (Ordner, Dateien, Metadaten).",
+            ttk.Button(top, text=_t("mlp.btn.backup"), command=self._backup_library, style="Secondary.TButton"),
+            _t("mlp.tip.backup"),
         ).pack(side="right", padx=(6, 0))
         tip(
-            ttk.Button(top, text="Bibliothek laden…", command=self._restore_library, style="Secondary.TButton"),
-            "Bibliothek aus einer ZIP-Backup-Datei wiederherstellen (überschreibt die aktuelle).",
+            ttk.Button(top, text=_t("mlp.btn.restore"), command=self._restore_library, style="Secondary.TButton"),
+            _t("mlp.btn.restore_tip"),
         ).pack(side="right", padx=(6, 0))
         tip(
-            ttk.Button(top, text="Speichern unter…", command=self._export_file, style="Accent.TButton"),
-            "Export: Dateien wählen, oder Ordner links (Strg+Klick) / nur Ordner markieren — inkl. Unterordner mit Struktur.",
+            ttk.Button(top, text=_t("mlp.btn.save_as"), command=self._export_file, style="Accent.TButton"),
+            _t("mlp.btn.export_tip"),
         ).pack(side="right", padx=(6, 0))
         tip(
-            ttk.Button(top, text="Im Explorer öffnen", command=self._open_in_explorer, style="Secondary.TButton"),
-            "Datei oder Bibliotheks-Ordner im Explorer anzeigen.",
+            ttk.Button(top, text=_t("mlp.btn.open_explorer"), command=self._open_in_explorer, style="Secondary.TButton"),
+            _t("mlp.tip.open_explorer"),
         ).pack(side="right", padx=(6, 0))
 
         self._body_pane = ttk.Panedwindow(self, orient="horizontal")
@@ -113,8 +114,8 @@ class ModelLibraryPanel(ttk.Frame):
         left_split.add(folder_col, weight=1)
         folder_col.columnconfigure(0, weight=1)
         folder_col.rowconfigure(3, weight=1)
-        ttk.Label(folder_col, text="Ordner", style="Muted.TLabel").grid(row=0, column=0, sticky="w")
-        self._folder_path_var = tk.StringVar(value="Bibliothek")
+        ttk.Label(folder_col, text=_t("mlp.label.folder"), style="Muted.TLabel").grid(row=0, column=0, sticky="w")
+        self._folder_path_var = tk.StringVar(value=_t("mlp.library.root"))
         path_hdr = ttk.Frame(folder_col, height=_hdr_h)
         path_hdr.grid(row=1, column=0, sticky="ew", pady=(2, 0))
         path_hdr.grid_propagate(False)
@@ -128,20 +129,20 @@ class ModelLibraryPanel(ttk.Frame):
         fbtns.grid(row=2, column=0, sticky="ew", pady=(4, 4))
         fbtns.grid_propagate(False)
         tip(
-            ttk.Button(fbtns, text="Unterordner", command=self._new_folder, style="Secondary.TButton"),
-            "Neuen Unterordner im gewählten Ordner anlegen.",
+            ttk.Button(fbtns, text=_t("mlp.btn.subfolder"), command=self._new_folder, style="Secondary.TButton"),
+            _t("mlp.btn.new_subfolder_tip"),
         ).pack(side="left", padx=(0, 4), pady=4)
         tip(
-            ttk.Button(fbtns, text="Umbenennen", command=self._rename_folder, style="Secondary.TButton"),
-            "Gewählten Ordner umbenennen (nicht Bibliothek).",
+            ttk.Button(fbtns, text=_t("mlp.btn.rename_short"), command=self._rename_folder, style="Secondary.TButton"),
+            _t("mlp.btn.rename_folder_tip"),
         ).pack(side="left", padx=(0, 4), pady=4)
         tip(
-            ttk.Button(fbtns, text="Löschen", command=self._delete_folder, style="Secondary.TButton"),
-            "Ordner inkl. Unterordner und Dateien löschen.",
+            ttk.Button(fbtns, text=_t("mlp.btn.delete_folder"), command=self._delete_folder, style="Secondary.TButton"),
+            _t("mlp.btn.delete_folder_tip"),
         ).pack(side="left", padx=(0, 4), pady=4)
         tip(
-            ttk.Button(fbtns, text="↑ Überordner", command=self._goto_parent_folder, style="Secondary.TButton"),
-            "Zum übergeordneten Ordner springen.",
+            ttk.Button(fbtns, text=_t("mlp.btn.parent_folder"), command=self._goto_parent_folder, style="Secondary.TButton"),
+            _t("mlp.btn.parent_folder_tip"),
         ).pack(side="left", pady=4)
         folder_wrap = ttk.Frame(folder_col)
         folder_wrap.grid(row=3, column=0, sticky="nsew")
@@ -160,7 +161,7 @@ class ModelLibraryPanel(ttk.Frame):
         left_split.add(files_col, weight=2)
         files_col.columnconfigure(0, weight=1)
         files_col.rowconfigure(4, weight=1)
-        self._files_title = ttk.Label(files_col, text="Dateien", style="Muted.TLabel")
+        self._files_title = ttk.Label(files_col, text=_t("mlp.label.files"), style="Muted.TLabel")
         self._files_title.grid(row=0, column=0, sticky="w")
         files_path_hdr = ttk.Frame(files_col, height=_hdr_h)
         files_path_hdr.grid(row=1, column=0, sticky="ew", pady=(2, 0))
@@ -170,14 +171,14 @@ class ModelLibraryPanel(ttk.Frame):
         file_btns = ttk.Frame(files_col, height=_btn_h)
         search_row = ttk.Frame(files_col)
         search_row.grid(row=2, column=0, sticky="ew", pady=(4, 0))
-        ttk.Label(search_row, text="Suche:").pack(side="left")
+        ttk.Label(search_row, text=_t("mlp.label.search")).pack(side="left")
         self._search_var = tk.StringVar()
         self._search_var.trace_add("write", lambda *_: self._reload_files())
         ttk.Entry(search_row, textvariable=self._search_var).pack(side="left", fill="x", expand=True, padx=6)
         self._filter_done_var = tk.BooleanVar(value=False)
         ttk.Checkbutton(
             search_row,
-            text="Nur offen",
+            text=_t("mlp.chk.open_only"),
             variable=self._filter_done_var,
             command=self._reload_files,
         ).pack(side="left")
@@ -185,12 +186,12 @@ class ModelLibraryPanel(ttk.Frame):
         file_btns.grid(row=3, column=0, sticky="ew", pady=(4, 4))
         file_btns.grid_propagate(False)
         tip(
-            ttk.Button(file_btns, text="Umbenennen", command=self._rename_file, style="Secondary.TButton"),
-            "Ausgewählte Datei umbenennen (F2).",
+            ttk.Button(file_btns, text=_t("mlp.btn.rename_short"), command=self._rename_file, style="Secondary.TButton"),
+            _t("mlp.btn.rename_file_f2_tip"),
         ).pack(side="left", padx=(0, 4), pady=4)
         tip(
-            ttk.Button(file_btns, text="Erledigt ✓", command=self._toggle_done_selected, style="Secondary.TButton"),
-            "Ausgewählte Datei(en) als gedruckt/erledigt markieren oder Markierung entfernen.",
+            ttk.Button(file_btns, text=_t("mlp.btn.done"), command=self._toggle_done_selected, style="Secondary.TButton"),
+            _t("mlp.btn.mark_done_tip"),
         ).pack(side="left", padx=(0, 4), pady=4)
         files_wrap = ttk.Frame(files_col)
         files_wrap.grid(row=4, column=0, sticky="nsew")
@@ -234,7 +235,7 @@ class ModelLibraryPanel(ttk.Frame):
         right_split = ttk.Panedwindow(right, orient="vertical")
         self._right_split = right_split
         right_split.grid(row=0, column=0, sticky="nsew")
-        preview_wrap = ttk.LabelFrame(right_split, text="  Vorschau  ", padding=6)
+        preview_wrap = ttk.LabelFrame(right_split, text=_t("mlp.section.preview"), padding=6)
         right_split.add(preview_wrap, weight=3)
         preview_wrap.columnconfigure(0, weight=1)
         preview_wrap.rowconfigure(0, weight=1)
@@ -246,7 +247,7 @@ class ModelLibraryPanel(ttk.Frame):
         preview_wrap.bind("<Configure>", lambda _e: self._stl_preview.fit_to_panel(), add="+")
         self._right_split.bind("<ButtonRelease-1>", lambda _e: self._stl_preview.fit_to_panel(), add="+")
 
-        meta = ttk.LabelFrame(right_split, text="  Ausgewählte Datei  ", padding=8)
+        meta = ttk.LabelFrame(right_split, text=_t("mlp.section.selected_file"), padding=8)
         right_split.add(meta, weight=2)
         meta.columnconfigure(0, weight=1)
         pad = {"padx": 0, "pady": 3}
@@ -260,19 +261,19 @@ class ModelLibraryPanel(ttk.Frame):
         tip(
             ttk.Checkbutton(
                 done_row,
-                text="Erledigt (bereits gedruckt / fertig)",
+                text=_t("mlp.chk.printed"),
                 variable=self._done_var,
                 command=self._on_done_checkbox,
             ),
-            "Haken setzen = Teil ist erledigt. Bleibt nach Neustart gespeichert.",
+            _t("mlp.tip.done_checkbox"),
         ).pack(anchor="w")
-        ttk.Label(meta, text="Anzeigename", style="Muted.TLabel").grid(row=1, column=0, sticky="w", **pad)
+        ttk.Label(meta, text=_t("mlp.label.display_name"), style="Muted.TLabel").grid(row=1, column=0, sticky="w", **pad)
         ttk.Entry(meta, textvariable=self._name_var).grid(row=2, column=0, sticky="ew", **pad)
-        ttk.Label(meta, text="Quelle (URL)", style="Muted.TLabel").grid(row=3, column=0, sticky="w", **pad)
+        ttk.Label(meta, text=_t("mlp.label.source_url"), style="Muted.TLabel").grid(row=3, column=0, sticky="w", **pad)
         ttk.Entry(meta, textvariable=self._url_var).grid(row=4, column=0, sticky="ew", **pad)
-        ttk.Label(meta, text="Bemerkung", style="Muted.TLabel").grid(row=5, column=0, sticky="w", **pad)
+        ttk.Label(meta, text=_t("mlp.label.note"), style="Muted.TLabel").grid(row=5, column=0, sticky="w", **pad)
         ttk.Entry(meta, textvariable=self._notes_var).grid(row=6, column=0, sticky="ew", **pad)
-        ttk.Label(meta, text="Pfad", style="Muted.TLabel").grid(row=7, column=0, sticky="w", **pad)
+        ttk.Label(meta, text=_t("mlp.label.path"), style="Muted.TLabel").grid(row=7, column=0, sticky="w", **pad)
         self._path_entry = ttk.Entry(meta, textvariable=self._path_var, state="readonly")
         self._path_entry.grid(row=8, column=0, sticky="ew", **pad)
         meta_btns = ttk.Frame(meta)
@@ -281,25 +282,25 @@ class ModelLibraryPanel(ttk.Frame):
         left_btns = ttk.Frame(meta_btns)
         left_btns.grid(row=0, column=0, sticky="w")
         tip(
-            ttk.Button(left_btns, text="Öffnen", command=self._open_selected_file, style="Secondary.TButton"),
-            "PDF, TXT, Bilder … mit Standardprogramm; STL/3MF im 3D-Viewer.",
+            ttk.Button(left_btns, text=_t("mlp.btn.open"), command=self._open_selected_file, style="Secondary.TButton"),
+            _t("mlp.tip.open_file_types"),
         ).pack(side="left", padx=(0, 6))
         tip(
-            ttk.Button(left_btns, text="In Creality öffnen", command=self._open_in_creality, style="Secondary.TButton"),
-            "STL/3MF in Creality Print (Windows-Standard-App für diese Dateitypen).",
+            ttk.Button(left_btns, text=_t("mlp.btn.open_creality"), command=self._open_in_creality, style="Secondary.TButton"),
+            _t("mlp.btn.open_creality_tip"),
         ).pack(side="left", padx=(0, 6))
         tip(
-            ttk.Button(left_btns, text="3D extern…", command=self._open_in_3d_viewer, style="Secondary.TButton"),
-            "Windows 3D Viewer / „Öffnen mit“ in separatem Fenster.",
+            ttk.Button(left_btns, text=_t("mlp.btn.open_3d"), command=self._open_in_3d_viewer, style="Secondary.TButton"),
+            _t("mlp.btn.open_3dviewer_tip"),
         ).pack(side="left")
         tip(
-            ttk.Button(meta_btns, text="Details speichern", command=self._save_meta, style="Accent.TButton"),
-            "Name, URL und Bemerkung für die ausgewählte Datei speichern.",
+            ttk.Button(meta_btns, text=_t("mlp.btn.save_details"), command=self._save_meta, style="Accent.TButton"),
+            _t("mlp.btn.save_meta_tip"),
         ).grid(row=0, column=2, sticky="e")
 
         ttk.Label(
             self,
-            text="Speichern unter: Dateien oder Ordner links (Strg+Klick) — mit Unterordnern | Verschieben: auf Zielordner ziehen.",
+            text=_t("mlp.hint.save_under"),
             style="Muted.TLabel",
             wraplength=920,
         ).pack(anchor="w", padx=12, pady=(0, 8))
@@ -332,7 +333,7 @@ class ModelLibraryPanel(ttk.Frame):
     def _reload_folders(self) -> None:
         self.folder_tree.delete(*self.folder_tree.get_children())
         root = self.library.folder_by_id("root")
-        root_name = root.name if root else "Bibliothek"
+        root_name = root.name if root else _t("mlp.library.root")
         self.folder_tree.insert("", "end", iid="root", text=root_name, open=True)
         self._insert_folder_children("root")
 
@@ -342,7 +343,7 @@ class ModelLibraryPanel(ttk.Frame):
             n_sub = len(self.library.child_folders(folder.id))
             label = folder.name
             if n_files or n_sub:
-                label = f"{folder.name}  ({n_files} Datei{'en' if n_files != 1 else ''})"
+                label = _t("mlp.folder.file_count", name=folder.name, n=n_files)
             self.folder_tree.insert(parent_id, "end", iid=folder.id, text=label, open=False)
             self._insert_folder_children(folder.id)
 
@@ -363,13 +364,13 @@ class ModelLibraryPanel(ttk.Frame):
         focus = self.files_tree.focus()
         self.files_tree.delete(*self.files_tree.get_children())
         path = self.library.folder_breadcrumb(self._current_folder_id)
-        self._files_title.config(text="Dateien")
+        self._files_title.config(text=_t("mlp.label.files"))
         self._files_path_lbl.config(text=path)
         self._update_folder_path_label()
         for e in self.library.entries_in_folder(self._current_folder_id):
             if not self._entry_matches_file_filter(e):
                 continue
-            storage = "Kopie" if e.storage == "copy" else "Link"
+            storage = _t("mlp.storage.copy") if e.storage == "copy" else _t("mlp.storage.link")
             mark = "✓" if e.done else ""
             tags = ("file_done",) if e.done else ("file_open",)
             self.files_tree.insert(
@@ -428,7 +429,7 @@ class ModelLibraryPanel(ttk.Frame):
         """
         file_sel = self._selected_entries()
         if file_sel:
-            return [(e, Path()) for e in file_sel], f"{len(file_sel)} Datei(en)"
+            return [(e, Path()) for e in file_sel], _t("mlp.export.n_files", n=len(file_sel))
 
         folder_ids = self._selected_movable_folder_ids()
         if folder_ids:
@@ -448,7 +449,7 @@ class ModelLibraryPanel(ttk.Frame):
             label = ", ".join(names[:3])
             if len(names) > 3:
                 label += f" … (+{len(names) - 3})"
-            return items, f"Ordner {label}"
+            return items, _t("mlp.export.folder_label", label=label)
 
         items = []
         for entry in self.library.entries_in_folder_recursive(self._current_folder_id):
@@ -476,12 +477,12 @@ class ModelLibraryPanel(ttk.Frame):
         self._url_var.set(entry.source_url)
         self._notes_var.set(entry.notes)
         path = entry.resolved_path(self.library.root)
-        self._path_var.set(str(path) if path else "— Datei nicht gefunden —")
+        self._path_var.set(str(path) if path else _t("mlp.path.not_found"))
         self._update_stl_preview(entry, path)
 
     def _update_stl_preview(self, entry: ModelEntry, path: Path | None) -> None:
         if not path or not path.is_file():
-            self._stl_preview.clear("Datei nicht gefunden.")
+            self._stl_preview.clear(_t("mlp.preview.file_not_found"))
             return
         ext = (entry.file_ext or path.suffix).lower()
         if ext == ".stl":
@@ -489,9 +490,9 @@ class ModelLibraryPanel(ttk.Frame):
                 pass
             return
         if ext == ".3mf":
-            self._stl_preview.clear("3MF: Vorschau nur extern\n(„3D extern…“ oder Creality).")
+            self._stl_preview.clear(_t("mlp.preview.3mf_external"))
             return
-        self._stl_preview.clear("Vorschau nur für STL.\n(PDF/TXT: „Öffnen“)")
+        self._stl_preview.clear(_t("mlp.preview.stl_only"))
 
     def _open_stl_external(self, path: Path) -> None:
         self._open_in_3d_viewer_for_path(path)
@@ -523,7 +524,7 @@ class ModelLibraryPanel(ttk.Frame):
         for raw in paths:
             p = self._resolve_drop_path(raw)
             if not p.exists():
-                notify(self, f"Nicht gefunden: {raw}", "warn")
+                notify(self, _t("mlp.notify.not_found_raw", raw=raw), "warn")
                 continue
             try:
                 if p.is_dir():
@@ -534,7 +535,7 @@ class ModelLibraryPanel(ttk.Frame):
                         continue
                     n += self._import_one_file(p, target)
             except (OSError, ValueError) as exc:
-                notify(self, f"{p.name}: {exc}", "error")
+                notify(self, _t("mlp.notify.path_error", name=p.name, exc=exc), "error")
         if n:
             self._reload_folders()
             self._reload_files()
@@ -575,33 +576,33 @@ class ModelLibraryPanel(ttk.Frame):
         folder_id = self._folder_at_pointer() or self._current_folder_id
         n = self._import_paths(paths, folder_id)
         if n:
-            notify(self, f"{n} Datei(en) importiert.", "ok")
+            notify(self, _t("mlp.notify.imported", n=n), "ok")
         else:
             notify(
                 self,
-                "Keine unterstützten Dateien oder Ordner (STL, 3MF, ZIP, PDF, Bilder …).",
+                _t("mlp.notify.unsupported"),
                 "warn",
             )
 
     def _import_folder_copy(self) -> None:
-        path = filedialog.askdirectory(parent=self, title="Ordner importieren")
+        path = filedialog.askdirectory(parent=self, title=_t("mlp.title.import_folder"))
         if not path:
             return
         n = self._import_paths([Path(path)])
         if n:
-            notify(self, f"{n} Datei(en) aus Ordner importiert.", "ok")
+            notify(self, _t("mlp.notify.imported", n=n), "ok")
         else:
             notify(
                 self,
-                "Im Ordner keine unterstützten Dateien gefunden.",
+                _t("mlp.notify.no_supported_in_folder"),
                 "warn",
             )
 
     def _import_copy(self) -> None:
         paths = filedialog.askopenfilenames(
-            title="Dateien importieren",
+            title=_t("mlp.title.import_files"),
             filetypes=[
-                ("Alles unterstützte", "*.stl *.3mf *.zip *.pdf *.png *.jpg *.jpeg *.gif *.txt *.md *.gcode"),
+                (_t("mlp.dialog.all_supported"), "*.stl *.3mf *.zip *.pdf *.png *.jpg *.jpeg *.gif *.txt *.md *.gcode"),
                 ("ZIP-Projekt", "*.zip"),
                 ("3D-Modelle", "*.stl *.3mf"),
                 ("PDF", "*.pdf"),
@@ -614,13 +615,13 @@ class ModelLibraryPanel(ttk.Frame):
             return
         n = self._import_paths([Path(p) for p in paths])
         if n:
-            notify(self, f"{n} Datei(en) importiert.", "ok")
+            notify(self, _t("mlp.notify.imported", n=n), "ok")
 
     def _import_link(self) -> None:
         paths = filedialog.askopenfilenames(
-            title="Datei verknüpfen",
+            title=_t("mlp.dialog.link_file_title"),
             filetypes=[
-                ("Unterstützte Dateien", "*.stl *.3mf *.pdf *.png *.jpg *.jpeg *.gif *.txt *.md *.gcode"),
+                (_t("mlp.dialog.supported_files"), "*.stl *.3mf *.pdf *.png *.jpg *.jpeg *.gif *.txt *.md *.gcode"),
                 ("3D-Modelle", "*.stl *.3mf"),
                 ("PDF", "*.pdf"),
                 ("Alle", "*.*"),
@@ -634,9 +635,9 @@ class ModelLibraryPanel(ttk.Frame):
                 self.library.link_file(Path(p), self._current_folder_id)
                 n += 1
             except (OSError, ValueError) as exc:
-                notify(self, f"{Path(p).name}: {exc}", "error")
+                notify(self, _t("mlp.notify.path_error", name=Path(p).name, exc=exc), "error")
         if n:
-            notify(self, f"{n} Verknüpfung(en) angelegt.", "ok")
+            notify(self, _t("mlp.notify.links_created", n=n), "ok")
             self._reload_files()
 
     def _ask_name(self, title: str, prompt: str, initial: str = "") -> str | None:
@@ -687,7 +688,7 @@ class ModelLibraryPanel(ttk.Frame):
         return self._current_folder_id
 
     def _new_folder(self) -> None:
-        name = self._ask_name("Unterordner", "Name des neuen Ordners:")
+        name = self._ask_name(_t("mlp.prompt.subfolder"), _t("mlp.prompt.subfolder_name"))
         if not name:
             return
         parent_id = self._current_folder_id
@@ -699,17 +700,17 @@ class ModelLibraryPanel(ttk.Frame):
             self.folder_tree.see(folder.id)
             self._current_folder_id = folder.id
             self._reload_files()
-        notify(self, f"Unterordner „{folder.name}“ angelegt.", "ok")
+        notify(self, _t("mlp.notify.folder_created", name=folder.name), "ok")
 
     def _rename_folder(self) -> None:
         folder_id = self._folder_id_for_rename()
         if not folder_id:
-            notify(self, "Bitte einen Ordner in der Liste links wählen.", "warn")
+            notify(self, _t("mlp.notify.pick_folder_left"), "warn")
             return
         folder = self.library.folder_by_id(folder_id)
         if not folder:
             return
-        title = "Hauptordner umbenennen" if folder_id == "root" else "Ordner umbenennen"
+        title = _t("mlp.title.rename_root") if folder_id == "root" else _t("mlp.title.rename_folder")
         name = self._ask_name(title, "Neuer Name:", folder.name)
         if not name:
             return
@@ -719,14 +720,14 @@ class ModelLibraryPanel(ttk.Frame):
         if self.folder_tree.exists(folder_id):
             self.folder_tree.selection_set(folder_id)
         self._reload_files()
-        notify(self, f"Umbenannt in „{name}“.", "ok")
+        notify(self, _t("mlp.notify.renamed", name=name), "ok")
 
     def _rename_file(self) -> None:
         entry = self._selected_entry()
         if not entry:
-            notify(self, "Bitte eine Datei in der Liste wählen.", "warn")
+            notify(self, _t("mlp.notify.pick_file"), "warn")
             return
-        name = self._ask_name("Datei umbenennen", "Neuer Anzeigename:", entry.display_name)
+        name = self._ask_name(_t("mlp.prompt.rename_file"), _t("mlp.prompt.new_display_name"), entry.display_name)
         if not name:
             return
         self.library.rename_entry(entry.id, name)
@@ -735,7 +736,7 @@ class ModelLibraryPanel(ttk.Frame):
         self._reload_folders()
         if self.files_tree.exists(entry.id):
             self.files_tree.selection_set(entry.id)
-        notify(self, f"Umbenannt in „{name}“.", "ok")
+        notify(self, _t("mlp.notify.renamed", name=name), "ok")
 
     def _goto_parent_folder(self) -> None:
         if self._current_folder_id == "root":
@@ -753,7 +754,7 @@ class ModelLibraryPanel(ttk.Frame):
     def _delete_folder(self) -> None:
         sel = self.folder_tree.selection()
         if not sel or sel[0] == "root":
-            notify(self, "Bitte einen Unterordner wählen.", "warn")
+            notify(self, _t("mlp.notify.pick_subfolder"), "warn")
             return
         folder_id = sel[0]
         folder = self.library.folder_by_id(folder_id)
@@ -761,9 +762,9 @@ class ModelLibraryPanel(ttk.Frame):
             return
         n = self.library.entry_count(folder_id, include_subfolders=True)
         sub = len(self.library.child_folders(folder_id))
-        msg = f"Ordner „{folder.name}“ wirklich löschen?"
+        msg = _t("mlp.confirm.delete_folder", name=folder.name)
         if n or sub:
-            msg += f"\n\nInkl. Unterordner: {n} Datei(en) werden entfernt."
+            msg += "\n\n" + _t("mlp.confirm.delete_folder_extra", n=n)
 
         def do_del() -> None:
             removed = self.library.delete_folder_recursive(folder_id)
@@ -772,14 +773,14 @@ class ModelLibraryPanel(ttk.Frame):
             self.folder_tree.selection_set("root")
             self._reload_files()
             self._clear_details()
-            notify(self, f"Ordner gelöscht ({removed} Datei(en) entfernt).", "ok")
+            notify(self, _t("mlp.notify.folder_deleted", removed=removed), "ok")
 
         confirm(self, msg, do_del)
 
     def _delete_file(self) -> None:
         entry = self._selected_entry()
         if not entry:
-            notify(self, "Bitte eine Datei auswählen.", "warn")
+            notify(self, _t("mlp.notify.pick_file_short"), "warn")
             return
 
         entry_id = entry.id
@@ -792,9 +793,9 @@ class ModelLibraryPanel(ttk.Frame):
             self._clear_details()
             self._reload_files()
             self._reload_folders()
-            notify(self, f"„{name}“ entfernt.", "ok")
+            notify(self, _t("mlp.notify.removed", name=name), "ok")
 
-        confirm(self, f"„{name}“ aus der Bibliothek entfernen?", do_del)
+        confirm(self, _t("mlp.confirm.remove", name=name), do_del)
 
     def _on_files_tree_click(self, event) -> None:
         if self.files_tree.identify_region(event.x, event.y) != "cell":
@@ -839,7 +840,7 @@ class ModelLibraryPanel(ttk.Frame):
     def _toggle_done_selected(self) -> None:
         entries = self._selected_entries()
         if not entries:
-            notify(self, "Bitte eine oder mehrere Dateien auswählen.", "warn")
+            notify(self, _t("mlp.notify.pick_files"), "warn")
             return
         mark_done = not all(e.done for e in entries)
         for entry in entries:
@@ -849,7 +850,7 @@ class ModelLibraryPanel(ttk.Frame):
         self.files_tree.selection_set([i for i in sel if self.files_tree.exists(i)])
         notify(
             self,
-            f"{len(entries)} Datei(en) als {'erledigt' if mark_done else 'offen'} markiert.",
+            _t("mlp.notify.marked_done", n=len(entries), state=_t("mlp.state.done") if mark_done else _t("mlp.state.open")),
             "ok",
         )
 
@@ -925,7 +926,7 @@ class ModelLibraryPanel(ttk.Frame):
         if not was_drag:
             return
         if not target_id:
-            notify(self, "Zum Verschieben auf einen Ordner links loslassen.", "warn")
+            notify(self, _t("mlp.notify.drop_on_folder"), "warn")
             return
         if folder_ids:
             self._apply_move_folders(folder_ids, target_id)
@@ -1002,7 +1003,7 @@ class ModelLibraryPanel(ttk.Frame):
         self._finish_move_ui(target_folder_id, focus_entry_ids=entry_ids)
         notify(
             self,
-            f"{moved} Datei(en) verschoben nach: {crumb}",
+            _t("mlp.notify.moved_files", n=moved, dest=crumb),
             "ok",
         )
 
@@ -1023,14 +1024,14 @@ class ModelLibraryPanel(ttk.Frame):
         if moved:
             crumb = self.library.folder_breadcrumb(target_folder_id)
             self._finish_move_ui(target_folder_id)
-            msg = f"{moved} Ordner verschoben nach: {crumb}"
+            msg = _t("mlp.notify.moved_folders", n=moved, dest=crumb)
             if skipped:
-                msg += "\n\nÜbersprungen:\n" + "\n".join(skipped[:6])
+                msg += _t("mlp.notify.skipped_header") + "\n".join(skipped[:6])
             notify(self, msg, "ok" if not skipped else "warn")
         elif skipped:
-            notify(self, "Nicht verschoben:\n" + "\n".join(skipped[:8]), "warn")
+            notify(self, _t("mlp.notify.not_moved", items="\n".join(skipped[:8])), "warn")
         else:
-            notify(self, "Keine Ordner verschoben.", "warn")
+            notify(self, _t("mlp.notify.no_folders_moved"), "warn")
 
     def _pick_target_folder(self, prompt: str) -> str | None:
         options = self.library.all_folders_for_picker()
@@ -1039,7 +1040,7 @@ class ModelLibraryPanel(ttk.Frame):
             return None
 
         dlg = tk.Toplevel(self)
-        dlg.title("In Ordner verschieben")
+        dlg.title(_t("mlp.title.move_to_folder"))
         prepare_toplevel(dlg, self, width=480, height=200, geometry_key="model_move_folder")
         picked: list[str] = []
 
@@ -1047,7 +1048,7 @@ class ModelLibraryPanel(ttk.Frame):
             picked.append(choice.get())
             dlg.destroy()
 
-        add_dialog_footer(dlg, on_ok=ok, on_cancel=dlg.destroy, ok_text="Verschieben")
+        add_dialog_footer(dlg, on_ok=ok, on_cancel=dlg.destroy, ok_text=_t("mlp.btn.move_ok"))
         body = ttk.Frame(dlg)
         body.pack(fill="both", expand=True, padx=14, pady=14)
         ttk.Label(body, text=prompt).pack(anchor="w", pady=(0, 8))
@@ -1067,7 +1068,7 @@ class ModelLibraryPanel(ttk.Frame):
             names = ", ".join(e.display_name for e in entries[:3])
             if len(entries) > 3:
                 names += f" … (+{len(entries) - 3})"
-            prompt = f"Zielordner für {len(entries)} Datei(en) ({names}):"
+            prompt = _t("mlp.move.target_files", n=len(entries), names=names)
             target_id = self._pick_target_folder(prompt)
             if target_id:
                 self._apply_move_entries([e.id for e in entries], target_id)
@@ -1081,21 +1082,21 @@ class ModelLibraryPanel(ttk.Frame):
             label = ", ".join(names)
             if len(folder_ids) > 4:
                 label += f" … (+{len(folder_ids) - 4})"
-            prompt = f"Zielordner für {len(folder_ids)} Ordner ({label}):"
+            prompt = _t("mlp.move.target_folders", n=len(folder_ids), label=label)
             target_id = self._pick_target_folder(prompt)
             if target_id:
                 self._apply_move_folders(folder_ids, target_id)
             return
         notify(
             self,
-            "Bitte Datei(en) in der Mitte oder einen oder mehrere Ordner links wählen (Strg+Klick).",
+            _t("mlp.move.pick_source"),
             "warn",
         )
 
     def _save_meta(self) -> None:
         entry = self._selected_entry()
         if not entry:
-            notify(self, "Bitte eine Datei auswählen.", "warn")
+            notify(self, _t("mlp.notify.pick_file_short"), "warn")
             return
         entry.display_name = self._name_var.get().strip() or entry.display_name
         entry.source_url = self._url_var.get().strip()
@@ -1103,16 +1104,16 @@ class ModelLibraryPanel(ttk.Frame):
         self.library.update_entry(entry)
         self._reload_files()
         self.files_tree.selection_set(entry.id)
-        notify(self, "Gespeichert.", "ok")
+        notify(self, _t("mlp.notify.saved"), "ok")
 
     def _backup_library(self) -> None:
         self.library.save()
         dest = filedialog.asksaveasfilename(
             parent=self,
-            title="Modell-Bibliothek sichern",
+            title=_t("mlp.title.backup"),
             defaultextension=".zip",
             initialfile=default_model_library_backup_name(),
-            filetypes=[("ZIP-Backup", "*.zip")],
+            filetypes=[(_t("mlp.filetype.zip_backup"), "*.zip")],
         )
         if not dest:
             return
@@ -1120,18 +1121,18 @@ class ModelLibraryPanel(ttk.Frame):
             n = backup_model_library(self.library.root, Path(dest))
             notify(
                 self,
-                f"Bibliothek gesichert ({n} Dateien):\n{dest}",
+                _t("mlp.notify.backup_ok", n=n, dest=dest),
                 "ok",
             )
         except OSError as exc:
-            notify(self, f"Backup fehlgeschlagen:\n{exc}", "error")
+            notify(self, _t("mlp.notify.backup_failed", exc=exc), "error")
 
     def _restore_library(self) -> None:
         def do_restore() -> None:
             src = filedialog.askopenfilename(
                 parent=self,
-                title="Modell-Bibliothek laden",
-                filetypes=[("ZIP-Backup", "*.zip"), ("Alle", "*.*")],
+                title=_t("mlp.title.restore"),
+                filetypes=[(_t("mlp.filetype.zip_backup"), "*.zip"), (_t("mlp.filetype.all"), "*.*")],
             )
             if not src:
                 return
@@ -1146,17 +1147,15 @@ class ModelLibraryPanel(ttk.Frame):
                 self._clear_details()
                 notify(
                     self,
-                    f"Bibliothek wiederhergestellt ({n} Dateien).\n\n{src}",
+                    _t("mlp.notify.restore_ok", n=n, src=src),
                     "ok",
                 )
             except (OSError, zipfile.BadZipFile, ValueError) as exc:
-                notify(self, f"Wiederherstellen fehlgeschlagen:\n{exc}", "error")
+                notify(self, _t("mlp.notify.restore_failed", exc=exc), "error")
 
         confirm(
             self,
-            "Aktuelle Modell-Bibliothek durch das ZIP-Backup ersetzen?\n\n"
-            "Tipp: Vorher „Bibliothek sichern…“.\n\n"
-            "Fortfahren?",
+            _t("mlp.confirm.restore"),
             do_restore,
         )
 
@@ -1187,7 +1186,7 @@ class ModelLibraryPanel(ttk.Frame):
         if not items:
             notify(
                 self,
-                "Keine Dateien zum Exportieren (Ordner leer oder Filter „Nur offen“ ausblenden).",
+                _t("mlp.notify.export_empty"),
                 "warn",
             )
             return
@@ -1196,30 +1195,30 @@ class ModelLibraryPanel(ttk.Frame):
             entry = items[0][0]
             src = entry.resolved_path(self.library.root)
             if not src:
-                notify(self, "Datei nicht gefunden (Pfad prüfen).", "warn")
+                notify(self, _t("mlp.notify.file_not_found"), "warn")
                 return
             default_name = self._export_dest_name(entry, src)
             ext = Path(default_name).suffix
             dest = filedialog.asksaveasfilename(
                 parent=self,
-                title="Datei speichern unter",
+                title=_t("mlp.title.save_file_as"),
                 initialfile=default_name,
                 defaultextension=ext,
                 filetypes=[
-                    ("Alle Dateien", "*.*"),
-                    (f"{ext.upper()} Dateien", f"*{ext}"),
+                    (_t("mlp.filetype.all"), "*.*"),
+                    (_t("mlp.filetype.ext", ext=ext.upper()), f"*{ext}"),
                 ],
             )
             if not dest:
                 return
             try:
                 shutil.copy2(src, Path(dest))
-                notify(self, f"Gespeichert:\n{dest}", "ok")
+                notify(self, _t("mlp.notify.saved_to", dest=dest), "ok")
             except OSError as exc:
                 notify(self, str(exc), "error")
             return
 
-        title = f"„{label}“ — {len(items)} Dateien exportieren (Ordnerstruktur)"
+        title = _t("mlp.title.export_batch", label=label, n=len(items))
         dest_dir = filedialog.askdirectory(parent=self, title=title)
         if not dest_dir:
             return
@@ -1240,12 +1239,12 @@ class ModelLibraryPanel(ttk.Frame):
             except OSError as exc:
                 failed.append(f"{entry.display_name}: {exc}")
         if ok:
-            msg = f"{ok} Datei(en) nach\n{dest_dir}"
+            msg = _t("mlp.notify.export_ok", n=ok, dest=dest_dir)
             if failed:
-                msg += f"\n\nFehler ({len(failed)}):\n" + "\n".join(failed[:5])
+                msg += "\n\n" + _t("mlp.notify.export_errors_header", n=len(failed)) + "\n".join(failed[:5])
             notify(self, msg, "ok" if not failed else "warn")
         elif failed:
-            notify(self, "Export fehlgeschlagen:\n" + "\n".join(failed[:8]), "error")
+            notify(self, _t("mlp.notify.export_failed", failed="\n".join(failed[:8])), "error")
 
     def _entry_for_single_file_action(self, *, silent: bool = False) -> ModelEntry | None:
         """Genau eine Datei für Öffnen / Viewer — Klick in der Dateiliste nötig."""
@@ -1255,7 +1254,7 @@ class ModelLibraryPanel(ttk.Frame):
                 return None
             messagebox.showwarning(
                 APP_NAME,
-                "Bitte nur eine Datei auswählen (nicht mehrere mit Strg+Klick).",
+                _t("mlp.notify.only_one_file"),
                 parent=self.winfo_toplevel(),
             )
             return None
@@ -1270,8 +1269,8 @@ class ModelLibraryPanel(ttk.Frame):
             return None
         messagebox.showwarning(
             APP_NAME,
-            "Bitte zuerst eine Datei in der mittleren Liste anklicken.\n\n"
-            "(Nur den Ordner links markieren reicht nicht.)",
+            _t("mlp.msg.pick_one_file") + "\n\n"
+            + _t("mlp.msg.pick_one_file_folder_only"),
             parent=self.winfo_toplevel(),
         )
         return None
@@ -1298,7 +1297,7 @@ class ModelLibraryPanel(ttk.Frame):
         path = entry.resolved_path(self.library.root)
         if not path or not path.is_file():
             if not silent:
-                notify(self, "Datei nicht gefunden (Pfad prüfen).", "warn")
+                notify(self, _t("mlp.notify.file_not_found"), "warn")
             return False
         ext = path.suffix.lower()
         if ext in {".stl", ".3mf"}:
@@ -1313,11 +1312,11 @@ class ModelLibraryPanel(ttk.Frame):
                 parent = self.winfo_toplevel()
                 if mode == "store" and messagebox.askyesno(
                     APP_NAME,
-                    f"{hint}\n\nMicrosoft Store öffnen („3D Viewer“ installieren)?",
+                    _t("mlp.viewer.install_q", hint=hint),
                     parent=parent,
                 ):
                     if open_microsoft_store_3d_viewer():
-                        notify(self, "Microsoft Store geöffnet — „3D Viewer“ installieren.", "info")
+                        notify(self, _t("mlp.viewer.store_opened"), "info")
                     return True
                 messagebox.showerror(APP_NAME, hint, parent=parent)
             return False
@@ -1326,10 +1325,10 @@ class ModelLibraryPanel(ttk.Frame):
             if ok:
                 return True
             if not silent:
-                notify(self, f"Konnte nicht öffnen:\n{err}", "error")
+                notify(self, _t("mlp.notify.cannot_open", err=err), "error")
             return False
         if not silent:
-            notify(self, f"Dateityp {ext} wird nicht unterstützt.", "warn")
+            notify(self, _t("mlp.notify.ext_unsupported", ext=ext), "warn")
         return False
 
     def _selected_mesh_path(self) -> Path | None:
@@ -1340,16 +1339,16 @@ class ModelLibraryPanel(ttk.Frame):
         if not path or not path.is_file():
             messagebox.showwarning(
                 APP_NAME,
-                "Datei nicht gefunden.\n\n"
-                f"Eintrag: {entry.display_name}\n"
-                "Pfad in den Details prüfen oder Datei erneut importieren.",
+                _t("mlp.notify.file_not_found") + "\n\n"
+                + _t("mlp.notify.entry_prefix", name=entry.display_name) + "\n"
+                + _t("mlp.notify.check_path_or_reimport"),
                 parent=self.winfo_toplevel(),
             )
             return None
         if path.suffix.lower() not in {".stl", ".3mf"}:
             messagebox.showwarning(
                 APP_NAME,
-                "Nur STL- und 3MF-Dateien können in einem 3D-Programm geöffnet werden.",
+                _t("mlp.notify.only_stl_3mf"),
                 parent=self.winfo_toplevel(),
             )
             return None
@@ -1361,7 +1360,7 @@ class ModelLibraryPanel(ttk.Frame):
             return
         ok, err = open_mesh_with_default_app(path)
         if not ok:
-            notify(self, f"Creality / Standard-App konnte nicht gestartet werden:\n{err}", "error")
+            notify(self, _t("mlp.notify.creality_open_failed", err=err), "error")
 
     def _open_in_3d_viewer_for_path(self, path: Path) -> None:
         from creality_nfc.windows_mesh_open import open_microsoft_store_3d_viewer
@@ -1373,17 +1372,17 @@ class ModelLibraryPanel(ttk.Frame):
             return
         if mode == "store" and messagebox.askyesno(
             APP_NAME,
-            f"{hint}\n\nMicrosoft Store öffnen („3D Viewer“ installieren)?",
+            _t("mlp.viewer.install_q", hint=hint),
             parent=parent,
         ):
             if open_microsoft_store_3d_viewer():
-                notify(self, "Microsoft Store geöffnet — „3D Viewer“ installieren.", "info")
+                notify(self, _t("mlp.notify.store_opened"), "info")
             else:
-                notify(self, "Store konnte nicht geöffnet werden.", "warn")
+                notify(self, _t("mlp.notify.store_cant_open"), "warn")
             return
         messagebox.showerror(
             APP_NAME,
-            f"{hint}\n\nAlternativ: „In Creality öffnen“ (Creality Print).",
+            _t("mlp.viewer.alt_creality", hint=hint),
             parent=parent,
         )
         notify(self, hint, "error")
@@ -1399,7 +1398,7 @@ class ModelLibraryPanel(ttk.Frame):
         if entry:
             path = entry.resolved_path(self.library.root)
             if not path:
-                notify(self, "Datei nicht gefunden (Pfad prüfen).", "warn")
+                notify(self, _t("mlp.notify.file_not_found"), "warn")
                 return
             self._show_in_explorer(path)
             return

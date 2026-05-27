@@ -14,6 +14,7 @@ from creality_nfc.gcode_filament import (
     find_gcode_file_info,
     total_job_filament_grams,
 )
+from creality_nfc.i18n import t as _t
 from creality_nfc.spool_passport import compare_passport_with_slot
 from creality_nfc.spool_usage import is_low_filament
 
@@ -37,10 +38,10 @@ class PrintReadinessReport:
 
     def summary(self) -> str:
         if self.ready:
-            return "Druck-Check: OK — Material und Rest passen."
+            return _t("readiness.summary_ok")
         errs = sum(1 for ln in self.lines if ln.level == "error")
         warns = sum(1 for ln in self.lines if ln.level == "warn")
-        return f"Druck-Check: {errs} Problem(e), {warns} Hinweis(e)"
+        return _t("readiness.summary_issues", errs=errs, warns=warns)
 
 
 def check_print_readiness(
@@ -61,7 +62,7 @@ def check_print_readiness(
         return PrintReadinessReport(
             filename="",
             ready=False,
-            lines=[ReadinessLine("error", "Keine G-Code-Datei gewählt.")],
+            lines=[ReadinessLine("error", _t("readiness.no_gcode"))],
         )
 
     if layout is None:
@@ -92,19 +93,23 @@ def check_print_readiness(
         lines.append(
             ReadinessLine(
                 "warn",
-                "Keine Farb-/Slot-Zuordnung aus G-Code — bitte Material im Slicer prüfen.",
+                _t("readiness.no_color_mapping"),
             )
         )
     else:
         if total_g:
             lines.append(
-                ReadinessLine("info", f"Geschätzter Gesamtverbrauch: ca. {total_g} g ({job[1]}).")
+                ReadinessLine("info", _t("readiness.total_usage", total_g=total_g, job=job[1]))
             )
         if plans and plans[0].spec.color_hex:
             lines.append(
                 ReadinessLine(
                     "info",
-                    f"G-Code-Farbe: {plans[0].spec.color_hex} → Slot {plans[0].slot_label}",
+                    _t(
+                        "readiness.gcode_color_slot",
+                        color=plans[0].spec.color_hex,
+                        slot=plans[0].slot_label,
+                    ),
                 )
             )
         for plan in plans:
@@ -122,8 +127,12 @@ def check_print_readiness(
                 lines.append(
                     ReadinessLine(
                         "error",
-                        f"{lab}: Slot leer — G-Code braucht ca. {need_g} g "
-                        f"({plan.spec.material_type or 'Material'}).",
+                        _t(
+                            "readiness.slot_empty",
+                            slot=lab,
+                            need_g=need_g,
+                            material=plan.spec.material_type or _t("spools.col.material"),
+                        ),
                     )
                 )
                 continue
@@ -140,14 +149,24 @@ def check_print_readiness(
                     lines.append(
                         ReadinessLine(
                             "warn",
-                            f"{lab}: Farbe G-Code ({gcol}) weicht von CFS ({scol}) ab.",
+                            _t(
+                                "readiness.color_mismatch",
+                                slot=lab,
+                                gcol=gcol,
+                                scol=scol,
+                            ),
                         )
                     )
             if gmat and mat and gmat.upper() not in mat.upper() and mat.upper() not in gmat.upper():
                 lines.append(
                     ReadinessLine(
                         "warn",
-                        f"{lab}: Material G-Code ({gmat}) vs. CFS ({mat}).",
+                        _t(
+                            "readiness.material_mismatch",
+                            slot=lab,
+                            gmat=gmat,
+                            mat=mat,
+                        ),
                     )
                 )
 
@@ -156,8 +175,7 @@ def check_print_readiness(
                 lines.append(
                     ReadinessLine(
                         "warn",
-                        f"{lab}: keine Spule in „Meine Spulen“ verknüpft "
-                        f"(ca. {need_g} g nötig).",
+                        _t("readiness.no_spool_linked", slot=lab, need_g=need_g),
                     )
                 )
             else:
@@ -166,14 +184,14 @@ def check_print_readiness(
                     lines.append(
                         ReadinessLine(
                             "warn",
-                            f"{lab}: „{sp.label}“ — Rest unbekannt, ca. {need_g} g nötig.",
+                            _t("readiness.unknown_remain", slot=lab, label=sp.label, need_g=need_g),
                         )
                     )
                 elif rem < need_g:
                     lines.append(
                         ReadinessLine(
                             "error",
-                            f"{lab}: „{sp.label}“ — nur {rem} g Rest, ca. {need_g} g nötig.",
+                            _t("readiness.low_remain", slot=lab, label=sp.label, rem=rem, need_g=need_g),
                         )
                     )
                 elif is_low_filament(sp, low_threshold_g) or rem - need_g < low_threshold_g:
@@ -181,15 +199,20 @@ def check_print_readiness(
                     lines.append(
                         ReadinessLine(
                             "warn",
-                            f"{lab}: „{sp.label}“ — nach Druck ca. {after} g "
-                            f"(unter {low_threshold_g} g Schwelle).",
+                            _t(
+                                "readiness.after_print_low",
+                                slot=lab,
+                                label=sp.label,
+                                after=after,
+                                threshold=low_threshold_g,
+                            ),
                         )
                     )
                 else:
                     lines.append(
                         ReadinessLine(
                             "ok",
-                            f"{lab}: „{sp.label}“ — {rem} g Rest, ca. {need_g} g nötig.",
+                            _t("readiness.ok_remain", slot=lab, label=sp.label, rem=rem, need_g=need_g),
                         )
                     )
                 for issue in compare_passport_with_slot(sp, slot):
@@ -199,7 +222,7 @@ def check_print_readiness(
         lines.append(
             ReadinessLine(
                 "info",
-                f"Gesamt ca. {total_g} g — keine Slot-Aufteilung im G-Code.",
+                _t("readiness.total_no_slots", total_g=total_g),
             )
         )
         for sp in inventory.all():
@@ -210,14 +233,23 @@ def check_print_readiness(
                 lines.append(
                     ReadinessLine(
                         "error",
-                        f"„{sp.label}“: nur {rem} g Rest, Job braucht ca. {total_g} g.",
+                        _t(
+                            "readiness.spool_low_job",
+                            label=sp.label,
+                            rem=rem,
+                            total_g=total_g,
+                        ),
                     )
                 )
             elif rem - total_g < low_threshold_g:
                 lines.append(
                     ReadinessLine(
                         "warn",
-                        f"„{sp.label}“: nach Job ca. {max(0, rem - total_g)} g Rest.",
+                        _t(
+                            "readiness.spool_after_job",
+                            label=sp.label,
+                            after=max(0, rem - total_g),
+                        ),
                     )
                 )
 
@@ -226,7 +258,11 @@ def check_print_readiness(
             0,
             ReadinessLine(
                 "info",
-                f"{layout.box_count()} CFS-Einheiten erkannt (Slots 1A–{layout.box_count()}D).",
+                _t(
+                    "readiness.cfs_units",
+                    count=layout.box_count(),
+                    last=layout.box_count(),
+                ),
             ),
         )
 

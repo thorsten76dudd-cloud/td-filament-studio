@@ -379,22 +379,24 @@ def build_print_phase_notification(
     progress: int | None,
 ) -> dict[str, str] | None:
     """title, detail, level für UI/Toast."""
+    from creality_nfc.i18n import t as _t
+
     if phase not in ("paused", "error"):
         return None
     fname = (filename or "").strip()
-    short = fname.rsplit("/", 1)[-1].rsplit("\\", 1)[-1] if fname else "Druckjob"
+    short = fname.rsplit("/", 1)[-1].rsplit("\\", 1)[-1] if fname else _t("ps.alert.default_job")
     pct = f"{progress} %" if progress is not None else "—"
     st = print_device_state_code(state)
-    st_txt = f"Firmware-State {st}" if st is not None else ""
+    st_txt = _t("ps.alert.firmware_state", code=st) if st is not None else ""
     hint = print_error_hint(state)
     ai = int(state.get("aiPausePrint", 0) or 0) == 1
 
     if phase == "error":
-        title = "Drucker-Fehler"
+        title = _t("ps.alert.title_error")
         lines = [
             f"{short}",
-            f"Fortschritt: {pct}",
-            "Am Touchscreen prüfen (FR-Code / Meldung).",
+            _t("ps.alert.progress", pct=pct),
+            _t("ps.alert.check_touch"),
         ]
         if hint:
             lines.insert(2, hint)
@@ -402,12 +404,17 @@ def build_print_phase_notification(
             lines.append(st_txt)
         return {"title": title, "detail": "\n".join(lines), "level": "error"}
 
-    title = "Druck pausiert"
+    title = _t("ps.alert.title_paused")
     if ai:
-        reason = "KI-Pause oder manuelle Pause"
+        reason = _t("ps.alert.ai_or_manual")
     else:
-        reason = "Pause — oft Filament- oder Störungsmeldung"
-    lines = [f"{short}", f"Fortschritt: {pct}", reason, "Am Display bestätigen oder „Fortsetzen“."]
+        reason = _t("ps.alert.pause_reason")
+    lines = [
+        f"{short}",
+        _t("ps.alert.progress", pct=pct),
+        reason,
+        _t("ps.alert.confirm_or_resume"),
+    ]
     if hint:
         lines.insert(3, hint)
     if st_txt:

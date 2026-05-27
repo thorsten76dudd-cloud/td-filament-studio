@@ -384,18 +384,13 @@ def wait_filament_ready(
 
         return
 
+    from creality_nfc.i18n import t as _t
+
     raise PrinterControlError(
-
-        "Filament-Zufuhr: Zeitüberschreitung.\n"
-
-        "Filament in Creality Print laden (Zufuhr) oder in der App den richtigen Slot wählen "
-
-        "(z. B. 2A) und erneut drucken.\n"
-
-        "Fehler FR0121: CFS-Filament im Extruder, Job aber für Spulenhalter gesliced → CFS zurückziehen "
-
-        "oder im Slicer „CFS aktivieren“."
-
+        _t("cfs_feed.timeout_part1")
+        + _t("cfs_feed.timeout_middle")
+        + _t("cfs_feed.error_fr0121")
+        + _t("cfs_feed.timeout_suffix")
     )
 
 

@@ -30,6 +30,7 @@ from creality_nfc.printer_control import (
     stop_print,
 )
 from creality_nfc.cfs_adopt import SLOT_LABELS, CfsSlotInfo, parse_cfs_slots
+from creality_nfc.i18n import t as _t
 from creality_nfc.cfs_feed import find_loaded_slot_index
 from creality_nfc.gcode_annotate import annotate_gcode_text
 from creality_nfc.gcode_filament import (
@@ -361,7 +362,7 @@ class PrinterDevicePanel(ttk.Frame):
     def _host(self) -> str | None:
         host = normalize_host(self.app.ssh_host_var.get())
         if not host:
-            notify(self, "Bitte Drucker-IP eintragen (Tab RFID-Tag oder Material-Datenbank).", "warn")
+            notify(self, _t("pdp.notify.enter_ip"), "warn")
             return None
         return host
 
@@ -377,7 +378,7 @@ class PrinterDevicePanel(ttk.Frame):
             self.conn_var.set(f"Verbunden — {host}")
         elif wait_ok is False and self._conn.connected:
             self.conn_var.set(
-                f"Verbunden — {host} (Temperatur: Creality Print schließen?)"
+                _t("pdp.connected_temp_hint", host=host)
             )
         elif self._conn.connected:
             from creality_nfc.printer_state import payload_has_live_telemetry
@@ -507,7 +508,7 @@ class PrinterDevicePanel(ttk.Frame):
             self.gcode_preview_label.config(image=self._photo, text="")
             self.gcode_preview_label.place(relx=0, rely=0, relwidth=1, relheight=1)
         except ImportError:
-            notify(self, "Pillow fehlt — pip install pillow", "error")
+            notify(self, _t("pdp.notify.pillow_missing"), "error")
         except Exception as exc:
             self._status_var.set(f"Bildanzeige fehlgeschlagen: {exc}")
 
@@ -520,7 +521,7 @@ class PrinterDevicePanel(ttk.Frame):
         if hasattr(self, "gcode_preview_label"):
             self.gcode_preview_label.config(
                 image="",
-                text="Datei wählen\n\n(Vorschaubild vom Slicer,\nfalls vorhanden)",
+                text=_t("pdp.gcode.file_pick_placeholder"),
             )
             self.gcode_preview_label.place(relx=0, rely=0, relwidth=1, relheight=1)
         self._clear_gcode_text_display()
@@ -557,7 +558,7 @@ class PrinterDevicePanel(ttk.Frame):
         self._set_gcode_hint_display(placeholder)
         if hasattr(self, "_gcode_text_status"):
             self._gcode_text_status.set(
-                "Datei wählen — G-Code per SSH (Anfang/Ende). Markieren, kopieren, lokal bearbeiten."
+                _t("pdp.gcode.file_pick_help")
             )
 
     def _set_gcode_text_display(self, text: str, status: str) -> None:
@@ -622,7 +623,7 @@ class PrinterDevicePanel(ttk.Frame):
             return
         chunk, from_full_file = self._read_gcode_for_clipboard()
         if not chunk.strip():
-            notify(self, "Kein G-Code zum Kopieren.", "warn")
+            notify(self, _t("pdp.notify.no_gcode_copy"), "warn")
             return
         expected = self._entry_size_bytes(self._selected_gcode_entry())
         if from_full_file and expected and len(chunk.encode("utf-8", errors="ignore")) < int(
@@ -630,8 +631,11 @@ class PrinterDevicePanel(ttk.Frame):
         ):
             notify(
                 self,
-                f"Cache nur {len(chunk):,} Zeichen, Drucker meldet {expected:,} Bytes.\n"
-                "Bitte „G-Code laden“ oder „Herunterladen…“ erneut.",
+                _t(
+                    "pdp.notify.cache_incomplete",
+                    chars=len(chunk),
+                    bytes=expected,
+                ),
                 "warn",
             )
             return
@@ -646,7 +650,7 @@ class PrinterDevicePanel(ttk.Frame):
                     "ok",
                 )
                 return
-        notify(self, "G-Code in Zwischenablage kopiert.", "ok")
+        notify(self, _t("pdp.notify.copied"), "ok")
 
     def _save_gcode_edited_local(self) -> None:
         if not hasattr(self, "gcode_text"):
@@ -656,15 +660,15 @@ class PrinterDevicePanel(ttk.Frame):
         dirty = self._gcode_editor_dirty()
         body = self.gcode_text.get("1.0", "end-1c")
         if not body.strip() and not cache:
-            notify(self, "Kein G-Code zum Speichern.", "warn")
+            notify(self, _t("pdp.notify.no_gcode_save"), "warn")
             return
         initial = (entry.get("name") if entry else None) or "druck.gcode"
         if not str(initial).lower().endswith(".gcode"):
             initial = f"{initial}.gcode"
         path = filedialog.asksaveasfilename(
-            title="G-Code speichern",
+            title=_t("pdp.title.save_gcode"),
             defaultextension=".gcode",
-            filetypes=[("G-Code", "*.gcode"), ("Alle Dateien", "*.*")],
+            filetypes=[("G-Code", "*.gcode"), ("*", "*.*")],
             initialfile=Path(initial).name,
         )
         if not path:
@@ -677,9 +681,9 @@ class PrinterDevicePanel(ttk.Frame):
                 if cache and dirty:
                     if not confirm(
                         self,
-                        "Nur die bearbeitete Vorschau speichern?\n\n"
-                        "Für die komplette Datei vom Drucker: Abbrechen und "
-                        "„Herunterladen…“ nutzen (oder Vorschau nicht bearbeiten).",
+                        _t("pdp.gcode.save_preview_only_q")
+                        + _t("pdp.gcode.complete_file_hint")
+                        + _t("pdp.gcode.use_download_alt"),
                     ):
                         return
                 Path(path).write_text(body, encoding="utf-8", errors="replace")
@@ -688,13 +692,12 @@ class PrinterDevicePanel(ttk.Frame):
             if expected and nbytes < int(expected * 0.9):
                 notify(
                     self,
-                    f"Gespeichert ({nbytes:,} Bytes) — kleiner als Drucker-Größe "
-                    f"({expected:,} Bytes). Für die volle Datei: „Herunterladen…“.",
+                    _t("pdp.gcode.smaller_than_printer", nbytes=nbytes, expected=expected),
                     "warn",
                 )
                 return
         except OSError as exc:
-            notify(self, f"Speichern fehlgeschlagen: {exc}", "error")
+            notify(self, _t("pdp.notify.save_failed", exc=exc), "error")
             return
         notify(
             self,
@@ -705,12 +708,12 @@ class PrinterDevicePanel(ttk.Frame):
     def _export_gcode_html(self) -> None:
         body = self.gcode_text.get("1.0", "end-1c") if hasattr(self, "gcode_text") else ""
         if not body.strip():
-            notify(self, "Kein G-Code zum Export.", "warn")
+            notify(self, _t("pdp.notify.no_gcode_export"), "warn")
             return
         entry = self._selected_gcode_entry()
         name = (entry.get("name") if entry else None) or "gcode.gcode"
         path = filedialog.asksaveasfilename(
-            title="G-Code mit Erklärung (HTML)",
+            title=_t("pdp.gcode.html_title"),
             defaultextension=".html",
             filetypes=[("HTML", "*.html")],
             initialfile=Path(name).with_suffix(".html").name,
@@ -724,7 +727,7 @@ class PrinterDevicePanel(ttk.Frame):
             import webbrowser
 
             webbrowser.open(Path(path).as_uri())
-            notify(self, f"HTML exportiert:\n{path}", "ok")
+            notify(self, _t("pdp.notify.html_exported", path=path), "ok")
         except OSError as exc:
             notify(self, str(exc), "error")
 
@@ -733,7 +736,7 @@ class PrinterDevicePanel(ttk.Frame):
             return
         needle = self._gcode_search_var.get().strip()
         if not needle:
-            notify(self, "Suchbegriff eingeben (z. B. M104, LAYER).", "warn")
+            notify(self, _t("pdp.notify.search_term"), "warn")
             return
         start = self._gcode_search_pos
         if backward:
@@ -745,7 +748,7 @@ class PrinterDevicePanel(ttk.Frame):
             if backward:
                 pos = self.gcode_text.search(needle, tk.END, "1.0", backwards=True, regexp=True)
         if not pos:
-            notify(self, f"Nicht gefunden: {needle}", "warn")
+            notify(self, _t("pdp.notify.not_found", needle=needle), "warn")
             return
         end = f"{pos}+{len(needle)}c"
         self.gcode_text.tag_remove("search", "1.0", tk.END)
@@ -863,7 +866,7 @@ class PrinterDevicePanel(ttk.Frame):
             return
         self._low_filament_warned_for = key
         msg = "\n".join(f"{s.label}: {why}" for s, why in lows[:4])
-        notify(self, f"Filament-Warnung vor Druck:\n{msg}", "warn")
+        notify(self, _t("pdp.notify.filament_warn", msg=msg), "warn")
         if getattr(self.app.settings, "alert_low_filament_toast", True):
             from creality_nfc.desktop_notify import show_desktop_notification
 
@@ -935,12 +938,12 @@ class PrinterDevicePanel(ttk.Frame):
 
     def show_print_check(self) -> None:
         if not self._conn:
-            notify(self, "Zuerst mit dem Drucker verbinden.", "warn")
+            notify(self, _t("pdp.notify.connect_first"), "warn")
             return
         host = self._host()
         if not host:
             return
-        notify(self, "Druck-Check wird vorbereitet …", "info")
+        notify(self, _t("pdp.notify.print_check_prep"), "info")
 
         def work() -> None:
             from creality_nfc.cfs_layout import parse_cfs_layout
@@ -954,8 +957,8 @@ class PrinterDevicePanel(ttk.Frame):
                     0,
                     lambda: notify(
                         self,
-                        "Keine G-Code-Datei — in „Dateien“ wählen, zuletzt markierte "
-                        "Datei oder laufender Druck.",
+                        _t("pdp.gcode.no_file_choose")
+                        + _t("pdp.gcode.no_file_choose_alt"),
                         "warn",
                     ),
                 )
@@ -986,11 +989,11 @@ class PrinterDevicePanel(ttk.Frame):
         try:
             show_spool_location_dialog(self, self.app.inventory)
         except Exception as exc:
-            notify(self, f"Spulen-Standort:\n{exc}", "error")
+            notify(self, _t("pdp.notify.spool_location_failed", exc=exc), "error")
 
     def show_cfs_batch_scan(self) -> None:
         if not self._conn:
-            notify(self, "Zuerst mit dem Drucker verbinden.", "warn")
+            notify(self, _t("pdp.notify.connect_first"), "warn")
             return
         from creality_nfc.cfs_adopt import parse_cfs_meta, parse_cfs_slots
         from ui.extras_dialogs import show_cfs_batch_dialog
@@ -1010,7 +1013,7 @@ class PrinterDevicePanel(ttk.Frame):
             return
 
         self._conn.request_get(boxsInfo=1)
-        notify(self, "CFS-Slots werden geladen …", "info")
+        notify(self, _t("pdp.notify.cfs_loading"), "info")
         host = self._conn.host
 
         def work() -> None:
@@ -1052,7 +1055,8 @@ class PrinterDevicePanel(ttk.Frame):
     def _reload_gcode_text(self) -> None:
         entry = self._selected_gcode_entry()
         if not entry:
-            notify(self, "Bitte zuerst eine G-Code-Datei in der Liste wählen.", "warn")
+            from creality_nfc.i18n import t as _t
+            notify(self, _t("printer.files.select_gcode"), "warn")
             return
         host = self._host()
         if not host:
@@ -1104,7 +1108,7 @@ class PrinterDevicePanel(ttk.Frame):
             body, status = format_gcode_snippet_for_view(local)
             status = f"{status} · {safe} · Cache {got:,} B"
             if expected and got < int(expected * 0.9):
-                status += f" (Drucker: {expected:,} B — bitte „Herunterladen…“ prüfen)"
+                status += _t("pdp.status.printer_bigger", expected=expected)
 
             def ok() -> None:
                 if gen != self._gcode_text_gen:
@@ -1199,7 +1203,7 @@ class PrinterDevicePanel(ttk.Frame):
                 self._apply_live_status(snap or {})
             elif snap and self._was_connected:
                 self.conn_var.set(
-                    f"Keine Live-Daten von {self._conn.host} — „Verbinden“ erneut"
+                    _t("pdp.conn.no_live_data", host=self._conn.host)
                 )
             if self._conn.connected and now - self._last_full_poll >= 1.0:
                 self._last_full_poll = now
@@ -1555,8 +1559,11 @@ class PrinterDevicePanel(ttk.Frame):
         fname = normalize_print_job_filename(
             str(ps.get("file") or self._last_print_filename or "")
         )
-        if not manual and fname and self.app.settings.is_post_print_deduct_handled(fname):
-            return
+        if not manual and fname:
+            if self.app.settings.is_post_print_deduct_handled(fname):
+                return
+            if self._post_print_deduct_offered_for == fname:
+                return
         # Sofort markieren, dass fuer diese Datei der Dialog ausgeloest wurde: verhindert,
         # dass ein nachfolgender Snap (Initial-Sync gefolgt von Catch-up oder Reconnect-Snaps)
         # den Dialog ein zweites Mal startet.
@@ -1577,7 +1584,7 @@ class PrinterDevicePanel(ttk.Frame):
             )
         except Exception as exc:
             try:
-                self.app.notify(f"Filament-Abzug konnte nicht starten: {exc}", "warn")
+                self.app.notify(_t("pdp.notify.deduct_failed", exc=exc), "warn")
             except Exception:
                 pass
 
@@ -1689,22 +1696,20 @@ class PrinterDevicePanel(ttk.Frame):
                     peak_progress=self._peak_print_progress,
                     last_progress=self._last_print_progress,
                 ):
-                    # Erster Snap nach App-Start zeigt einen bereits fertigen Druck:
-                    # Filename-Lock aus settings entfernen, damit der Dialog auch dann kommt,
-                    # wenn die App in einer fruheren Session denselben Filename schon verarbeitet hatte.
+                    # Erster Snap nach Start: nur nachfragen, wenn diese Datei noch nicht
+                    # bearbeitet wurde (Abziehen oder Abbrechen zaehlt als erledigt).
                     try:
                         from creality_nfc.app_settings import normalize_print_job_filename
 
                         sync_fname = normalize_print_job_filename(
                             fname or self._last_print_filename
                         )
-                        if sync_fname and self.app.settings.forget_post_print_deduct(sync_fname):
-                            from app.paths import DEFAULT_SETTINGS_PATH
-
-                            self.app.settings.save(DEFAULT_SETTINGS_PATH)
+                        if sync_fname and not self.app.settings.is_post_print_deduct_handled(
+                            sync_fname
+                        ):
+                            self._request_post_print_deduct(s, ps)
                     except Exception:
                         pass
-                    self._request_post_print_deduct(s, ps)
                 self._last_print_phase = phase
                 self._print_phase_synced = True
         else:
@@ -1806,7 +1811,7 @@ class PrinterDevicePanel(ttk.Frame):
                 pct = max(0, min(100, int(self._peak_print_progress)))
                 self._prog_bar.configure(maximum=100)
                 self._prog_bar["value"] = pct
-                prog_txt = f"~{pct} % (Drucker meldet 0 %)"
+                prog_txt = _t("pdp.progress.stuck", percent=pct)
             else:
                 pct = max(0, min(100, int(prog)))
                 self._prog_bar.configure(maximum=100)
@@ -1857,23 +1862,25 @@ class PrinterDevicePanel(ttk.Frame):
 
     def _manual_post_print_deduct(self) -> None:
         if not self._conn:
-            notify(self, "Zuerst mit dem Drucker verbinden.", "warn")
+            notify(self, _t("pdp.notify.connect_first"), "warn")
             return
         snap = self._conn.snapshot()
         ps = print_status(snap)
         if not (ps.get("file") or self._last_print_filename):
-            notify(self, "Kein Druckjob erkannt — Dateiname fehlt.", "warn")
+            from creality_nfc.i18n import t as _t
+            notify(self, _t("notify.no_job_detected"), "warn")
             return
         self._request_post_print_deduct(snap, ps, manual=True)
 
     def _update_print_controls(self, s: dict, *, phase: str | None = None) -> None:
+        from creality_nfc.i18n import t as _t
         phase = phase if phase is not None else print_job_phase(s)
         hints = {
-            "idle": "Bereit — neuen Job in Creality Print starten.",
-            "printing": "Druck läuft — Fortschritt per WebSocket.",
-            "paused": "Druck pausiert — „Fortsetzen“ oder „Stopp“.",
-            "complete": "Druck beendet — nächsten Job in Creality Print.",
-            "error": "Fehler — am Display prüfen oder „Stopp“.",
+            "idle": _t("printer.hint.idle"),
+            "printing": _t("printer.hint.printing"),
+            "paused": _t("printer.hint.paused"),
+            "complete": _t("printer.hint.complete"),
+            "error": _t("printer.hint.error"),
         }
         self._print_hint_var.set(hints.get(phase, ""))
         try:
@@ -1901,12 +1908,12 @@ class PrinterDevicePanel(ttk.Frame):
             return
         snap = self._conn.snapshot() if self._conn else {}
         if print_job_phase(snap) != "printing":
-            notify(self, "Kein laufender Druck — Job in Creality Print starten.", "warn")
+            notify(self, _t("pdp.notify.no_print_running"), "warn")
             return
 
         def work() -> None:
             send_print_params(host, {"pause": 1}, self._conn)
-            self.app.after(0, lambda: notify(self, "Pause gesendet", "ok"))
+            self.app.after(0, lambda: notify(self, _t("pdp.notify.pause_sent"), "ok"))
 
         self._run_bg("Pause", work)
 
@@ -1923,8 +1930,7 @@ class PrinterDevicePanel(ttk.Frame):
                     0,
                     lambda: notify(
                         self,
-                        "Kein pausierter Druck. „Fortsetzen“ gilt nur nach Pause.\n"
-                        "Neuen Job in Creality Print starten.",
+                        _t("pdp.notify.not_paused_resume"),
                         "warn",
                     ),
                 )
@@ -1935,7 +1941,7 @@ class PrinterDevicePanel(ttk.Frame):
                 send_print_params(host, {"repoPlrStatus": 1}, self._conn)
             else:
                 send_print_params(host, {"pause": 0}, self._conn)
-            self.app.after(0, lambda: notify(self, "Fortsetzen gesendet", "ok"))
+            self.app.after(0, lambda: notify(self, _t("pdp.notify.resume_sent"), "ok"))
 
         self._run_bg("Fortsetzen", work)
 
@@ -1954,9 +1960,9 @@ class PrinterDevicePanel(ttk.Frame):
         if not host:
             return
         if open_camera_app_window(host):
-            self._cam_status_var.set("Vollbild (Edge) geöffnet")
+            self._cam_status_var.set(_t("pdp.cam.fullscreen_edge"))
         else:
-            notify(self, "Kamera im Browser nicht verfügbar.", "error")
+            notify(self, _t("pdp.cam.browser_unavailable"), "error")
 
     def _switch_to_live_camera(self) -> None:
         """Tab Monitor: Live-Kamera starten."""
@@ -2009,7 +2015,7 @@ class PrinterDevicePanel(ttk.Frame):
                 self.cam_preview_label.place(relx=0, rely=0, relwidth=1, relheight=1)
                 self.cam_preview_label.config(
                     image="",
-                    text="Verbinde mit dem Drucker — Kamera startet automatisch",
+                    text=_t("pdp.cam.connecting"),
                 )
 
     def _on_cam_jpeg_frame(self, data: bytes) -> None:
@@ -2077,7 +2083,7 @@ class PrinterDevicePanel(ttk.Frame):
             self._cam_status_var.set("Live (Edge/WebRTC)")
         else:
             self._cam_status_var.set(
-                "Kamera nicht erreichbar — Drucker-IP/WLAN prüfen (unabhängig vom NFC-Reader)"
+                _t("pdp.cam.unreachable")
             )
 
     def _prefetch_camera_frame(self, host: str) -> None:
@@ -2183,9 +2189,9 @@ class PrinterDevicePanel(ttk.Frame):
         self.cfs_dashboard._box_filter = None
         self.cfs_dashboard._layout_sig = ()
         self.cfs_dashboard._status_var.set(
-            "Slot wählen, dann Zufuhr oder Zurückziehen"
+            _t("pdp.cfs.choose_then")
             if self.cfs_dashboard._creality
-            else "Slot wählen · → RFID übernimmt Material in den Editor"
+            else _t("pdp.cfs.choose_rfid")
         )
         snap: dict = {}
         if self._conn:
@@ -2204,14 +2210,14 @@ class PrinterDevicePanel(ttk.Frame):
     def _toggle_cfs_preview_from_tab(self) -> None:
         if self._cfs_preview_boxes:
             self.force_cfs_demo_off()
-            notify(self, "4× CFS Demo beendet — wieder echte CFS-Daten.", "ok")
+            notify(self, _t("pdp.notify.demo_ended"), "ok")
         else:
             self.set_cfs_preview(4)
             if hasattr(self.app, "_cfs_preview_var"):
                 self.app._cfs_preview_var.set(True)
             notify(
                 self,
-                "Demo aktiv: 4 CFS — „Demo beenden“ oder Navigation-Haken zum Ausschalten.",
+                _t("pdp.notify.demo_active_4cfs"),
                 "info",
             )
 
@@ -2265,22 +2271,19 @@ class PrinterDevicePanel(ttk.Frame):
         if self._cfs_preview_boxes:
             n = self._cfs_preview_boxes
             self.cfs_dashboard.set_mode_hint(
-                f"Demo: {n} CFS — Übersicht (Zeilen CFS 1–{n}, Spalten A–D)"
+                _t("pdp.cfs.demo_overview", n=n)
             )
-            self.cfs_dashboard._active_var.set(f"Vorschau: {n} CFS (Demo-Daten)")
-            self.cfs_dashboard._status_var.set(
-                "Nur UI-Test — Zufuhr/RFID nicht an den Drucker. "
-                "Navigation → CFS-Vorschau beenden."
-            )
+            self.cfs_dashboard._active_var.set(_t("pdp.cfs.preview_active", n=n))
+            self.cfs_dashboard._status_var.set(_t("pdp.cfs.preview_status"))
         elif nbox <= 1:
-            self.cfs_dashboard.set_mode_hint("1 CFS am Drucker (1A–1D)")
+            self.cfs_dashboard.set_mode_hint(_t("cfsd.summary_one_cfs"))
             self.cfs_dashboard._status_var.set(
-                "Slot wählen, dann Zufuhr oder Zurückziehen"
+                _t("pdp.cfs.choose_feed_retract")
                 if self.cfs_dashboard._creality
-                else "Slot wählen · → RFID übernimmt Material in den Editor"
+                else _t("pdp.cfs.choose_rfid")
             )
         else:
-            self.cfs_dashboard.set_mode_hint(f"{nbox} CFS am Drucker — CFS 1…{nbox} oben wählen")
+            self.cfs_dashboard.set_mode_hint(_t("pdp.cfs.printer_overview", nbox=nbox))
         pname = ""
         if hasattr(self.app, "printer_var"):
             pname = self.app.printer_var.get().strip()
@@ -2354,7 +2357,8 @@ class PrinterDevicePanel(ttk.Frame):
             return
         slot = self._cfs_slots[index]
         if slot.empty:
-            notify(self, f"Slot {slot.label}: kein Material — Spule einlegen oder manuell wählen.", "warn")
+            from creality_nfc.i18n import t as _t
+            notify(self, _t("printer.cfs.slot_no_material", label=slot.label), "warn")
             return
         if hasattr(self.app, "apply_cfs_slot"):
             self.app.apply_cfs_slot(slot)
@@ -2365,10 +2369,12 @@ class PrinterDevicePanel(ttk.Frame):
             return
         sel = self.cfs_dashboard._selected
         if sel is None:
-            notify(self, "Bitte zuerst einen CFS-Slot wählen (z. B. 1A oder 2C).", "warn")
+            from creality_nfc.i18n import t as _t
+            notify(self, _t("printer.cfs.choose_slot"), "warn")
             return
         if sel < 0 or sel >= len(self._cfs_slots):
-            notify(self, "Ungültiger Slot — CFS aktualisieren.", "warn")
+            from creality_nfc.i18n import t as _t
+            notify(self, _t("printer.cfs.invalid_slot"), "warn")
             return
         slot = self._cfs_slots[sel]
         box_id = getattr(slot, "box_id", 1) or 1
@@ -2378,7 +2384,7 @@ class PrinterDevicePanel(ttk.Frame):
             feed_filament(host, box_id, material_id, self._conn)
             self.app.after(
                 0,
-                lambda: notify(self, f"Zufuhr gestartet — Slot {slot.label}", "ok"),
+                lambda: notify(self, _t("pdp.notify.feed_started", label=slot.label), "ok"),
             )
 
         self._run_bg("CFS Zufuhr", work)
@@ -2389,23 +2395,27 @@ class PrinterDevicePanel(ttk.Frame):
             return
         sel = self.cfs_dashboard._selected
         if sel is None:
-            notify(self, "Bitte zuerst einen CFS-Slot wählen.", "warn")
+            from creality_nfc.i18n import t as _t
+            notify(self, _t("printer.cfs.choose_slot_short"), "warn")
             return
         if sel < 0 or sel >= len(self._cfs_slots):
-            notify(self, "Ungültiger Slot — CFS aktualisieren.", "warn")
+            from creality_nfc.i18n import t as _t
+            notify(self, _t("printer.cfs.invalid_slot"), "warn")
             return
         slot = self._cfs_slots[sel]
         box_id = getattr(slot, "box_id", 1) or 1
         material_id = slot.index
+        from creality_nfc.i18n import t as _tlbl
+        retract_msg = _tlbl("printer.cfs.retract_msg", label=slot.label)
 
         def work() -> None:
             retract_filament(host, box_id, material_id, self._conn)
             self.app.after(
                 0,
-                lambda: notify(self, f"Zurückziehen — Slot {slot.label}", "ok"),
+                lambda: notify(self, retract_msg, "ok"),
             )
 
-        self._run_bg("CFS Zurück", work)
+        self._run_bg(_t("pdp.bg.cfs_back"), work)
 
     def _refresh_cfs(self) -> None:
         host = self._host()
@@ -2476,7 +2486,7 @@ class PrinterDevicePanel(ttk.Frame):
         def work() -> None:
             self._send(host, gcodeCmd=f"M106 P{channel} S{s_val}")
 
-        self._run_bg(f"Lüfter {channel}", work)
+        self._run_bg(_t("pdp.bg.fan", channel=channel), work)
 
     def _send(self, host: str, **params) -> None:
         if self._conn and self._conn.connected:
@@ -2488,7 +2498,7 @@ class PrinterDevicePanel(ttk.Frame):
         def runner() -> None:
             try:
                 work()
-                self.app.after(0, lambda: notify(self, f"{label} OK", "ok"))
+                self.app.after(0, lambda: notify(self, _t("pdp.notify.cmd_ok", label=label), "ok"))
             except Exception as exc:
                 self.app.after(0, lambda: notify(self, str(exc), "error"))
 
@@ -2622,13 +2632,14 @@ class PrinterDevicePanel(ttk.Frame):
             return
         entry = self._selected_gcode_entry()
         if not entry:
-            notify(self, "Bitte zuerst eine G-Code-Datei in der Liste wählen.", "warn")
+            from creality_nfc.i18n import t as _t
+            notify(self, _t("printer.files.select_gcode"), "warn")
             return
         name = entry.get("name") or "druck.gcode"
         if not str(name).lower().endswith(".gcode"):
             name = f"{name}.gcode"
         local = filedialog.asksaveasfilename(
-            title="G-Code vom Drucker speichern",
+            title=_t("pdp.title.save_from_printer"),
             initialfile=name,
             defaultextension=".gcode",
             filetypes=[("G-Code", "*.gcode"), ("Alle Dateien", "*.*")],
@@ -2657,8 +2668,8 @@ class PrinterDevicePanel(ttk.Frame):
                     0,
                     lambda: notify(
                         self,
-                        f"Gespeichert:\n{local}\n\n"
-                        "Kopie für Verbrauchsschätzung: data/gcode_cache/",
+                        _t("pdp.files.saved_path", path=local)
+                        + _t("pdp.cache.copy_for_estimate"),
                         "ok",
                     ),
                 )
@@ -2675,7 +2686,8 @@ class PrinterDevicePanel(ttk.Frame):
             return
         entry = self._selected_gcode_entry()
         if not entry:
-            notify(self, "Bitte zuerst eine G-Code-Datei wählen.", "warn")
+            from creality_nfc.i18n import t as _t
+            notify(self, _t("printer.files.select_gcode"), "warn")
             return
         name = entry.get("name") or entry.get("path") or "?"
         try:
@@ -2686,7 +2698,7 @@ class PrinterDevicePanel(ttk.Frame):
         password = self._ssh_password()
 
         def do() -> None:
-            self._status_var.set(f"Lösche {name}…")
+            self._status_var.set(_t("pdp.files.deleting", name=name))
 
             def work() -> None:
                 err: str | None = None
@@ -2707,10 +2719,10 @@ class PrinterDevicePanel(ttk.Frame):
                 def done() -> None:
                     if err:
                         notify(self, err, "error")
-                        self._status_var.set("Löschen fehlgeschlagen")
+                        self._status_var.set(_t("pdp.files.delete_failed"))
                         return
-                    notify(self, f"„{name}“ gelöscht.", "ok")
-                    self._status_var.set(f"Gelöscht: {name}")
+                    notify(self, _t("pdp.files.deleted_notify", name=name), "ok")
+                    self._status_var.set(_t("pdp.files.deleted_status", name=name))
                     if self._conn and self._conn.connected:
                         self._conn.request_get(
                             reqGcodeList=1, reqGcodeFile=1, reqGcodeFileInfo2=1
@@ -2721,14 +2733,14 @@ class PrinterDevicePanel(ttk.Frame):
 
             threading.Thread(target=work, daemon=True).start()
 
-        confirm(self, f"„{name}“ wirklich vom Drucker löschen?", do)
+        confirm(self, _t("pdp.files.delete_confirm", name=name), do)
 
     def _upload_gcode(self) -> None:
         host = self._host()
         if not host:
             return
         path = filedialog.askopenfilename(
-            title="G-Code auf den Drucker kopieren",
+            title=_t("pdp.title.upload_gcode"),
             filetypes=[("G-Code", "*.gcode"), ("Alle Dateien", "*.*")],
         )
         if not path:
@@ -2753,7 +2765,7 @@ class PrinterDevicePanel(ttk.Frame):
 
         name = Path(local_path).name
         self._status_var.set(f"Hochgeladen: {name}")
-        notify(self, f"Datei auf dem Drucker:\n{remote}\n\nListe wird aktualisiert…", "ok")
+        notify(self, _t("pdp.notify.uploaded", remote=remote), "ok")
         if self._conn and self._conn.connected:
             self._conn.request_get(reqGcodeList=1, reqGcodeFile=1, reqGcodeFileInfo2=1)
         else:
@@ -2774,9 +2786,9 @@ class PrinterDevicePanel(ttk.Frame):
             def done() -> None:
                 if files:
                     self._set_gcode_files(files)
-                    self._status_var.set(f"{len(files)} Dateien (SSH)")
+                    self._status_var.set(_t("pdp.status.files_ssh", n=len(files)))
                 elif not self._gcode_files:
-                    self._status_var.set("Keine Dateien — SSH/Root prüfen")
+                    self._status_var.set(_t("pdp.files.no_files_ssh"))
 
             self.app.after(0, done)
 
@@ -2799,7 +2811,7 @@ class PrinterDevicePanel(ttk.Frame):
             except Exception:
                 pass
         self._fetch_gcode_list_ssh()
-        self._status_var.set("Dateiliste wird geladen…")
+        self._status_var.set(_t("pdp.status.loading_files"))
 
     def _on_gcode_select(self, _evt=None) -> None:
         sel = self.file_list.curselection()
@@ -2816,7 +2828,7 @@ class PrinterDevicePanel(ttk.Frame):
         self._last_gcode_entry = entry
         name = entry.get("name") or "?"
         self._gcode_preview_hold = True
-        self.gcode_preview_label.config(image="", text=f"Vorschaubild lädt…\n{name}")
+        self.gcode_preview_label.config(image="", text=_t("pdp.gcode.preview_loading", name=name))
         self.gcode_preview_label.place(relx=0, rely=0, relwidth=1, relheight=1)
         threading.Thread(
             target=self._load_gcode_preview_bg,
@@ -2844,7 +2856,7 @@ class PrinterDevicePanel(ttk.Frame):
             if not shot:
                 self.gcode_preview_label.config(
                     image="",
-                    text=f"Kein Vorschaubild\n{name}\n\n(nur beim Slicen erzeugt)",
+                    text=_t("pdp.gcode.no_preview", name=name),
                 )
                 return
             data, _ = shot
@@ -2854,7 +2866,7 @@ class PrinterDevicePanel(ttk.Frame):
                 self._preview_pil = Image.open(io.BytesIO(data))
                 self._fit_gcode_preview_image()
             except Exception:
-                self.gcode_preview_label.config(image="", text=f"Vorschaubild fehlerhaft\n{name}")
+                self.gcode_preview_label.config(image="", text=_t("pdp.gcode.preview_bad", name=name))
 
         self.app.after(0, done)
 
@@ -2868,7 +2880,7 @@ class PrinterDevicePanel(ttk.Frame):
         def work() -> None:
             self._send(host, nozzleTempControl=int(v))
 
-        self._run_bg("Düsentemp.", work)
+        self._run_bg(_t("pdp.bg.nozzle_temp"), work)
 
     def _apply_bed(self) -> None:
         host = self._host()
@@ -2902,7 +2914,7 @@ class PrinterDevicePanel(ttk.Frame):
         def runner() -> None:
             try:
                 fn(host)
-                self.app.after(0, lambda: notify(self, f"{label} OK", "ok"))
+                self.app.after(0, lambda: notify(self, _t("pdp.notify.cmd_ok", label=label), "ok"))
             except Exception as exc:
                 self.app.after(0, lambda: notify(self, str(exc), "error"))
 
@@ -2916,16 +2928,16 @@ class PrinterDevicePanel(ttk.Frame):
         def do() -> None:
             def work() -> None:
                 send_print_params(host, {"stop": 1}, self._conn)
-                self.app.after(0, lambda: notify(self, "Stopp gesendet", "ok"))
+                self.app.after(0, lambda: notify(self, _t("pdp.notify.stop_sent"), "ok"))
 
             self._run_bg("Stopp", work)
 
-        confirm(self, f"Druck auf {host} wirklich stoppen?", do)
+        confirm(self, _t("pdp.confirm.stop", host=host), do)
 
     def _open_creality_web_ui(self) -> None:
         host = self._host_quiet()
         if not host:
-            notify(self, "Bitte zuerst die Drucker-IP im Tab „RFID-Tag“ eintragen.", "warn")
+            notify(self, _t("pdp.notify.enter_ip_rfid"), "warn")
             return
         url = creality_web_ui_url(host)
         if url:
@@ -2933,8 +2945,8 @@ class PrinterDevicePanel(ttk.Frame):
             return
         notify(
             self,
-            "Keine Creality-Web-Oberfläche gefunden (Port 80 liefert oft 404).\n"
-            "K2: WebSocket Port 9999 — Steuerung in dieser App; optional „Klipper / Web-UI“.",
+            _t("pdp.web.no_creality")
+            + _t("pdp.web.k2_hint"),
             "warn",
         )
 
@@ -2942,7 +2954,7 @@ class PrinterDevicePanel(ttk.Frame):
         host = self._host()
         if not host:
             return
-        self._status_var.set("Klipper/Moonraker wird geprüft…")
+        self._status_var.set(_t("pdp.web.checking_klipper"))
 
         def work() -> None:
             probe = probe_klipper(host)

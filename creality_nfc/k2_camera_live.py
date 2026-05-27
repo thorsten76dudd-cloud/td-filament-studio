@@ -43,7 +43,7 @@ _VIEWER_HTML = """<!DOCTYPE html>
 </head>
 <body>
 <div id="wrap">
-  <div id="status">Verbinde mit __HOST__ …</div>
+  <div id="status">__I18N_CONNECTING__</div>
   <video id="remoteVideos" playsinline autoplay muted></video>
 </div>
 <script>
@@ -67,7 +67,7 @@ function setStatus(msg, cls) {
 function hardReload() {
   if (reloading) return;
   reloading = true;
-  setStatus("Video stockt — neu laden …", "warn");
+  setStatus("__I18N_RELOAD__", "warn");
   try { if (pc) pc.close(); } catch (_) {}
   setTimeout(() => { window.location.reload(); }, 250);
 }
@@ -100,14 +100,14 @@ function startWatchdog() {
     if (!gotFirstFrame) {
       if (idle > RELOAD_LIMIT_MS) hardReload();
       else if (idle > STALL_LIMIT_MS) {
-        setStatus("Warte auf Video — Drucker zu beschäftigt?", "warn");
+        setStatus("__I18N_WAIT_BUSY__", "warn");
       }
       return;
     }
     if (idle > RELOAD_LIMIT_MS) {
       hardReload();
     } else if (idle > STALL_LIMIT_MS) {
-      setStatus("Video stockt — versuche Recovery …", "warn");
+      setStatus("__I18N_RECOVERY__", "warn");
     }
   }, 1000);
 }
@@ -128,14 +128,14 @@ function sendOfferToCall(sdp) {
       if (res.type === "answer") {
         return pc.setRemoteDescription(new RTCSessionDescription(res));
       }
-      throw new Error("Keine SDP-Antwort");
+      throw new Error("__I18N_NO_SDP__");
     })
     .then(() => {
-      setStatus("WebRTC verbunden — warte auf Video …", "ok");
+      setStatus("__I18N_WEBRTC_WAIT__", "ok");
       startWatchdog();
     })
     .catch(e => {
-      setStatus("Kamera-Fehler: " + e, "err");
+      setStatus("__I18N_ERROR__" + e, "err");
       setTimeout(hardReload, 4000);
     });
 }
@@ -148,16 +148,16 @@ function buildPeer() {
     videoEl.srcObject = event.streams[0];
     videoEl.autoplay = true;
     videoEl.muted = true;
-    setStatus("Live · " + HOST, "ok");
+    setStatus("__I18N_LIVE__" + HOST, "ok");
     markFrame();
   };
   pc.oniceconnectionstatechange = () => {
     const s = pc.iceConnectionState;
     if (s === "failed") {
-      setStatus("ICE fehlgeschlagen — neu verbinden …", "err");
+      setStatus("__I18N_ICE_FAILED__", "err");
       setTimeout(hardReload, 1500);
     } else if (s === "disconnected") {
-      setStatus("Kamera getrennt — Recovery läuft …", "warn");
+      setStatus("__I18N_DISCONNECTED__", "warn");
       setTimeout(() => {
         if (pc && pc.iceConnectionState !== "connected" && pc.iceConnectionState !== "completed") {
           hardReload();
@@ -175,7 +175,7 @@ function buildPeer() {
   pc.addTransceiver("video", { direction: "sendrecv" });
   pc.createOffer()
     .then((d) => pc.setLocalDescription(d))
-    .catch((e) => setStatus("Offer: " + e, "err"));
+    .catch((e) => setStatus("__I18N_OFFER__" + e, "err"));
 }
 
 videoEl.addEventListener("playing", markFrame);
@@ -262,6 +262,25 @@ def build_isolated_browser_args(exe: Path, url: str) -> list[str]:
     ]
 
 
+def _viewer_html_for_host(host: str, title: str) -> str:
+    from creality_nfc.i18n import t as _t
+
+    html = _VIEWER_HTML.replace("__HOST__", host).replace("__TITLE__", title)
+    return (
+        html.replace("__I18N_CONNECTING__", _t("camera.connecting", host=host))
+        .replace("__I18N_RELOAD__", _t("camera.reload"))
+        .replace("__I18N_WAIT_BUSY__", _t("camera.wait_busy"))
+        .replace("__I18N_RECOVERY__", _t("camera.recovery"))
+        .replace("__I18N_NO_SDP__", _t("camera.no_sdp"))
+        .replace("__I18N_WEBRTC_WAIT__", _t("camera.webrtc_wait"))
+        .replace("__I18N_ERROR__", _t("camera.error"))
+        .replace("__I18N_LIVE__", _t("camera.live"))
+        .replace("__I18N_ICE_FAILED__", _t("camera.ice_failed"))
+        .replace("__I18N_DISCONNECTED__", _t("camera.disconnected"))
+        .replace("__I18N_OFFER__", _t("camera.offer_error"))
+    )
+
+
 class _CameraProxyHandler(BaseHTTPRequestHandler):
     printer_host: str = ""
 
@@ -275,9 +294,7 @@ class _CameraProxyHandler(BaseHTTPRequestHandler):
             q = parse_qs(parsed.query)
             win = (q.get("win") or [""])[0].strip()
             title = make_viewer_title(win) if win else f"{VIEWER_TITLE_PREFIX} Viewer"
-            html = (
-                _VIEWER_HTML.replace("__HOST__", self.printer_host).replace("__TITLE__", title)
-            )
+            html = _viewer_html_for_host(self.printer_host, title)
             body = html.encode("utf-8")
             self.send_response(200)
             self.send_header("Content-Type", "text/html; charset=utf-8")

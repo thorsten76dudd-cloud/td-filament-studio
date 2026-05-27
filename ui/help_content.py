@@ -1,8 +1,10 @@
 """Hilfetexte für TD Filament Studio."""
 
 from creality_nfc.config import MATERIAL_DB_PRINTER_ONLY
+from creality_nfc.i18n import current_language
+from ui.help_content_en import PROGRAM_HELP_EN, PROGRAM_HELP_EN_PRINTER_ONLY_REPLACEMENTS
 
-PROGRAM_HELP = """
+PROGRAM_HELP_DE = """
 TD FILAMENT STUDIO — Kurzanleitung
 ==================================
 
@@ -357,8 +359,8 @@ Dateien (data/)
 """
 
 if MATERIAL_DB_PRINTER_ONLY:
-    PROGRAM_HELP = (
-        PROGRAM_HELP.replace(
+    PROGRAM_HELP_DE = (
+        PROGRAM_HELP_DE.replace(
             "• Profil bearbeiten / Neues Profil… / Datenbank laden…",
             "• Profil bearbeiten (Ansicht) / Datenbank laden… — Liste nur „Vom Drucker (SSH)“; kein „Neues Profil“.",
         )
@@ -444,3 +446,40 @@ Lokales Inventar (data/spools.json): Liste links, Bearbeitung rechts (scrollbar)
             "• Material-DB nur vom Drucker (kein Cloud-Merge in dieser Version)",
         )
     )
+
+
+_PROGRAM_HELP_EN_RESOLVED = PROGRAM_HELP_EN
+if MATERIAL_DB_PRINTER_ONLY:
+    for _src, _dst in PROGRAM_HELP_EN_PRINTER_ONLY_REPLACEMENTS:
+        _PROGRAM_HELP_EN_RESOLVED = _PROGRAM_HELP_EN_RESOLVED.replace(_src, _dst)
+
+
+def get_program_help() -> str:
+    """Liefert den Anleitungstext passend zur aktuell gewaehlten Sprache."""
+
+    lang = current_language()
+    if lang == "en":
+        return _PROGRAM_HELP_EN_RESOLVED
+    return PROGRAM_HELP_DE
+
+
+class _ProgramHelpProxy:
+    """Verzoegerter Wrapper, damit ``PROGRAM_HELP.strip()`` weiter funktioniert."""
+
+    def __str__(self) -> str:
+        return get_program_help()
+
+    def strip(self) -> str:
+        return get_program_help().strip()
+
+    def __add__(self, other):
+        return str(self) + other
+
+    def __radd__(self, other):
+        return other + str(self)
+
+    def __getattr__(self, item):
+        return getattr(get_program_help(), item)
+
+
+PROGRAM_HELP = _ProgramHelpProxy()

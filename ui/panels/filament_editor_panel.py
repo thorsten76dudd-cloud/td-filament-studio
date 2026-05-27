@@ -9,6 +9,7 @@ from tkinter import scrolledtext, ttk
 from typing import Callable
 
 from creality_nfc.config import MATERIAL_DB_PRINTER_ONLY
+from creality_nfc.i18n import t as _t
 from creality_nfc.db_lock import is_item_locked, set_item_locked
 from creality_nfc.db_store import add_or_update_item, find_item, new_filament_item
 from creality_nfc.materials import FilamentProfile
@@ -30,16 +31,20 @@ FILAMENT_TYPES = (
     "HIPS",
 )
 
-PRINT_FIELDS = (
-    ("nozzle_temperature", "Düse °C"),
-    ("nozzle_temperature_initial_layer", "Düse 1. Layer °C"),
-    ("hot_plate_temp", "Heizbett °C"),
-    ("hot_plate_temp_initial_layer", "Bett 1. Layer °C"),
-    ("filament_flow_ratio", "Flow-Ratio"),
-    ("filament_max_volumetric_speed", "Max. Volumen mm³/s"),
-    ("filament_retraction_length", "Retraction mm"),
-    ("default_filament_colour", "Farbe (Profil)"),
-)
+def _print_fields() -> tuple[tuple[str, str], ...]:
+    return (
+        ("nozzle_temperature", _t("fep.col.nozzle_c")),
+        ("nozzle_temperature_initial_layer", _t("fep.col.nozzle_first_c")),
+        ("hot_plate_temp", _t("fep.col.bed_c")),
+        ("hot_plate_temp_initial_layer", _t("fep.col.bed_first_c")),
+        ("filament_flow_ratio", _t("fep.col.flow_ratio")),
+        ("filament_max_volumetric_speed", _t("fep.col.max_volume")),
+        ("filament_retraction_length", _t("fep.col.retraction")),
+        ("default_filament_colour", _t("fep.col.color_profile")),
+    )
+
+
+PRINT_FIELDS = _print_fields()
 
 
 class FilamentEditorPanel(ttk.Frame):
@@ -87,23 +92,23 @@ class FilamentEditorPanel(ttk.Frame):
     def _build_header(self) -> None:
         hdr = ttk.Frame(self)
         hdr.pack(fill="x", padx=8, pady=(8, 4))
-        title_txt = "Profil — nur Anzeige" if self._readonly else "Filament bearbeiten"
+        title_txt = _t("fep.title.view_only") if self._readonly else _t("fep.title.new")
         self._title = ttk.Label(hdr, text=title_txt, font=("Segoe UI", 12, "bold"))
         self._title.pack(side="left")
         if self._readonly:
             ttk.Label(
                 hdr,
-                text="Änderungen in Creality Print / am Drucker",
+                text=_t("fep.hdr.changes_in_creality"),
                 style="Muted.TLabel",
             ).pack(side="right", padx=(12, 0))
         else:
             tip(
-                ttk.Button(hdr, text="Zurücksetzen", command=self._clear_form, style="Secondary.TButton"),
+                ttk.Button(hdr, text=_t("fep.btn.reset"), command=self._clear_form, style="Secondary.TButton"),
                 "Alle Felder leeren (neues Profil vorbereiten).",
             ).pack(side="right", padx=4)
             tip(
-                ttk.Button(hdr, text="In Datenbank speichern", command=self._save, style="Accent.TButton"),
-                "Nur lokal (k2_pro.json). Der Drucker wird nicht überschrieben.",
+                ttk.Button(hdr, text=_t("fep.btn.save_db"), command=self._save, style="Accent.TButton"),
+                _t("fep.hdr.local_only"),
             ).pack(side="right", padx=(0, 4))
 
         if self._readonly:
@@ -122,7 +127,7 @@ class FilamentEditorPanel(ttk.Frame):
             self._summary_name.pack(anchor="w")
             self._summary_sub = tk.Label(
                 inner,
-                text="Marke · ID · Typ",
+                text=_t("fep.summary_placeholder"),
                 bg=CARD,
                 fg=MUTED,
                 font=("Segoe UI", 10),
@@ -141,8 +146,8 @@ class FilamentEditorPanel(ttk.Frame):
 
     def _build_readonly_tabs(self) -> None:
         tab_base = ttk.Frame(self.nb)
-        self.nb.add(tab_base, text="  Übersicht  ")
-        grid_host = section(tab_base, "Stammdaten")
+        self.nb.add(tab_base, text=_t("fep.tab.overview"))
+        grid_host = section(tab_base, _t("fep.section.master"))
         grid_host.pack(fill="x", padx=4, pady=6)
         for col in range(4):
             grid_host.columnconfigure(col, weight=1 if col % 2 == 1 else 0)
@@ -173,11 +178,11 @@ class FilamentEditorPanel(ttk.Frame):
             self._readonly_value_labels[key] = val
 
         tab_print = ttk.Frame(self.nb)
-        self.nb.add(tab_print, text="  Druckparameter  ")
+        self.nb.add(tab_print, text=_t("fep.tab.print"))
         scroll_frame = ttk.Frame(tab_print)
         scroll_frame.pack(fill="both", expand=True, padx=4, pady=4)
         _canvas, scroll_inner = scrollable_tab(scroll_frame)
-        print_sec = section(scroll_inner, "Temperaturen & Flow")
+        print_sec = section(scroll_inner, _t("fep.section.temp_flow"))
         print_sec.pack(fill="x", padx=2, pady=4)
         print_sec.columnconfigure(1, weight=1)
         print_sec.columnconfigure(3, weight=1)
@@ -201,10 +206,10 @@ class FilamentEditorPanel(ttk.Frame):
             self._readonly_value_labels[f"print_{key}"] = val_lbl
 
         tab_json = ttk.Frame(self.nb)
-        self.nb.add(tab_json, text="  JSON (kvParam)  ")
+        self.nb.add(tab_json, text=_t("fep.tab.json"))
         ttk.Label(
             tab_json,
-            text="Rohdaten vom Drucker — Erklärungen im Tab „Hilfe“ → JSON kvParam.",
+            text=_t("fep.hint.raw_kvparam"),
             style="Muted.TLabel",
         ).pack(anchor="w", padx=10, pady=(8, 4))
         self.param_text = scrolledtext.ScrolledText(tab_json, height=14, font=("Consolas", 10))
@@ -214,43 +219,43 @@ class FilamentEditorPanel(ttk.Frame):
     def _build_editable_tabs(self) -> None:
         pad = {"padx": 8, "pady": 2}
         tab_base = ttk.Frame(self.nb)
-        self.nb.add(tab_base, text="  Basis  ")
-        ttk.Label(tab_base, text="ID (5 Ziffern)").pack(anchor="w", **pad)
+        self.nb.add(tab_base, text=_t("fep.tab.base"))
+        ttk.Label(tab_base, text=_t("fep.label.id")).pack(anchor="w", **pad)
         e_fid = ttk.Entry(tab_base, textvariable=self.fid_var)
         e_fid.pack(fill="x", **pad)
         self._base_entries.append(e_fid)
-        ttk.Label(tab_base, text="Marke").pack(anchor="w", **pad)
+        ttk.Label(tab_base, text=_t("fep.label.brand")).pack(anchor="w", **pad)
         e_brand = ttk.Entry(tab_base, textvariable=self.brand_var)
         e_brand.pack(fill="x", **pad)
         self._base_entries.append(e_brand)
-        ttk.Label(tab_base, text="Name").pack(anchor="w", **pad)
+        ttk.Label(tab_base, text=_t("fep.label.name")).pack(anchor="w", **pad)
         e_name = ttk.Entry(tab_base, textvariable=self.name_var)
         e_name.pack(fill="x", **pad)
         self._base_entries.append(e_name)
-        ttk.Label(tab_base, text="Typ").pack(anchor="w", **pad)
+        ttk.Label(tab_base, text=_t("fep.label.type")).pack(anchor="w", **pad)
         self._type_combo = ttk.Combobox(
             tab_base, textvariable=self.type_var, values=FILAMENT_TYPES, state="readonly"
         )
         self._type_combo.pack(fill="x", **pad)
         row = ttk.Frame(tab_base)
         row.pack(fill="x", **pad)
-        ttk.Label(row, text="Min °C").pack(side="left")
+        ttk.Label(row, text=_t("fep.label.min_c")).pack(side="left")
         e_min = ttk.Entry(row, textvariable=self.min_var, width=8)
         e_min.pack(side="left", padx=6)
         self._base_entries.append(e_min)
-        ttk.Label(row, text="Max °C").pack(side="left")
+        ttk.Label(row, text=_t("fep.label.max_c")).pack(side="left")
         e_max = ttk.Entry(row, textvariable=self.max_var, width=8)
         e_max.pack(side="left", padx=6)
         self._base_entries.append(e_max)
         self._lock_cb = ttk.Checkbutton(
             tab_base,
-            text="Vor Cloud/Drucker-Update schützen (eigene Einstellungen behalten)",
+            text=_t("fep.chk.protect_from_cloud"),
             variable=self.lock_var,
         )
         self._lock_cb.pack(anchor="w", **pad)
 
         tab_print = ttk.Frame(self.nb)
-        self.nb.add(tab_print, text="  Druckparameter  ")
+        self.nb.add(tab_print, text=_t("fep.tab.print"))
         scroll_outer = ttk.Frame(tab_print)
         scroll_outer.pack(fill="both", expand=True)
         _canvas, scroll = scrollable_tab(scroll_outer)
@@ -265,10 +270,10 @@ class FilamentEditorPanel(ttk.Frame):
             self._print_entries.append(pe)
 
         tab_json = ttk.Frame(self.nb)
-        self.nb.add(tab_json, text="  JSON (kvParam)  ")
+        self.nb.add(tab_json, text=_t("fep.tab.json"))
         ttk.Label(
             tab_json,
-            text="Vollständiges kvParam — Erklärungen im Tab „Hilfe“ → JSON kvParam.",
+            text=_t("fep.hint.full_kvparam"),
             style="Muted.TLabel",
         ).pack(anchor="w", **pad)
         self.param_text = scrolledtext.ScrolledText(tab_json, height=12, font=("Consolas", 9))
@@ -287,7 +292,7 @@ class FilamentEditorPanel(ttk.Frame):
         min_t = self.min_var.get().strip()
         max_t = self.max_var.get().strip()
         if min_t or max_t:
-            self._summary_temp.config(text=f"Temperaturbereich: {min_t} – {max_t} °C")
+            self._summary_temp.config(text=_t("fep.summary.temp_range", min_t=min_t, max_t=max_t))
         else:
             self._summary_temp.config(text="")
         mapping = {
@@ -313,21 +318,25 @@ class FilamentEditorPanel(ttk.Frame):
 
     def load_new(self, template_item: dict | None = None) -> None:
         if self._readonly:
-            self._title.config(text="Profil — nur Anzeige")
+            self._title.config(text=_t("fep.title.view_only"))
             self._template_item = template_item
             self._existing_item = None
             self._apply_item(template_item)
             return
-        self._title.config(text="Neues Filament")
+        self._title.config(text=_t("fep.title.new"))
         self._template_item = template_item
         self._existing_item = None
         self._apply_item(template_item)
 
     def load_edit(self, profile: FilamentProfile) -> None:
         if self._readonly:
-            self._title.config(text=f"Ansehen: {profile.brand} — {profile.name}")
+            self._title.config(
+                text=_t("fep.title.view", brand=profile.brand, name=profile.name)
+            )
         else:
-            self._title.config(text=f"Bearbeiten: {profile.brand} — {profile.name}")
+            self._title.config(
+                text=_t("fep.title.edit", brand=profile.brand, name=profile.name)
+            )
         self._template_item = None
         self._existing_item = find_item(
             self.db_data,
@@ -388,7 +397,7 @@ class FilamentEditorPanel(ttk.Frame):
             if not isinstance(kv, dict):
                 raise ValueError("kvParam muss ein JSON-Objekt sein.")
         except json.JSONDecodeError as exc:
-            raise ValueError(f"Ungültiges JSON:\n{exc}") from exc
+            raise ValueError(_t("fep.error.invalid_json", exc=exc)) from exc
         for key, var in self._print_vars.items():
             val = var.get().strip()
             if val:
@@ -399,25 +408,33 @@ class FilamentEditorPanel(ttk.Frame):
 
     def _save(self) -> None:
         if self._readonly:
-            notify(self, "Speichern ist deaktiviert — Daten nur vom Drucker (Ansicht).", "warn")
+            notify(self, _t("fep.notify.save_disabled"), "warn")
             return
         updated = self._commit_save()
         if updated is not None:
             self._on_saved(updated)
-            notify(self, f"„{self.brand_var.get()} — {self.name_var.get()}“ gespeichert.", "ok")
+            notify(
+                self,
+                _t(
+                    "fep.notify.saved",
+                    brand=self.brand_var.get(),
+                    name=self.name_var.get(),
+                ),
+                "ok",
+            )
 
     def _commit_save(self) -> dict | None:
         if self._readonly:
             return None
         fid = self.fid_var.get().strip()
         if len(fid) != 5 or not fid.isdigit():
-            notify(self, "ID muss genau 5 Ziffern haben.", "warn")
+            notify(self, _t("fep.notify.id_5digits"), "warn")
             return None
         try:
             min_t = int(self.min_var.get())
             max_t = int(self.max_var.get())
         except ValueError:
-            notify(self, "Min/Max müssen Zahlen sein.", "warn")
+            notify(self, _t("fep.notify.min_max_numbers"), "warn")
             return None
         try:
             kv = self._merged_kv()

@@ -6,6 +6,7 @@ import tkinter as tk
 from tkinter import ttk
 from typing import TYPE_CHECKING
 
+from creality_nfc.i18n import t as _t
 from creality_nfc.printer_control import PRINT_SPEED_PRESETS
 from creality_nfc.printer_control import home_xy, home_z
 from ui.components import button_grid
@@ -28,12 +29,13 @@ _BODY = "Printer.Card.TLabel"
 _PROG = "Printer.Accent.Horizontal.TProgressbar"
 _NB = "Printer.TNotebook"
 
-_SPEED_LABELS = {
-    25: "Still",
-    50: "Stabil 50%",
-    100: "Standard 100%",
-    125: "Ultraschnell 125%",
-}
+def _speed_labels() -> dict[int, str]:
+    return {
+        25: _t("printer.speed.silent"),
+        50: _t("printer.speed.stable"),
+        100: _t("printer.speed.standard"),
+        125: _t("printer.speed.ultra"),
+    }
 
 
 def _build_settings(panel: PrinterDevicePanel, parent: ttk.Frame) -> None:
@@ -46,12 +48,16 @@ def _build_settings(panel: PrinterDevicePanel, parent: ttk.Frame) -> None:
     right = ttk.Frame(parent, style="Printer.Card.TFrame")
     right.grid(row=0, column=1, sticky="nsew", padx=(6, 0))
 
-    temps = ttk.LabelFrame(left, text="  Temperaturen  ", padding=8, style=_SEC)
+    temps = ttk.LabelFrame(left, text=_t("printer.section.temperatures"), padding=8, style=_SEC)
     temps.pack(fill="x", pady=(0, 8))
     tg = ttk.Frame(temps, style="Printer.Card.TFrame")
     tg.pack(fill="x")
     for col, (title, attr) in enumerate(
-        (("Düse", "nozzle_lbl"), ("Bett", "bed_lbl"), ("Kammer", "box_lbl"))
+        (
+            (_t("printer.temp.nozzle"), "nozzle_lbl"),
+            (_t("printer.temp.bed"), "bed_lbl"),
+            (_t("printer.temp.chamber"), "box_lbl"),
+        )
     ):
         tg.columnconfigure(col, weight=1)
         cell = tk.Frame(tg, bg=SURFACE_DARK, padx=6, pady=8)
@@ -61,7 +67,7 @@ def _build_settings(panel: PrinterDevicePanel, parent: ttk.Frame) -> None:
         lbl.pack(anchor="w", pady=(2, 0))
         setattr(panel, attr, lbl)
 
-    tgt = ttk.LabelFrame(left, text="  Soll-Temperatur  ", padding=8, style=_SEC)
+    tgt = ttk.LabelFrame(left, text=_t("printer.section.target_temp"), padding=8, style=_SEC)
     tgt.pack(fill="x")
     panel.nozzle_tgt = tk.IntVar(value=0)
     panel.bed_tgt = tk.IntVar(value=0)
@@ -70,9 +76,9 @@ def _build_settings(panel: PrinterDevicePanel, parent: ttk.Frame) -> None:
     tg2.pack(fill="x")
     for col, (lbl, var, cmd) in enumerate(
         (
-            ("Düse", panel.nozzle_tgt, panel._apply_nozzle),
-            ("Bett", panel.bed_tgt, panel._apply_bed),
-            ("Kammer", panel.box_tgt, panel._apply_chamber),
+            (_t("printer.temp.nozzle"), panel.nozzle_tgt, panel._apply_nozzle),
+            (_t("printer.temp.bed"), panel.bed_tgt, panel._apply_bed),
+            (_t("printer.temp.chamber"), panel.box_tgt, panel._apply_chamber),
         )
     ):
         tg2.columnconfigure(col, weight=1)
@@ -87,31 +93,33 @@ def _build_settings(panel: PrinterDevicePanel, parent: ttk.Frame) -> None:
         spin.pack(side="left")
         spin.bind("<FocusIn>", panel._on_temp_spin_focus)
         tip(
-            rounded_button(row, "Set", cmd, variant="secondary", compact=True),
-            f"Soll-{lbl} senden.",
+            rounded_button(row, _t("printer.btn.set"), cmd, variant="secondary", compact=True),
+            _t("printer.tip.target_temp", label=lbl),
         ).pack(side="left", padx=4)
 
-    led = ttk.LabelFrame(right, text="  LED & Achsen  ", padding=8, style=_SEC)
+    led = ttk.LabelFrame(right, text=_t("printer.section.led_axes"), padding=8, style=_SEC)
     led.pack(fill="x", pady=(0, 8))
     panel.led_var = tk.BooleanVar(value=False)
     ttk.Checkbutton(
-        led, text="LED ein", variable=panel.led_var, command=panel._toggle_led, style="Printer.TCheckbutton"
+        led, text=_t("printer.dashboard.led_on"), variable=panel.led_var, command=panel._toggle_led, style="Printer.TCheckbutton"
     ).pack(anchor="w", pady=(0, 6))
     button_grid(
         led,
         [
-            ("Licht an", lambda: panel._set_light(True), _BTN, "LED an."),
-            ("Licht aus", lambda: panel._set_light(False), _BTN, "LED aus."),
-            ("Home XY", lambda: panel._cmd("Home XY", home_xy), _BTN, "X/Y Home."),
-            ("Home Z", lambda: panel._cmd("Home Z", home_z), _BTN, "Z Home."),
+            (_t("printer.btn.light_on"), lambda: panel._set_light(True), _BTN, _t("printer.tip.led_on")),
+            (_t("printer.btn.light_off"), lambda: panel._set_light(False), _BTN, _t("printer.tip.led_off")),
+            (_t("printer.btn.home_xy"), lambda: panel._cmd("Home XY", home_xy), _BTN, _t("printer.tip.home_xy")),
+            (_t("printer.btn.home_z"), lambda: panel._cmd("Home Z", home_z), _BTN, _t("printer.tip.home_z")),
         ],
         columns=2,
     ).pack(fill="x")
 
-    fan_box = ttk.LabelFrame(right, text="  Lüfter  ", padding=8, style=_SEC)
+    fan_box = ttk.LabelFrame(right, text=_t("printer.section.fans"), padding=8, style=_SEC)
     fan_box.pack(fill="x", pady=(0, 8))
     panel.fan_vars = [tk.IntVar(value=0) for _ in range(3)]
-    for i, name in enumerate(("Modell", "Gehäuse", "Seite")):
+    for i, name in enumerate(
+        (_t("printer.fan.model"), _t("printer.fan.housing"), _t("printer.fan.side"))
+    ):
         row = ttk.Frame(fan_box, style="Printer.Card.TFrame")
         row.pack(fill="x", pady=2)
         ttk.Label(row, text=name, width=8, style=_BODY).pack(side="left")
@@ -127,11 +135,17 @@ def _build_settings(panel: PrinterDevicePanel, parent: ttk.Frame) -> None:
         sc.bind("<ButtonPress-1>", lambda _e: panel._set_fan_drag(True))
         sc.bind("<ButtonRelease-1>", lambda _e: panel._set_fan_drag(False))
         tip(
-            rounded_button(row, "Set", lambda ch=i: panel._apply_fan(ch), variant="secondary", compact=True),
-            f"Lüfter {name}.",
+            rounded_button(
+                row,
+                _t("printer.btn.set"),
+                lambda ch=i: panel._apply_fan(ch),
+                variant="secondary",
+                compact=True,
+            ),
+            _t("printer.tip.fan", name=name),
         ).pack(side="left")
 
-    spd = ttk.LabelFrame(right, text="  Druckgeschwindigkeit  ", padding=8, style=_SEC)
+    spd = ttk.LabelFrame(right, text=_t("printer.section.print_speed"), padding=8, style=_SEC)
     spd.pack(fill="x")
     sr = ttk.Frame(spd, style="Printer.Card.TFrame")
     sr.pack(fill="x")
@@ -139,7 +153,7 @@ def _build_settings(panel: PrinterDevicePanel, parent: ttk.Frame) -> None:
         sr.columnconfigure(col, weight=1)
         ttk.Radiobutton(
             sr,
-            text=_SPEED_LABELS.get(pct, _label),
+            text=_speed_labels().get(pct, _label),
             value=pct,
             variable=panel._speed_var,
             command=lambda p=pct: panel._apply_speed_preset(p),
@@ -180,26 +194,22 @@ def _build_print_strip(panel: PrinterDevicePanel, parent: ttk.Frame) -> None:
     hist_row.pack(fill="x", pady=(0, 4))
     rounded_button(
         hist_row,
-        "Druck-Check",
+        _t("printer.btn.print_check"),
         panel.show_print_check,
         variant="secondary",
         compact=True,
     ).pack(side="left", padx=(0, 6))
-    tip(
-        hist_row,
-        "G-Code vs. CFS/Spulen — markierte Datei, zuletzt gewählt oder laufender Druck. "
-        "Lädt bei Bedarf die volle Datei automatisch vom Drucker.",
-    )
+    tip(hist_row, _t("printer.tip.print_check_running"))
     rounded_button(
         hist_row,
-        "Druck-Historie",
+        _t("printer.btn.print_history"),
         panel.show_print_history,
         variant="secondary",
         compact=True,
     ).pack(side="left", padx=(0, 6))
     rounded_button(
         hist_row,
-        "Spulen-Standort",
+        _t("printer.btn.spool_location"),
         panel.show_spool_locations,
         variant="secondary",
         compact=True,
@@ -209,31 +219,31 @@ def _build_print_strip(panel: PrinterDevicePanel, parent: ttk.Frame) -> None:
     ctrl.pack(fill="x", pady=(6, 0))
     ttk.Label(
         ctrl,
-        text="Start: Creality Print / Drucker-Display",
+        text=_t("printer.dashboard.start_creality"),
         style=_MUTED,
     ).pack(side="left", padx=(0, 12))
     panel._btn_pause = tip(
-        rounded_button(ctrl, "Pause", panel._pause_print, variant="secondary"),
-        "Pausieren.",
+        rounded_button(ctrl, _t("printer.btn.pause"), panel._pause_print, variant="secondary"),
+        _t("printer.tip.pause"),
     )
     panel._btn_pause.pack(side="left", padx=4)
     panel._btn_resume = tip(
-        rounded_button(ctrl, "Fortsetzen", panel._resume_print, variant="secondary"),
-        "Fortsetzen.",
+        rounded_button(ctrl, _t("printer.btn.resume"), panel._resume_print, variant="secondary"),
+        _t("printer.tip.resume"),
     )
     panel._btn_resume.pack(side="left", padx=4)
     tip(
-        rounded_button(ctrl, "Stopp", panel._stop_print, variant="danger"),
-        "Abbrechen.",
+        rounded_button(ctrl, _t("printer.btn.stop"), panel._stop_print, variant="danger"),
+        _t("printer.tip.stop"),
     ).pack(side="left", padx=4)
     panel._btn_deduct = tip(
         rounded_button(
             ctrl,
-            "Verbrauch abziehen…",
+            _t("printer.btn.deduct_consumption") + "\u2026",
             panel._manual_post_print_deduct,
             variant="secondary",
         ),
-        "Filament von verknüpften Spulen abziehen (nach Druckende).",
+        _t("printer.tip.deduct"),
     )
     panel._btn_deduct.pack(side="right", padx=4)
 
@@ -241,17 +251,17 @@ def _build_print_strip(panel: PrinterDevicePanel, parent: ttk.Frame) -> None:
 def build_creality_dashboard(panel: PrinterDevicePanel, outer: ttk.Frame) -> None:
     """Unterseiten statt einer überfüllten Einzelseite."""
 
-    conn = ttk.LabelFrame(outer, text="  Verbindung  ", padding=6, style=_SEC)
+    conn = ttk.LabelFrame(outer, text=_t("printer.section.connection_pad"), padding=6, style=_SEC)
     conn.pack(fill="x", pady=(0, 6))
-    panel.conn_var = tk.StringVar(value="Nicht verbunden — IP im Tab RFID-Tag eintragen")
+    panel.conn_var = tk.StringVar(value=_t("printer.conn.not_connected_hint"))
     ttk.Label(conn, textvariable=panel.conn_var, style=_MUTED).pack(anchor="w", pady=(0, 4))
     button_grid(
         conn,
         [
-            ("Verbinden", panel.connect, _ACC, "WebSocket-Verbindung."),
-            ("Trennen", panel.disconnect, _BTN, "Trennen."),
-            ("Creality Web-UI", panel._open_creality_web_ui, _BTN, "Browser-Oberfläche."),
-            ("Klipper / Web-UI", panel.open_klipper_ui, _BTN, "Klipper-UI."),
+            (_t("printer.btn.connect"), panel.connect, _ACC, _t("printer.tip.websocket")),
+            (_t("printer.btn.disconnect"), panel.disconnect, _BTN, _t("printer.tip.disconnect")),
+            (_t("printer.btn.creality_webui"), panel._open_creality_web_ui, _BTN, _t("printer.tip.creality_webui")),
+            (_t("printer.btn.klipper_webui"), panel.open_klipper_ui, _BTN, _t("printer.tip.klipper")),
         ],
         columns=4,
         pad=3,
@@ -267,9 +277,9 @@ def build_creality_dashboard(panel: PrinterDevicePanel, outer: ttk.Frame) -> Non
     tab_mon.rowconfigure(0, weight=1)
     tab_mon.rowconfigure(1, weight=0)
     tab_mon.columnconfigure(0, weight=1)
-    nb.add(tab_mon, text="  Monitor  ")
+    nb.add(tab_mon, text=_t("printer.tab.monitor_pad"))
 
-    cam_card = ttk.LabelFrame(tab_mon, text="  Kamera  ", padding=4, style=_SEC)
+    cam_card = ttk.LabelFrame(tab_mon, text=_t("printer.section.camera_pad"), padding=4, style=_SEC)
     cam_card.grid(row=0, column=0, sticky="nsew", pady=(0, 6))
 
     panel._cam_preview_host = tk.Frame(
@@ -285,7 +295,7 @@ def build_creality_dashboard(panel: PrinterDevicePanel, outer: ttk.Frame) -> Non
 
     panel.cam_preview_label = tk.Label(
         panel._cam_preview_host,
-        text="Verbinde mit dem Drucker — Kamera startet automatisch",
+        text=_t("printer.cam.connecting_msg"),
         anchor="center",
         bg=P_CARD_ALT,
         fg=P_MUTED,
@@ -298,17 +308,17 @@ def build_creality_dashboard(panel: PrinterDevicePanel, outer: ttk.Frame) -> Non
     cam_bar = tk.Frame(cam_card, bg=CARD)
     cam_bar.pack(fill="x", padx=4, pady=(0, 4))
     tip(
-        rounded_button(cam_bar, "Live-Kamera", panel._toggle_live_camera, variant="accent"),
-        "Livebild in der App (funktioniert auf jedem Monitor).",
+        rounded_button(cam_bar, _t("printer.btn.live_camera"), panel._toggle_live_camera, variant="accent"),
+        _t("printer.tip.live_camera"),
     ).pack(side="left", padx=(0, 6))
     tip(
-        rounded_button(cam_bar, "Vollbild", panel._open_camera_fullscreen, variant="secondary"),
-        "Separates Edge-Fenster (WebRTC).",
+        rounded_button(cam_bar, _t("printer.btn.fullscreen"), panel._open_camera_fullscreen, variant="secondary"),
+        _t("printer.tip.fullscreen"),
     ).pack(side="left")
     panel._cam_status_var = tk.StringVar(value="")
     ttk.Label(cam_bar, textvariable=panel._cam_status_var, style=_MUTED).pack(side="left", padx=10)
 
-    print_card = ttk.LabelFrame(tab_mon, text="  Aktueller Druck  ", padding=8, style=_SEC)
+    print_card = ttk.LabelFrame(tab_mon, text=_t("printer.section.current_print_pad"), padding=8, style=_SEC)
     print_card.grid(row=1, column=0, sticky="ew")
     _build_print_strip(panel, print_card)
 
@@ -316,14 +326,14 @@ def build_creality_dashboard(panel: PrinterDevicePanel, outer: ttk.Frame) -> Non
     tab_ctrl = ttk.Frame(nb, padding=8, style="Printer.TFrame")
     tab_ctrl.rowconfigure(0, weight=1)
     tab_ctrl.columnconfigure(0, weight=1)
-    nb.add(tab_ctrl, text="  Steuerung  ")
+    nb.add(tab_ctrl, text=_t("printer.tab.control_pad"))
     settings_wrap = ttk.Frame(tab_ctrl, style="Printer.TFrame")
     settings_wrap.pack(fill="both", expand=True)
     _build_settings(panel, settings_wrap)
 
     # —— Filament ——
     tab_fil = ttk.Frame(nb, padding=4, style="Printer.TFrame")
-    nb.add(tab_fil, text="  Filament  ")
+    nb.add(tab_fil, text=_t("printer.tab.filament_pad"))
     panel.cfs_dashboard = CfsDashboard(
         tab_fil,
         appearance="printer",
@@ -344,14 +354,14 @@ def build_creality_dashboard(panel: PrinterDevicePanel, outer: ttk.Frame) -> Non
     tab_files.rowconfigure(1, weight=1)
     tab_files.columnconfigure(0, weight=2)
     tab_files.columnconfigure(1, weight=3)
-    nb.add(tab_files, text="  Dateien  ")
+    nb.add(tab_files, text=_t("printer.tab.files_pad"))
 
-    panel._status_var = tk.StringVar(value="Nicht verbunden")
+    panel._status_var = tk.StringVar(value=_t("printer.label.not_connected"))
     ttk.Label(tab_files, textvariable=panel._status_var, style=_MUTED).grid(
         row=0, column=0, columnspan=2, sticky="w", pady=(0, 4)
     )
 
-    list_card = ttk.LabelFrame(tab_files, text="  G-Code auf dem Drucker  ", padding=4, style=_SEC)
+    list_card = ttk.LabelFrame(tab_files, text=_t("printer.files.gcode_on_printer"), padding=4, style=_SEC)
     list_card.grid(row=1, column=0, sticky="nsew", padx=(0, 6))
     list_card.rowconfigure(0, weight=1)
     list_card.columnconfigure(0, weight=1)
@@ -373,7 +383,7 @@ def build_creality_dashboard(panel: PrinterDevicePanel, outer: ttk.Frame) -> Non
     scroll_files.pack(side="right", fill="y")
     panel.file_list.bind("<<ListboxSelect>>", panel._on_gcode_select)
 
-    prev_card = ttk.LabelFrame(tab_files, text="  Vorschau  ", padding=4, style=_SEC)
+    prev_card = ttk.LabelFrame(tab_files, text=_t("printer.files.preview"), padding=4, style=_SEC)
     prev_card.grid(row=1, column=1, sticky="nsew")
     prev_card.rowconfigure(0, weight=1)
     prev_card.columnconfigure(0, weight=1)
@@ -386,8 +396,8 @@ def build_creality_dashboard(panel: PrinterDevicePanel, outer: ttk.Frame) -> Non
     tab_thumb.columnconfigure(0, weight=1)
     tab_gcode.rowconfigure(0, weight=1)
     tab_gcode.columnconfigure(0, weight=1)
-    panel._gcode_prev_nb.add(tab_thumb, text="  Bild  ")
-    panel._gcode_prev_nb.add(tab_gcode, text="  G-Code  ")
+    panel._gcode_prev_nb.add(tab_thumb, text=_t("printer.files.image"))
+    panel._gcode_prev_nb.add(tab_gcode, text=_t("printer.files.gcode"))
 
     panel._gcode_preview_host = tk.Frame(
         tab_thumb,
@@ -403,7 +413,7 @@ def build_creality_dashboard(panel: PrinterDevicePanel, outer: ttk.Frame) -> Non
 
     panel.gcode_preview_label = tk.Label(
         panel._gcode_preview_host,
-        text="Datei wählen\n\n(Vorschaubild vom Slicer,\nfalls vorhanden)",
+        text=_t("printer.files.choose_file"),
         anchor="center",
         bg=P_CARD_ALT,
         fg=P_MUTED,
@@ -419,9 +429,7 @@ def build_creality_dashboard(panel: PrinterDevicePanel, outer: ttk.Frame) -> Non
     gcode_txt_frame.grid(row=0, column=0, sticky="nsew", padx=2, pady=2)
     gcode_txt_frame.rowconfigure(2, weight=1)
     gcode_txt_frame.columnconfigure(0, weight=1)
-    panel._gcode_text_status = tk.StringVar(
-        value="Datei wählen — G-Code per SSH (Anfang/Ende). Markieren, kopieren, lokal bearbeiten."
-    )
+    panel._gcode_text_status = tk.StringVar(value=_t("printer.files.choose_file_help"))
     ttk.Label(gcode_txt_frame, textvariable=panel._gcode_text_status, style=_MUTED).grid(
         row=0, column=0, sticky="ew", pady=(0, 2)
     )
@@ -429,8 +437,8 @@ def build_creality_dashboard(panel: PrinterDevicePanel, outer: ttk.Frame) -> Non
     gcode_hdr.grid(row=1, column=0, sticky="ew", pady=(0, 2))
     gcode_hdr.columnconfigure(0, weight=3)
     gcode_hdr.columnconfigure(1, weight=2)
-    ttk.Label(gcode_hdr, text="G-Code", style=_BODY).grid(row=0, column=0, sticky="w")
-    ttk.Label(gcode_hdr, text="Was der Drucker macht", style=_BODY).grid(
+    ttk.Label(gcode_hdr, text=_t("printer.gcode.col_gcode"), style=_BODY).grid(row=0, column=0, sticky="w")
+    ttk.Label(gcode_hdr, text=_t("printer.gcode.col_what"), style=_BODY).grid(
         row=0, column=1, sticky="w", padx=(8, 0)
     )
     txt_wrap = ttk.Frame(gcode_txt_frame, style="Printer.TFrame")
@@ -483,16 +491,9 @@ def build_creality_dashboard(panel: PrinterDevicePanel, outer: ttk.Frame) -> Non
     panel.gcode_hint_text.configure(fg=P_MUTED)
     panel.gcode_hint_text.grid(row=0, column=1, sticky="nsew", padx=(6, 0))
     scroll_gcode.grid(row=0, column=2, sticky="ns")
-    panel.gcode_text.insert(
-        "1.0",
-        "; G-Code-Text erscheint hier nach Auswahl einer Datei.\n"
-        "; Root-SSH und Drucker-IP wie beim Herunterladen.\n",
-    )
+    panel.gcode_text.insert("1.0", _t("printer.gcode.placeholder"))
     panel.gcode_hint_text.config(state="normal")
-    panel.gcode_hint_text.insert(
-        "1.0",
-        "Hinweis nach Dateiauswahl\nSSH wie beim Herunterladen",
-    )
+    panel.gcode_hint_text.insert("1.0", _t("printer.gcode.hint_panel"))
     panel.gcode_hint_text.config(state="disabled")
     for _w in (txt_wrap, panel.gcode_text, panel.gcode_hint_text):
         _w.bind("<MouseWheel>", _gcode_wheel)
@@ -502,20 +503,20 @@ def build_creality_dashboard(panel: PrinterDevicePanel, outer: ttk.Frame) -> Non
     gcode_search = ttk.Frame(gcode_txt_frame, style="Printer.TFrame")
     gcode_search.grid(row=3, column=0, sticky="ew", pady=(4, 0))
     gcode_search.columnconfigure(1, weight=1)
-    ttk.Label(gcode_search, text="Suche", style=_MUTED).grid(row=0, column=0, sticky="w")
+    ttk.Label(gcode_search, text=_t("printer.gcode.search"), style=_MUTED).grid(row=0, column=0, sticky="w")
     ttk.Entry(gcode_search, textvariable=panel._gcode_search_var, width=24).grid(
         row=0, column=1, sticky="ew", padx=(6, 6)
     )
     rounded_button(
         gcode_search,
-        "Weiter",
+        _t("printer.gcode.search_next"),
         lambda: panel._gcode_find_next(backward=False),
         variant="secondary",
         compact=True,
     ).grid(row=0, column=2, padx=(0, 4))
     rounded_button(
         gcode_search,
-        "Zurück",
+        _t("printer.gcode.search_prev"),
         lambda: panel._gcode_find_next(backward=True),
         variant="secondary",
         compact=True,
@@ -525,52 +526,44 @@ def build_creality_dashboard(panel: PrinterDevicePanel, outer: ttk.Frame) -> Non
     gcode_act.grid(row=4, column=0, sticky="ew", pady=(4, 0))
     rounded_button(
         gcode_act,
-        "Druck-Check",
+        _t("printer.btn.print_check"),
         panel.show_print_check,
         variant="accent",
         compact=True,
     ).pack(side="left", padx=(0, 8))
-    tip(
-        gcode_act,
-        "G-Code vs. CFS/Spulen — markierte Datei in der Liste. Lädt bei Bedarf "
-        "die volle Datei automatisch vom Drucker (SSH/Cache).",
-    )
+    tip(gcode_act, _t("printer.tip.print_check_file"))
     rounded_button(
         gcode_act,
-        "Alles kopieren",
+        _t("printer.btn.copy_all"),
         panel._copy_gcode_display,
         variant="secondary",
         compact=True,
     ).pack(side="left", padx=(0, 6))
     rounded_button(
         gcode_act,
-        "Speichern unter…",
+        _t("printer.btn.save_as"),
         panel._save_gcode_edited_local,
         variant="secondary",
         compact=True,
     ).pack(side="left", padx=(0, 6))
     rounded_button(
         gcode_act,
-        "HTML-Export…",
+        _t("printer.btn.html_export"),
         panel._export_gcode_html,
         variant="secondary",
         compact=True,
     ).pack(side="left")
-    tip(
-        gcode_act,
-        "Alles kopieren / Speichern: komplette Datei aus dem Cache nach „G-Code laden“ "
-        "(nicht nur die Vorschau). Volle Datei vom Drucker: „Herunterladen…“.",
-    )
+    tip(gcode_act, _t("printer.tip.copy_save_gcode"))
 
     button_grid(
         tab_files,
         [
-            ("Druck-Check", panel.show_print_check, _BTN, "G-Code vs. CFS/Spulen — markierte Datei, zuletzt gewählt oder laufender Druck."),
-            ("Aktualisieren", panel._refresh_gcode_list, _BTN, "Liste neu laden."),
-            ("Hochladen…", panel._upload_gcode, _BTN, "Hochladen."),
-            ("Herunterladen…", panel._download_gcode, _BTN, "G-Code komplett speichern."),
-            ("G-Code laden", panel._reload_gcode_text, _BTN, "Text neu vom Drucker holen."),
-            ("Löschen", panel._delete_gcode, _BTN, "Löschen."),
+            (_t("printer.btn.print_check"), panel.show_print_check, _BTN, _t("printer.tip.print_check_running")),
+            (_t("printer.btn.refresh"), panel._refresh_gcode_list, _BTN, _t("printer.tip.refresh_list")),
+            (_t("printer.btn.upload"), panel._upload_gcode, _BTN, _t("printer.tip.upload")),
+            (_t("printer.btn.download"), panel._download_gcode, _BTN, _t("printer.tip.download")),
+            (_t("printer.btn.load_gcode"), panel._reload_gcode_text, _BTN, _t("printer.tip.reload_gcode")),
+            (_t("printer.btn.delete"), panel._delete_gcode, _BTN, _t("printer.tip.delete")),
         ],
         columns=3,
     ).grid(row=2, column=0, columnspan=2, sticky="ew", pady=(8, 0))

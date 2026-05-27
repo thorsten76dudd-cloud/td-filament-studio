@@ -7,6 +7,7 @@ from typing import TYPE_CHECKING
 
 from creality_nfc.cfs_adopt import CfsSlotInfo
 from creality_nfc.cfs_layout import cfs_slot_label
+from creality_nfc.i18n import t as _t
 from creality_nfc.materials import normalize_filament_id
 
 if TYPE_CHECKING:
@@ -47,21 +48,25 @@ def sync_passport_from_cfs_slot(
     if not slot.empty:
         spool.cfs_box_id = getattr(slot, "box_id", 1) or 1
         spool.cfs_slot = slot.index
-        updated.append("CFS-Slot")
+        updated.append(_t("passport.cfs_slot"))
 
     rfid = (slot.rfid_id or "").strip()
     if rfid:
         want = normalize_filament_id(rfid)
         if spool.filament_id and normalize_filament_id(spool.filament_id) != want:
             warnings.append(
-                f"RFID am Drucker ({want}) weicht von Filament-ID ({spool.filament_id}) ab."
+                _t(
+                    "passport.rfid_mismatch",
+                    want=want,
+                    fid=spool.filament_id,
+                )
             )
         elif not spool.filament_id:
             spool.filament_id = want
-            updated.append("Filament-ID")
+            updated.append(_t("passport.filament_id"))
 
     if slot.percent is not None and spool.remaining_g is not None:
-        info.append(f"Drucker meldet ca. {slot.percent}% Füllstand im Slot.")
+        info.append(_t("passport.printer_fill", percent=slot.percent))
 
     if printer_name.strip():
         spool.last_seen_printer = printer_name.strip()
@@ -71,7 +76,7 @@ def sync_passport_from_cfs_slot(
         from creality_nfc.spool_inventory import _now
 
         spool.last_seen_at = _now()
-        updated.append("Zuletzt gesehen")
+        updated.append(_t("passport.last_seen"))
 
     return PassportSyncResult(updated_fields=updated, warnings=warnings, info=info)
 
@@ -80,14 +85,18 @@ def compare_passport_with_slot(spool: Spool, slot: CfsSlotInfo) -> list[str]:
     """Abweichungen Inventar vs. CFS (für Dialog)."""
     issues: list[str] = []
     if slot.empty:
-        issues.append("Slot am Drucker ist leer.")
+        issues.append(_t("passport.slot_empty"))
         return issues
 
     rfid = (slot.rfid_id or "").strip()
     if rfid and spool.filament_id:
         if normalize_filament_id(rfid) != normalize_filament_id(spool.filament_id):
             issues.append(
-                f"RFID Drucker ({rfid}) ≠ Filament-ID Spule ({spool.filament_id})."
+                _t(
+                    "passport.rfid_vs_spool",
+                    rfid=rfid,
+                    fid=spool.filament_id,
+                )
             )
 
     key = spool.effective_cfs_key()
@@ -96,11 +105,14 @@ def compare_passport_with_slot(spool: Spool, slot: CfsSlotInfo) -> list[str]:
         s_bid = getattr(slot, "box_id", 1) or 1
         if bid != s_bid or idx != slot.index:
             issues.append(
-                f"Spule ist {cfs_slot_label(bid, idx)} zugeordnet, "
-                f"Drucker meldet {cfs_slot_label(s_bid, slot.index)}."
+                _t(
+                    "passport.slot_mismatch",
+                    assigned=cfs_slot_label(bid, idx),
+                    reported=cfs_slot_label(s_bid, slot.index),
+                )
             )
 
     if spool.remaining_g is not None and spool.remaining_g < 50:
-        issues.append(f"Rest in App nur noch {spool.remaining_g} g.")
+        issues.append(_t("passport.low_remain", rem=spool.remaining_g))
 
     return issues

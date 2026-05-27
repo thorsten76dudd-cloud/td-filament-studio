@@ -4,8 +4,8 @@
 # or -DeleteAllOldReleases to wipe everything except the current $Tag.
 
 param(
-    [string]$Version = "1.5.130",
-    [string]$Tag = "v1.5.130-stable",
+    [string]$Version = "1.5.131",
+    [string]$Tag = "v1.5.131-stable",
     [string]$Repo = "thorsten76dudd-cloud/td-filament-studio",
     [string]$RemoveTag = "",
     [switch]$DeleteAllOldReleases
@@ -33,19 +33,18 @@ if (-not (Test-Path $Setup)) {
 $notes = @(
     "## TD Filament Studio $Version",
     "",
-    "### Fix",
-    "* Tippfehler in Drucker-Dashboard: 'DB vergleigen' -> 'DB vergleichen'",
-    "* Release-Skript: alte Versionen bleiben jetzt standardmaessig auf GitHub erhalten",
+    "### Neu",
+    "* **Englisch (DE/EN):** Sprache unter Einstellungen waehlen, App neu starten.",
+    "* Englische Hilfe, G-Code-Erklaerungen, Druck-Check und Kamera-Status.",
+    "",
+    "### Fixes",
+    "* Verbrauchs-Dialog nach Druckende nur einmal (Abziehen/Abbrechen zaehlt).",
+    "* Start-Crash (Tooltip/LazyString, fehlender Uebersetzungs-Import) behoben.",
     "",
     "### Enthalten",
-    "* Doppel-Dialog beim Reconnect verhindert (v1.5.129)",
-    "* Filename-Lock-Reset im Initial-Sync (v1.5.128)",
-    "* Anzeige bei 0 %-Glitch zeigt Peak (v1.5.127)",
-    "* Sync-Pfad mit Catch-up (v1.5.125)",
-    "* Kamera-Watchdog (v1.5.124)",
-    "* Hintergrund (Tray) optional (v1.5.123)",
+    "* Alle Fixes ab v1.5.130 (alte Releases bleiben auf GitHub).",
     "",
-    "Details: STABLE-v1.5.130.md im Repository."
+    "Details: STABLE-v$Version.md im Repository."
 ) -join [Environment]::NewLine
 Set-Content -Path $NotesFile -Value $notes -Encoding UTF8
 

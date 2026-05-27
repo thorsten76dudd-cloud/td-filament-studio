@@ -6,6 +6,7 @@ import tkinter as tk
 from tkinter import ttk
 from typing import Any
 
+from creality_nfc.i18n import t as _t
 from creality_nfc.print_readiness import PrintReadinessReport, ReadinessLine
 from ui.dialog_theme import prepare_toplevel, theme_dialog
 from ui.rounded_widgets import rounded_button
@@ -25,7 +26,7 @@ def show_print_check_dialog(
     report: PrintReadinessReport,
 ) -> None:
     dlg = tk.Toplevel(parent)
-    dlg.title("Druck-Check")
+    dlg.title(_t("pcd.title"))
     prepare_toplevel(
         dlg,
         parent,
@@ -41,12 +42,12 @@ def show_print_check_dialog(
     short = report.filename.replace("\\", "/").rsplit("/", 1)[-1]
     ttk.Label(
         top,
-        text=f"Prüfe markierte Datei: {short}",
+        text=_t("pcd.checking_file", short=short),
         font=("Segoe UI", 11, "bold"),
     ).pack(anchor="w")
     ttk.Label(
         top,
-        text="(Die Datei muss in der Liste grün markiert sein — nicht der letzte Druck.)",
+        text=_t("pcd.green_mark_hint"),
         style="Muted.TLabel",
         wraplength=520,
     ).pack(anchor="w", pady=(2, 0))
@@ -75,13 +76,13 @@ def show_print_check_dialog(
     if not report.lines:
         ttk.Label(
             inner,
-            text="Keine Prüfdaten — G-Code und CFS-Verbindung prüfen.",
+            text=_t("pcd.no_data"),
             style="Muted.TLabel",
         ).pack(anchor="w", padx=8, pady=4)
 
     foot = tk.Frame(dlg, bg=BG)
     foot.pack(side="bottom", fill="x", padx=14, pady=12)
-    rounded_button(foot, "Schließen", dlg.destroy, variant="accent", compact=True).pack(
+    rounded_button(foot, _t("btn.close"), dlg.destroy, variant="accent", compact=True).pack(
         side="right"
     )
 

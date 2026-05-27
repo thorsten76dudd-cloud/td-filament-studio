@@ -50,6 +50,8 @@ class AppSettings:
     # Fenstergröße/-position: Schlüssel -> "BreitexHoehe+X+Y"
     window_geometry: dict[str, str] = field(default_factory=dict)
     main_window_maximized: bool = False
+    # UI-Sprache ("de" oder "en"). Aenderung wird beim naechsten Start aktiv.
+    language: str = "de"
 
     @classmethod
     def load(cls, path: Path) -> AppSettings:

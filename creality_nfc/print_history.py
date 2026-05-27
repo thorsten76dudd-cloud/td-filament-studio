@@ -302,13 +302,15 @@ def repair_history_slots_from_inventory(
 
 def normalize_history_note(record: PrintJobRecord) -> str:
     """Anzeige-Notiz — korrigiert widersprüchliche alte Einträge."""
+    from creality_nfc.i18n import t as _t
+
     note = (record.note or "").strip()
     dg = record.deducted_g
     if dg is not None and dg > 0:
-        if "nachträg" in note.lower():
-            return note or "Nachträglich abgezogen"
-        if not note or "kein abzug" in note.lower():
-            return "Abzug bestätigt"
+        if "nachträg" in note.lower() or "later" in note.lower():
+            return note or _t("ph.note.retro")
+        if not note or "kein abzug" in note.lower() or "no deduction" in note.lower():
+            return _t("ph.note.confirmed")
     if not note:
         return "—"
     return note
@@ -316,15 +318,17 @@ def normalize_history_note(record: PrintJobRecord) -> str:
 
 def repair_history_entry(record: PrintJobRecord) -> bool:
     """Speichert korrigierte Notiz, wenn Abzug und Notiz widersprechen."""
+    from creality_nfc.i18n import t as _t
+
     note = (record.note or "").strip()
     dg = record.deducted_g
     if dg is None or dg <= 0:
         return False
-    if note and "kein abzug" not in note.lower():
+    if note and "kein abzug" not in note.lower() and "no deduction" not in note.lower():
         return False
     record.note = (
-        "Nachträglich abgezogen"
-        if "nachträg" in note.lower()
-        else "Abzug bestätigt"
+        _t("ph.note.retro")
+        if ("nachträg" in note.lower() or "later" in note.lower())
+        else _t("ph.note.confirmed")
     )
     return True

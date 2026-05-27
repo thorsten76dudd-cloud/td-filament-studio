@@ -6,14 +6,17 @@ import html
 from pathlib import Path
 
 from creality_nfc.gcode_annotate import annotate_gcode_text, explain_gcode_line
+from creality_nfc.i18n import t as _t
 
 
 def export_gcode_with_hints_html(
     gcode_body: str,
     *,
-    title: str = "G-Code mit Erklärung",
+    title: str | None = None,
     filename: str = "",
 ) -> str:
+    if title is None:
+        title = _t("gcode_export.title")
     lines = gcode_body.splitlines()
     rows: list[str] = []
     for i, line in enumerate(lines, start=1):

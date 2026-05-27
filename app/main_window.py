@@ -18,7 +18,6 @@ from app.constants import (
     DEFAULT_PRINTER,
     PRINTER_OPTIONS,
     SKIP_DATA_JSON,
-    SUPPORTED_PRINTERS_SHORT,
     normalize_printer_model,
     printer_int_to_display,
 )
@@ -31,6 +30,7 @@ from creality_nfc.config import (
     GITHUB_URL,
     MATERIAL_DB_PRINTER_ONLY,
 )
+from creality_nfc.i18n import t as _t
 from creality_nfc.db_merge import merge_databases, merge_stats
 from creality_nfc.db_store import (
     db_path_for_printer,
@@ -182,6 +182,9 @@ class TDFilamentStudioApp(AppTk):
         self.reader = CrealityNfcReader()
         apply_window_icon(self)
         self.settings = AppSettings.load(DEFAULT_SETTINGS_PATH)
+        from creality_nfc.i18n import set_language
+
+        set_language(self.settings.language or "de")
         from ui.window_geometry import (
             WindowGeometryManager,
             clear_table_dialog_geometries,
@@ -267,60 +270,62 @@ class TDFilamentStudioApp(AppTk):
         menubar = tk.Menu(self)
         self.config(menu=menubar)
 
+        from creality_nfc.i18n import t as _t
+
         m_file = tk.Menu(menubar, tearoff=0)
-        menubar.add_cascade(label="Datei", menu=m_file)
+        menubar.add_cascade(label=_t("menu.file"), menu=m_file)
         m_import = tk.Menu(m_file, tearoff=0)
-        m_file.add_cascade(label="Import", menu=m_import)
+        m_file.add_cascade(label=_t("menu.file.import"), menu=m_import)
         if not MATERIAL_DB_PRINTER_ONLY:
-            m_import.add_command(label="Von Creality Cloud…", command=self.sync_database)
-        m_import.add_command(label="Vom Drucker (SSH)…", command=self.sync_from_printer)
+            m_import.add_command(label=_t("menu.file.import.cloud"), command=self.sync_database)
+        m_import.add_command(label=_t("menu.file.import.printer_ssh"), command=self.sync_from_printer)
         if not MATERIAL_DB_PRINTER_ONLY:
-            m_import.add_command(label="Slicer-Profile (Orca JSON)…", command=self.import_slicer_profiles)
-            m_import.add_command(label="Datenbank-Datei öffnen…", command=self.pick_database)
-            m_import.add_command(label="Cloud in lokale DB mergen…", command=self.merge_cloud)
-        m_import.add_command(label="CFS-RFID ZIP…", command=self.import_cfs_zip)
+            m_import.add_command(label=_t("menu.file.import.orca"), command=self.import_slicer_profiles)
+            m_import.add_command(label=_t("menu.file.import.db_file"), command=self.pick_database)
+            m_import.add_command(label=_t("menu.file.import.cloud_merge"), command=self.merge_cloud)
+        m_import.add_command(label=_t("menu.file.import.cfs_zip"), command=self.import_cfs_zip)
         m_file.add_separator()
         if not MATERIAL_DB_PRINTER_ONLY:
-            m_file.add_command(label="DB öffnen…", command=self.pick_database)
-            m_file.add_command(label="DB speichern unter…", command=self.save_database_as)
-        m_file.add_command(label="material_options.json exportieren…", command=self.export_options)
+            m_file.add_command(label=_t("menu.file.db_open"), command=self.pick_database)
+            m_file.add_command(label=_t("menu.file.db_save_as"), command=self.save_database_as)
+        m_file.add_command(label=_t("menu.file.export_options"), command=self.export_options)
         m_file.add_separator()
-        m_file.add_command(label="Daten sichern (ZIP)…", command=self.backup_data)
-        m_file.add_command(label="Daten wiederherstellen (ZIP)…", command=self.restore_data)
-        m_file.add_command(label="CFS-RFID ZIP importieren…", command=self.import_cfs_zip)
-        m_file.add_command(label="Tag-Daten exportieren…", command=self.export_tag_data)
-        m_file.add_command(label="Druck-Historie…", command=self.show_print_history)
-        m_file.add_command(label="Tag leeren…", command=self.format_tag_quick)
-        m_file.add_command(label="Chip duplizieren…", command=self.duplicate_chip_start)
+        m_file.add_command(label=_t("menu.file.backup_zip"), command=self.backup_data)
+        m_file.add_command(label=_t("menu.file.restore_zip"), command=self.restore_data)
+        m_file.add_command(label=_t("menu.file.cfs_zip_import"), command=self.import_cfs_zip)
+        m_file.add_command(label=_t("menu.file.export_tag"), command=self.export_tag_data)
+        m_file.add_command(label=_t("menu.file.history"), command=self.show_print_history)
+        m_file.add_command(label=_t("menu.file.format_tag"), command=self.format_tag_quick)
+        m_file.add_command(label=_t("menu.file.duplicate_chip"), command=self.duplicate_chip_start)
         m_file.add_separator()
-        m_file.add_command(label="In Hintergrund (Tray)", command=self._hide_to_tray)
+        m_file.add_command(label=_t("menu.file.tray"), command=self._hide_to_tray)
         m_file.add_separator()
-        m_file.add_command(label="Beenden", command=lambda: self._on_close(force=True))
+        m_file.add_command(label=_t("menu.file.exit"), command=lambda: self._on_close(force=True))
 
         m_extra = tk.Menu(menubar, tearoff=0)
-        menubar.add_cascade(label="Navigation", menu=m_extra)
-        m_extra.add_command(label="Tab: RFID-Tag", command=lambda: self.notebook.select(self.tab_tag))
-        m_extra.add_command(label="Tag leeren…", command=self.format_tag_quick)
-        m_extra.add_command(label="Chip duplizieren…", command=self.duplicate_chip_start)
-        m_extra.add_command(label="Tab: Filament-Profil", command=lambda: self.notebook.select(self.tab_profile))
-        m_extra.add_command(label="Tab: Material-DB", command=lambda: self.notebook.select(self.tab_db))
-        m_extra.add_command(label="Tab: Drucker", command=lambda: self.notebook.select(self.tab_printer))
-        m_extra.add_command(label="Tab: Meine Spulen", command=lambda: self.notebook.select(self.tab_spools))
+        menubar.add_cascade(label=_t("menu.nav"), menu=m_extra)
+        m_extra.add_command(label=_t("menu.nav.tab.rfid"), command=lambda: self.notebook.select(self.tab_tag))
+        m_extra.add_command(label=_t("menu.file.format_tag"), command=self.format_tag_quick)
+        m_extra.add_command(label=_t("menu.file.duplicate_chip"), command=self.duplicate_chip_start)
+        m_extra.add_command(label=_t("menu.nav.tab.profile"), command=lambda: self.notebook.select(self.tab_profile))
+        m_extra.add_command(label=_t("menu.nav.tab.material_db"), command=lambda: self.notebook.select(self.tab_db))
+        m_extra.add_command(label=_t("menu.nav.tab.printer"), command=lambda: self.notebook.select(self.tab_printer))
+        m_extra.add_command(label=_t("menu.nav.tab.spools"), command=lambda: self.notebook.select(self.tab_spools))
         m_extra.add_command(
-            label="Tab: Modell-Bibliothek", command=lambda: self.notebook.select(self.tab_models)
+            label=_t("menu.nav.tab.library"), command=lambda: self.notebook.select(self.tab_models)
         )
-        m_extra.add_command(label="Tab: Hilfe", command=lambda: self.notebook.select(self.tab_help))
+        m_extra.add_command(label=_t("menu.nav.tab.help"), command=lambda: self.notebook.select(self.tab_help))
         m_extra.add_separator()
-        m_extra.add_command(label="Tag-Halter (Links)…", command=self.open_tag_holder_links)
-        m_extra.add_command(label="Tab: Einstellungen", command=lambda: self.notebook.select(self.tab_settings))
-        m_extra.add_command(label="Drucker verwalten…", command=self.open_printer_manager)
+        m_extra.add_command(label=_t("menu.nav.tag_holder_links"), command=self.open_tag_holder_links)
+        m_extra.add_command(label=_t("menu.nav.tab.settings"), command=lambda: self.notebook.select(self.tab_settings))
+        m_extra.add_command(label=_t("menu.file.printers"), command=self.open_printer_manager)
         self._cfs_preview_var = tk.BooleanVar(value=False)
         m_extra.add_checkbutton(
-            label="CFS-Vorschau (4 Boxen, nur Anzeige)",
+            label=_t("menu.nav.cfs_preview"),
             variable=self._cfs_preview_var,
             command=self._toggle_cfs_preview,
         )
-        m_extra.add_command(label="Nach Updates suchen", command=self.check_updates)
+        m_extra.add_command(label=_t("menu.nav.check_updates"), command=self.check_updates)
 
     def _build_header(self) -> None:
         hdr = tk.Frame(self, bg=HEADER)
@@ -371,7 +376,7 @@ class TDFilamentStudioApp(AppTk):
         right.pack(side="right", anchor="n", padx=(16, 0))
         self.db_badge = tk.Label(
             right,
-            text="Datenbank: …",
+            text=_t("mw.ui.database_loading"),
             bg=HEADER_SURFACE,
             fg=ON_HEADER,
             font=F_BADGE,
@@ -397,14 +402,16 @@ class TDFilamentStudioApp(AppTk):
         self.tab_help = ttk.Frame(self.notebook, padding=tab_pad)
         self.tab_settings = ttk.Frame(self.notebook, padding=tab_pad)
 
-        self.notebook.add(self.tab_tag, text=" RFID-Tag ")
-        self.notebook.add(self.tab_profile, text=" Filament-Profil ")
-        self.notebook.add(self.tab_db, text=" Material-DB ")
-        self.notebook.add(self.tab_printer, text=" Drucker ")
-        self.notebook.add(self.tab_spools, text=" Meine Spulen ")
-        self.notebook.add(self.tab_models, text=" Modell-Bibliothek ")
-        self.notebook.add(self.tab_help, text=" Hilfe ")
-        self.notebook.add(self.tab_settings, text=" Einstellungen ")
+        from creality_nfc.i18n import t as _t
+
+        self.notebook.add(self.tab_tag, text=f" {_t('tab.rfid')} ")
+        self.notebook.add(self.tab_profile, text=f" {_t('tab.profile')} ")
+        self.notebook.add(self.tab_db, text=f" {_t('tab.material_db')} ")
+        self.notebook.add(self.tab_printer, text=f" {_t('tab.printer')} ")
+        self.notebook.add(self.tab_spools, text=f" {_t('tab.spools')} ")
+        self.notebook.add(self.tab_models, text=f" {_t('tab.library')} ")
+        self.notebook.add(self.tab_help, text=f" {_t('tab.help')} ")
+        self.notebook.add(self.tab_settings, text=f" {_t('tab.settings')} ")
 
         saved = load_settings()
         from creality_nfc.printer_ssh import default_password
@@ -450,7 +457,7 @@ class TDFilamentStudioApp(AppTk):
         root.pack(fill="both", expand=True)
 
         # Feste Aktionsleiste — bleibt sichtbar, kein Überlappen mit Formular
-        action_bar = ttk.LabelFrame(root, text="  Aktionen  ", padding=(14, 12))
+        action_bar = ttk.LabelFrame(root, text=_t("mw.ui.actions"), padding=(14, 12))
         action_bar.pack(fill="x", pady=(0, 6))
 
         tag_info = tk.Frame(
@@ -462,7 +469,7 @@ class TDFilamentStudioApp(AppTk):
         tag_info.pack(fill="x", pady=(0, 10))
         self.spool_match_label = tk.Label(
             tag_info,
-            text="— Tag auflegen oder „Tag lesen“ —",
+            text=_t("mw.spool.placeholder_read"),
             font=F_HEAD,
             bg=BG_SUBTLE,
             fg=MUTED,
@@ -475,7 +482,7 @@ class TDFilamentStudioApp(AppTk):
         tag_sub.pack(fill="x", padx=12, pady=(0, 10))
         tk.Label(
             tag_sub,
-            text="UID",
+            text=_t("mw.ui.uid"),
             font=F_SMALL,
             bg=BG_SUBTLE,
             fg=MUTED,
@@ -514,32 +521,32 @@ class TDFilamentStudioApp(AppTk):
         self.color_preview.pack(padx=6, pady=6)
         self._update_color_preview()
         tip(
-            ttk.Button(btn_row, text="Farbe…", command=self.pick_color, style="Secondary.TButton"),
-            "Filamentfarbe für den RFID-Tag wählen (Hex-Farbcode).",
+            ttk.Button(btn_row, text=_t("mw.btn.color"), command=self.pick_color, style="Secondary.TButton"),
+            _t("mw.tag.color_pick_tip"),
         ).pack(side="left", padx=(0, 4))
         self._btn_color_presets = tip(
-            ttk.Button(btn_row, text="Presets", command=self.show_color_presets, style="Secondary.TButton"),
-            "Standardfarben (Schwarz, Weiß, Creality-Blau …).",
+            ttk.Button(btn_row, text=_t("mw.btn.presets"), command=self.show_color_presets, style="Secondary.TButton"),
+            _t("mw.tag.color_defaults_tip"),
         )
         self._btn_color_presets.pack(side="left", padx=(0, 4))
         tip(
-            ttk.Button(btn_row, text="Foto…", command=self.pick_color_from_image, style="Secondary.TButton"),
-            "Farbe aus Filament-Foto schätzen (JPG/PNG).",
+            ttk.Button(btn_row, text=_t("mw.btn.photo"), command=self.pick_color_from_image, style="Secondary.TButton"),
+            _t("mw.tag.color_photo_tip"),
         ).pack(side="left", padx=(0, 8))
         tip(
-            ttk.Button(btn_row, text="Tag lesen", command=self.read_tag, style="Secondary.TButton"),
+            ttk.Button(btn_row, text=_t("mw.btn.read_tag"), command=self.read_tag, style="Secondary.TButton"),
             "Aktuellen Inhalt vom NFC-Tag einlesen (UID, Farbe, Gewicht, Filament-ID).",
         ).pack(side="left", padx=(0, 8))
         tip(
-            ttk.Button(btn_row, text="Tag schreiben", command=self.write_tag, style="Accent.TButton"),
-            "Gewähltes Profil, Farbe und Seriennummer auf den Tag schreiben.",
+            ttk.Button(btn_row, text=_t("mw.btn.write_tag"), command=self.write_tag, style="Accent.TButton"),
+            _t("mw.tag.write_tip"),
         ).pack(side="left", padx=(0, 4))
         tip(
-            ttk.Button(btn_row, text="Tag leeren…", command=self.format_tag_quick, style="Secondary.TButton"),
-            "Creality-Daten vom Tag löschen (nicht physisch zerstören — danach neu beschreiben).",
+            ttk.Button(btn_row, text=_t("mw.btn.format_tag"), command=self.format_tag_quick, style="Secondary.TButton"),
+            _t("mw.tag.format_tip"),
         ).pack(side="left", padx=(0, 4))
         tip(
-            ttk.Button(btn_row, text="Chip duplizieren…", command=self.duplicate_chip_start, style="Secondary.TButton"),
+            ttk.Button(btn_row, text=_t("mw.btn.duplicate_chip"), command=self.duplicate_chip_start, style="Secondary.TButton"),
             CHIP_DUP_TOOLTIP,
         ).pack(side="left", padx=(0, 8))
         self._chip_dup_hint_frame = tk.Frame(action_bar, bg=ACCENT_SOFT)
@@ -561,12 +568,12 @@ class TDFilamentStudioApp(AppTk):
             ),
         )
         tip(
-            ttk.Button(btn_row, text="Tag export…", command=self.export_tag_data, style="Secondary.TButton"),
+            ttk.Button(btn_row, text=_t("mw.btn.export_tag"), command=self.export_tag_data, style="Secondary.TButton"),
             "Zuletzt gelesene Tag-Daten als JSON speichern.",
         ).pack(side="left", padx=(0, 8))
         tip(
-            ttk.Button(btn_row, text="Spule speichern", command=self.save_current_spool, style="Secondary.TButton"),
-            "Aktuelle Tag-Daten als Spule unter „Meine Spulen“ speichern.",
+            ttk.Button(btn_row, text=_t("mw.btn.save_spool"), command=self.save_current_spool, style="Secondary.TButton"),
+            _t("mw.tip.save_spool"),
         ).pack(side="left")
 
         self._placement_box = tk.Frame(
@@ -596,45 +603,45 @@ class TDFilamentStudioApp(AppTk):
 
         _canvas, scroll = scrollable_tab(root)
 
-        sec_reader = section(scroll, "NFC-Reader")
+        sec_reader = section(scroll, _t("mw.section.nfc_reader"))
         r1 = ttk.Frame(sec_reader)
         r1.pack(fill="x", pady=(0, 4))
         tip(
-            ttk.Button(r1, text="Reader verbinden", command=self.connect_reader, style="Secondary.TButton"),
-            "ACS NFC-Reader per USB verbinden (PC/SC muss laufen).",
+            ttk.Button(r1, text=_t("mw.btn.connect_reader"), command=self.connect_reader, style="Secondary.TButton"),
+            _t("mw.tip.connect_reader"),
         ).pack(side="left", padx=(0, 6), pady=2)
         tip(
             ttk.Button(
-                r1, text="Smartcard starten", command=self.start_smartcard_service, style="Secondary.TButton"
+                r1, text=_t("mw.btn.smartcard_start"), command=self.start_smartcard_service, style="Secondary.TButton"
             ),
-            "Windows-Dienst „Smartcard“ starten (oft Admin-Rechte nötig).",
+            _t("mw.tag.smartcard_start_tip"),
         ).pack(side="left", padx=(0, 6), pady=2)
         tip(
-            ttk.Button(r1, text="Tag-Speicher…", command=self.open_tag_tools, style="Secondary.TButton"),
-            "Erweiterte Tag-Tools: Sektoren anzeigen, leeren, Prüfsumme.",
+            ttk.Button(r1, text=_t("mw.btn.tag_memory"), command=self.open_tag_tools, style="Secondary.TButton"),
+            _t("mw.tag.advanced_tools_tip"),
         ).pack(side="left", pady=2)
         r2 = ttk.Frame(sec_reader)
         r2.pack(fill="x")
         reader_actions: list[tuple[str, object, str]] = [
             (
-                "Tag-Halter STL speichern…",
+                _t("mw.btn.holder_stl"),
                 lambda: save_bundled_plastic_holder_stls(self),
-                "RFID-Tag-Halter für Creality-Kunststoffspulen: Grundkörper + 1A–1D (5 STL) — 2× pro Spule drucken.",
+                _t("mw.tag.holder_links_tip"),
             ),
             (
                 "Tag-Halter (Links)…",
                 self.open_tag_holder_links,
-                "Halter (Thingiverse), Tags/Reader (Amazon-Beispiele), weitere Links — Printables & Creality Cloud.",
+                _t("mw.tip.holder_links"),
             ),
             (
-                "Drucker wählen…",
+                _t("mw.tag.choose_printer"),
                 self.open_printer_manager,
-                "Drucker-IP, Modell und SSH-Passwort verwalten und übernehmen.",
+                _t("mw.tag.choose_printer_tip"),
             ),
         ]
         if not MATERIAL_DB_PRINTER_ONLY:
             reader_actions.append(
-                ("DB speichern…", self.save_database_as, "Material-Datenbank als JSON-Datei speichern."),
+                (_t("mw.db.save_as"), self.save_database_as, _t("mw.tip.save_db_json")),
             )
         for text, cmd, help_txt in reader_actions:
             tip(
@@ -644,14 +651,14 @@ class TDFilamentStudioApp(AppTk):
         tip(
             ttk.Button(
                 r2,
-                text="Gleiche Spule nochmal",
+                text=_t("mw.btn.same_spool_again"),
                 command=self._duplicate_last_tag_template,
                 style="Accent.TButton",
             ),
-            "Letztes Material erneut laden — Seriennummer +1, neuer Tag.",
+            _t("mw.tip.same_spool_again"),
         ).pack(side="left", padx=(0, 6), pady=2)
 
-        sec_mat = section(scroll, "Filament für den Tag")
+        sec_mat = section(scroll, _t("mw.section.filament_for_tag"))
         form = ttk.Frame(sec_mat)
         form.pack(fill="x")
         form.columnconfigure(1, weight=1)
@@ -664,10 +671,10 @@ class TDFilamentStudioApp(AppTk):
 
         ip_wrap = ttk.Frame(form)
         ttk.Entry(ip_wrap, textvariable=self.ssh_host_var).pack(fill="x")
-        _grid_row(0, "Drucker-IP", ip_wrap, pady=(0, 2))
+        _grid_row(0, _t("mw.label.printer_ip"), ip_wrap, pady=(0, 2))
         ttk.Label(
             form,
-            text="Gleiche IP für RFID, Drucker-Tab und SSH.",
+            text=_t("mw.tag.same_ip_hint"),
             style="Muted.TLabel",
             wraplength=520,
         ).grid(row=1, column=0, columnspan=2, sticky="w", pady=(0, 6))
@@ -679,9 +686,9 @@ class TDFilamentStudioApp(AppTk):
         self.search_var.trace_add("write", lambda *_: self._apply_material_filter())
         tip(
             ttk.Button(search_wrap, text="✕", width=3, command=self._clear_search),
-            "Suchfeld leeren und alle Materialien wieder anzeigen.",
+            _t("mw.tip.clear_search"),
         ).pack(side="left", padx=(6, 0))
-        _grid_row(2, "Suche", search_wrap)
+        _grid_row(2, _t("mw.label.search"), search_wrap)
 
         self.printer_var = tk.StringVar(value=DEFAULT_PRINTER)
         self.brand_var = tk.StringVar()
@@ -692,7 +699,7 @@ class TDFilamentStudioApp(AppTk):
         self.printer_combo = ttk.Combobox(
             form, textvariable=self.printer_var, values=list(PRINTER_OPTIONS), state="readonly"
         )
-        _grid_row(3, "Drucker (am Tag)", self.printer_combo)
+        _grid_row(3, _t("mw.label.printer_on_tag"), self.printer_combo)
         self.printer_combo.bind("<<ComboboxSelected>>", self._on_printer_change)
         saved_printer = normalize_printer_model(
             load_settings().get("printer", DEFAULT_PRINTER)
@@ -700,14 +707,14 @@ class TDFilamentStudioApp(AppTk):
         self.printer_var.set(saved_printer)
         ttk.Label(
             form,
-            text=SUPPORTED_PRINTERS_SHORT,
+            text=_t("app.supported_printers_short"),
             style="Muted.TLabel",
             wraplength=520,
             justify="left",
         ).grid(row=4, column=0, columnspan=2, sticky="w", pady=(0, 6))
 
         self.brand_combo = ttk.Combobox(form, textvariable=self.brand_var, state="readonly")
-        _grid_row(5, "Marke", self.brand_combo)
+        _grid_row(5, _t("mw.label.brand"), self.brand_combo)
         self.brand_combo.bind("<<ComboboxSelected>>", self._on_brand_change)
 
         mat_wrap = ttk.Frame(form)
@@ -720,7 +727,7 @@ class TDFilamentStudioApp(AppTk):
             style="Muted.TLabel",
             wraplength=480,
         ).grid(row=1, column=0, sticky="w", pady=(4, 0))
-        _grid_row(6, "Material", mat_wrap)
+        _grid_row(6, _t("mw.label.material"), mat_wrap)
         self.material_combo.bind("<<ComboboxSelected>>", self._on_material_selected)
 
         prof_btns = ttk.Frame(form)
@@ -729,23 +736,23 @@ class TDFilamentStudioApp(AppTk):
         self._btn_edit_profile = tip(
             ttk.Button(
                 prof_btns,
-                text="Profil bearbeiten",
+                text=_t("mw.btn.edit_profile"),
                 command=self.edit_filament,
                 style="Secondary.TButton",
             ),
-            "Tab „Filament-Profil“ — Profil anzeigen (nur Lesen, Daten vom Drucker)."
+            _t("mw.tip.edit_profile_readonly")
             if MATERIAL_DB_PRINTER_ONLY
-            else "Tab „Filament-Profil“ öffnen und Material bearbeiten.",
+            else _t("mw.profile.open_tab"),
         )
         self._btn_edit_profile.grid(row=0, column=0, sticky="ew", padx=(0, 4), pady=2)
         self._btn_new_profile = tip(
             ttk.Button(
                 prof_btns,
-                text="Neues Profil…",
+                text=_t("mw.btn.new_profile"),
                 command=self.add_filament,
                 style="Secondary.TButton",
             ),
-            "Neues Filament-Profil in der Datenbank anlegen.",
+            _t("mw.tip.new_profile"),
         )
         self._btn_new_profile.grid(row=0, column=1, sticky="ew", pady=2)
         if MATERIAL_DB_PRINTER_ONLY:
@@ -754,20 +761,20 @@ class TDFilamentStudioApp(AppTk):
         tip(
             ttk.Button(
                 prof_btns,
-                text="Datenbank laden…",
+                text=_t("mw.btn.load_database"),
                 command=self._goto_db_tab,
                 style="Secondary.TButton",
             ),
-            "Zum Tab Material-Datenbank — Profil nur per „Vom Drucker (SSH)“ laden."
+            _t("mw.tip.goto_db_printer")
             if MATERIAL_DB_PRINTER_ONLY
-            else "Zum Tab Material-Datenbank wechseln (Import vom Drucker/Cloud).",
+            else _t("mw.tip.goto_db_cloud"),
         ).grid(row=1, column=0, columnspan=2, sticky="ew", pady=2)
-        _grid_row(7, "Profil", prof_btns, pady=(6, 4))
+        _grid_row(7, _t("mw.label.profile"), prof_btns, pady=(6, 4))
 
         weight_c = ttk.Combobox(
             form, textvariable=self.weight_var, values=list(WEIGHT_CODES.keys()), state="readonly"
         )
-        _grid_row(8, "Gewicht (Tag)", weight_c)
+        _grid_row(8, _t("mw.label.weight_tag"), weight_c)
 
         self.spool_var = tk.StringVar()
         spool_wrap = ttk.Frame(form)
@@ -775,13 +782,13 @@ class TDFilamentStudioApp(AppTk):
         self.spool_combo.pack(side="left", fill="x", expand=True)
         tip(
             ttk.Button(spool_wrap, text="…", width=3, command=self._goto_spools_tab),
-            "Tab „Meine Spulen“ öffnen (Inventar verwalten).",
+            _t("mw.spool.open_tab_tip"),
         ).pack(side="left", padx=(6, 0))
-        _grid_row(9, "Meine Spule", spool_wrap)
+        _grid_row(9, _t("mw.label.my_spool"), spool_wrap)
         self.spool_combo.bind("<<ComboboxSelected>>", self._on_spool_selected)
         self._refresh_spool_combo()
 
-        opts = ttk.LabelFrame(scroll, text="  Optionen  ", padding=6)
+        opts = ttk.LabelFrame(scroll, text=_t("mw.ui.options"), padding=6)
         opts.pack(fill="x", pady=(0, 6))
         self.auto_read_var = tk.BooleanVar(value=self.settings.auto_read_tag)
         self.auto_write_var = tk.BooleanVar(value=self.settings.auto_write_tag)
@@ -794,36 +801,36 @@ class TDFilamentStudioApp(AppTk):
         oc.columnconfigure(1, weight=1)
         ttk.Checkbutton(
             oc,
-            text="Auto lesen",
+            text=_t("settings.auto_read"),
             variable=self.auto_read_var,
             command=self._sync_auto_flags,
         ).grid(row=0, column=0, sticky="w", pady=2)
         ttk.Checkbutton(
             oc,
-            text="Auto schreiben",
+            text=_t("settings.auto_write"),
             variable=self.auto_write_var,
             command=self._sync_auto_flags,
         ).grid(row=0, column=1, sticky="w", pady=2)
         ttk.Checkbutton(
             oc,
-            text="Stapelmodus",
+            text=_t("settings.batch_write"),
             variable=self.batch_write_var,
             command=self._sync_batch_flag,
         ).grid(row=1, column=0, sticky="w", pady=2)
         serial_row = ttk.Frame(oc)
         serial_row.grid(row=1, column=1, sticky="ew", pady=2)
-        ttk.Label(serial_row, text="SN").pack(side="left")
+        ttk.Label(serial_row, text=_t("mw.ui.sn")).pack(side="left")
         self.serial_var = tk.StringVar(value=self.settings.next_serial_str())
         ttk.Entry(serial_row, textvariable=self.serial_var, width=8).pack(side="left", padx=4)
         ttk.Checkbutton(
             serial_row,
-            text="Auto +1",
+            text=_t("settings.auto_serial"),
             variable=self.auto_serial_var,
             command=self._on_serial_mode_change,
         ).pack(side="left")
         ttk.Checkbutton(
             oc,
-            text="Spule in „Meine Spulen“ sync",
+            text=_t("settings.auto_sync_spool"),
             variable=self.auto_sync_spool_var,
             command=self._sync_auto_flags,
         ).grid(row=2, column=0, columnspan=2, sticky="w", pady=2)
@@ -831,23 +838,23 @@ class TDFilamentStudioApp(AppTk):
         tip(
             ttk.Button(
                 scroll,
-                text="→ Tab Filament-Profil (Druckparameter)",
+                text=_t("mw.label.goto_profile_tab"),
                 command=self._goto_profile_tab,
                 style="Accent.TButton",
             ),
-            "Gewähltes Material im Tab Filament-Profil ansehen (nur Lesen, Daten vom Drucker)."
+            _t("mw.profile.view_tip")
             if MATERIAL_DB_PRINTER_ONLY
-            else "Gewähltes Material im eigenen Tab bearbeiten und in der DB speichern.",
+            else _t("mw.profile.edit_tip"),
         ).pack(anchor="w", pady=(8, 4))
 
-        sec_diag = section(scroll, "Tag-Rohdaten (Reader-Auslesen)")
+        sec_diag = section(scroll, _t("mw.section.tag_raw"))
         sec_diag.pack(fill="both", expand=True, pady=(8, 4))
         diag_btns = ttk.Frame(sec_diag)
         diag_btns.pack(fill="x", pady=(0, 4))
         tip(
             ttk.Button(
                 diag_btns,
-                text="Jetzt vom Tag lesen",
+                text=_t("mw.btn.read_now"),
                 command=self._refresh_tag_diagnostic_manual,
                 style="Secondary.TButton",
             ),
@@ -859,8 +866,7 @@ class TDFilamentStudioApp(AppTk):
         self.tag_diag_text.pack(fill="both", expand=True)
         self.tag_diag_text.insert(
             "1.0",
-            "Hier erscheinen UID, Blöcke und Payload nach „Tag lesen“, „Tag leeren“ oder „Jetzt vom Tag lesen“.\n"
-            "Nach „Tag leeren“: Tag 2–3 Sekunden vom Reader nehmen, wieder auflegen, dann prüfen.",
+            _t("mw.tag.read_hint"),
         )
         self.tag_diag_text.config(state="disabled")
 
@@ -869,7 +875,7 @@ class TDFilamentStudioApp(AppTk):
         root.pack(fill="both", expand=True)
         ttk.Label(
             root,
-            text="Druckparameter des gewählten Materials. Auswahl: Tab „RFID-Tag“ → Marke/Material.",
+            text=_t("mw.profile.params_hint"),
             style="Muted.TLabel",
             wraplength=900,
         ).pack(anchor="w", padx=8, pady=(8, 4))
@@ -892,25 +898,24 @@ class TDFilamentStudioApp(AppTk):
         top.columnconfigure(0, weight=1)
         top.rowconfigure(1, weight=1)
 
-        sec = section(top, "Material-Datenbank (nur vom Drucker)")
+        sec = section(top, _t("mw.section.material_db_printer"))
         sec.grid(row=0, column=0, sticky="ew", padx=4, pady=(4, 2))
         if MATERIAL_DB_PRINTER_ONLY:
             intro = (
-                "Die Profil-Liste kommt nur aus „Vom Drucker (SSH)“ — keine Cloud, "
-                "keine Datei, kein Merge. Nach dem Laden wird sie lokal zwischengespeichert "
-                "und beim nächsten Start wieder geladen. Tab „Filament-Profil“ nur Lesen. "
-                "Druckparameter änderst du in Creality Print."
+                _t("mw.profile.db_printer_only_intro")
+                + " "
+                + _t("mw.profile.read_only_hint")
             )
         else:
             intro = (
-                "Sicherer Modus: Profile vom K2 holen und lokal bearbeiten — "
-                "nichts wird per SSH auf den Drucker geschrieben. "
-                "Druckparameter am Drucker änderst du in Creality Print."
+                _t("mw.profile.db_safe_mode_intro")
+                + " "
+                + _t("mw.profile.printer_creality_print")
             )
         ttk.Label(sec, text=intro, style="Muted.TLabel", wraplength=820).pack(
             anchor="w", pady=(0, 6)
         )
-        self.db_label = ttk.Label(sec, text="Lade…", style="Muted.TLabel", wraplength=800)
+        self.db_label = ttk.Label(sec, text=_t("mw.ui.db_loading"), style="Muted.TLabel", wraplength=800)
         self.db_label.pack(anchor="w", pady=(0, 6))
 
         grid = ttk.Frame(sec)
@@ -918,12 +923,12 @@ class TDFilamentStudioApp(AppTk):
         if MATERIAL_DB_PRINTER_ONLY:
             actions = [
                 (
-                    "Vom Drucker (SSH)",
+                    _t("mw.db.from_printer_ssh"),
                     self.sync_from_printer,
-                    "material_database.json per SSH vom Drucker holen.",
+                    _t("mw.tip.db_ssh"),
                 ),
                 (
-                    "CFS-RFID ZIP…",
+                    _t("mw.db.cfs_zip"),
                     self.import_cfs_zip,
                     "Backup-ZIP mit Datenbank und Einstellungen importieren.",
                 ),
@@ -931,29 +936,29 @@ class TDFilamentStudioApp(AppTk):
         else:
             actions = [
                 (
-                    "Von Creality Cloud",
+                    _t("mw.db.from_cloud"),
                     self.sync_database,
-                    "Material-Datenbank von Creality Cloud herunterladen.",
+                    _t("mw.tip.db_cloud"),
                 ),
                 (
-                    "Vom Drucker (SSH)",
+                    _t("mw.db.from_printer_ssh"),
                     self.sync_from_printer,
-                    "material_database.json per SSH vom Drucker holen (nur Lesen).",
+                    _t("mw.tip.db_ssh_readonly"),
                 ),
                 (
-                    "Cloud mergen",
+                    _t("mw.db.cloud_merge"),
                     self.merge_cloud,
-                    "Cloud-Daten mit der lokalen Datenbank zusammenführen.",
+                    _t("mw.db.cloud_merge_tip"),
                 ),
-                ("Datei öffnen…", self.pick_database, "Bestehende JSON-Datenbank von der Festplatte laden."),
+                (_t("mw.db.open_file"), self.pick_database, _t("mw.db.open_file_tip")),
                 (
-                    "Slicer-Profile import…",
+                    _t("mw.db.slicer_import"),
                     self.import_slicer_profiles,
                     "Orca/Creality JSON — Notizen: {\"id\",\"vendor\",\"type\",\"name\"}.",
                 ),
-                ("DB speichern…", self.save_database_as, "Datenbank als JSON-Datei exportieren."),
+                (_t("mw.db.save_as"), self.save_database_as, "Datenbank als JSON-Datei exportieren."),
                 (
-                    "CFS-RFID ZIP…",
+                    _t("mw.db.cfs_zip"),
                     self.import_cfs_zip,
                     "Backup-ZIP mit Datenbank und Einstellungen importieren.",
                 ),
@@ -967,11 +972,11 @@ class TDFilamentStudioApp(AppTk):
                 help_txt,
             ).grid(row=r, column=c, sticky="ew", padx=3, pady=3)
 
-        list_sec = section(top, "Alle Material-Profile")
+        list_sec = section(top, _t("mw.section.all_profiles"))
         list_sec.grid(row=1, column=0, sticky="nsew", padx=4, pady=4)
         self._profile_list_title = ttk.Label(
             list_sec,
-            text="0 Profile — Suche filtert die Liste",
+            text=_t("mw.ui.profile_list_empty"),
             style="Muted.TLabel",
         )
         self._profile_list_title.pack(anchor="w", pady=(0, 6))
@@ -983,7 +988,7 @@ class TDFilamentStudioApp(AppTk):
         self._db_list_search_var.trace_add("write", lambda *_: self._refresh_profile_list())
         tip(
             ttk.Button(search_db, text="✕", width=3, command=lambda: self._db_list_search_var.set("")),
-            "Filter zurücksetzen.",
+            _t("mw.db.reset_filter"),
         ).pack(side="left", padx=(6, 0))
         tree_wrap = ttk.Frame(list_sec)
         tree_wrap.pack(fill="both", expand=True)
@@ -999,7 +1004,7 @@ class TDFilamentStudioApp(AppTk):
         for col, title, width in (
             ("id", "ID", 72),
             ("brand", "Marke", 120),
-            ("name", "Material", 220),
+            ("name", _t("mw.label.material"), 220),
             ("type", "Typ", 80),
         ):
             self._profile_tree.heading(col, text=title)
@@ -1015,20 +1020,20 @@ class TDFilamentStudioApp(AppTk):
         tip(
             ttk.Button(
                 tree_btns,
-                text="Für RFID-Tag übernehmen",
+                text=_t("mw.db.adopt_for_rfid"),
                 command=self._apply_profile_tree_selection,
                 style="Accent.TButton",
             ),
-            "Ausgewähltes Profil in Tab „RFID-Tag“ übernehmen.",
+            _t("mw.db.adopt_rfid_tip"),
         ).pack(side="left", padx=(0, 8))
         tip(
             ttk.Button(
                 tree_btns,
-                text="Profil bearbeiten",
+                text=_t("mw.btn.edit_profile"),
                 command=self._edit_profile_tree_selection,
                 style="Secondary.TButton",
             ),
-            "Filament-Profil-Tab mit Auswahl öffnen.",
+            _t("mw.db.open_profile_tab_tip"),
         ).pack(side="left")
 
         foot = ttk.Frame(top)
@@ -1037,17 +1042,17 @@ class TDFilamentStudioApp(AppTk):
         foot_row.pack(fill="x")
         ttk.Label(
             foot_row,
-            text="Doppelklick = RFID-Tag · Bearbeiten: Tab „Filament-Profil“",
+            text=_t("mw.ui.db_list_hint"),
             style="Muted.TLabel",
         ).pack(side="left")
         tip(
             ttk.Button(
                 foot_row,
-                text="Drucker & SSH →",
+                text=_t("mw.ui.goto_printer_ssh"),
                 command=lambda: self.notebook.select(self.tab_printer),
                 style="Secondary.TButton",
             ),
-            "IP, SSH, DB-Vergleich und Upload im Tab „Drucker“.",
+            _t("mw.tip.printer_ssh"),
         ).pack(side="right")
 
     def _build_tab_printer(self) -> None:
@@ -1081,7 +1086,7 @@ class TDFilamentStudioApp(AppTk):
         left.pack(side="left", fill="x", expand=True)
         self.scard_dot = tk.Label(left, text="●", bg=BG_SUBTLE, fg=MUTED, font=(FONT, 11))
         self.scard_dot.pack(side="left", padx=(0, 10))
-        self.status_label = ttk.Label(left, text="Bereit", style="Footer.TLabel")
+        self.status_label = ttk.Label(left, text=_t("scard.state.ok"), style="Footer.TLabel")
         self.status_label.pack(side="left", anchor="w")
 
         foot_font = (FONT, 10)
@@ -1107,7 +1112,7 @@ class TDFilamentStudioApp(AppTk):
                 font=foot_font,
                 compact=True,
             ),
-            "App-Einstellungen öffnen (Pfade, Auto-Lesen/Schreiben, NFC).",
+            _t("mw.settings.open_tip"),
         )
         self.btn_scard_help = tip(
             rounded_button(
@@ -1118,7 +1123,7 @@ class TDFilamentStudioApp(AppTk):
                 font=foot_font,
                 compact=True,
             ),
-            "Hilfe zum NFC-Reader und Windows Smartcard-Dienst.",
+            _t("mw.tip.smartcard_help"),
         )
         self.btn_scard = tip(
             rounded_button(
@@ -1160,12 +1165,12 @@ class TDFilamentStudioApp(AppTk):
         cf_btns = ttk.Frame(self.confirm_frame)
         cf_btns.pack(side="right")
         self._btn_confirm_yes = tip(
-            ttk.Button(cf_btns, text="Ja", command=self._on_confirm_yes, style="Accent.TButton"),
-            "Aktion bestätigen und ausführen.",
+            ttk.Button(cf_btns, text=_t("btn.yes"), command=self._on_confirm_yes, style="Accent.TButton"),
+            _t("mw.confirm_run_tip"),
         )
         self._btn_confirm_yes.pack(side="left", padx=(0, 6))
         self._btn_confirm_no = tip(
-            ttk.Button(cf_btns, text="Nein", command=self._on_confirm_no, style="Secondary.TButton"),
+            ttk.Button(cf_btns, text=_t("btn.no"), command=self._on_confirm_no, style="Secondary.TButton"),
             "Aktion abbrechen.",
         )
         self._btn_confirm_no.pack(side="left")
@@ -1180,7 +1185,7 @@ class TDFilamentStudioApp(AppTk):
         log_card.pack(fill="x", padx=12, pady=(0, 4))
         ttk.Label(
             log_card,
-            text="Protokoll",
+            text=_t("statusbar.log"),
             style="CardHeading.TLabel",
         ).pack(anchor="w", padx=10, pady=(6, 0))
         self.msg_log = scrolledtext.ScrolledText(
@@ -1199,11 +1204,11 @@ class TDFilamentStudioApp(AppTk):
         if self._log_visible:
             self._log_panel.pack_forget()
             self._log_visible = False
-            self.btn_log.configure(text="Protokoll")
+            self.btn_log.configure(text=_t("statusbar.log"))
         else:
             self._log_panel.pack(fill="x", side="bottom", before=self._statusbar_frame)
             self._log_visible = True
-            self.btn_log.configure(text="Protokoll ▾")
+            self.btn_log.configure(text=_t("statusbar.log") + " ▾")
 
     def notify(self, text: str, level: str = "info") -> None:
         ts = datetime.now().strftime("%H:%M:%S")
@@ -1281,7 +1286,7 @@ class TDFilamentStudioApp(AppTk):
         self.batch_write_var.set(settings.batch_write_mode)
         if settings.auto_increment_serial:
             self.serial_var.set(f"{self.settings.next_serial:06d}")
-        self.notify("Einstellungen gespeichert", "ok")
+        self.notify(_t("mw.notify.settings_saved"), "ok")
         self._sync_creality_watcher()
         if not settings.tray_run_in_background:
             self._stop_background_tray()
@@ -1313,18 +1318,18 @@ class TDFilamentStudioApp(AppTk):
 
         if state == "ok":
             self.scard_dot.config(fg=OK)
-            self.btn_scard.config(text="Smartcard starten")
+            self.btn_scard.config(text=_t("mw.btn.smartcard_start"))
             self.btn_scard.pack_forget()
         elif state == "no_reader":
             self.scard_dot.config(fg=WARN)
             self.btn_scard.pack_forget()
         elif state == "service_stuck":
             self.scard_dot.config(fg=ERR)
-            self.btn_scard.config(text="Neu starten (UAC)")
+            self.btn_scard.config(text=_t("mw.btn.smartcard_restart_uac"))
             self._pack_scard_buttons()
         else:
             self.scard_dot.config(fg=ERR)
-            self.btn_scard.config(text="Smartcard starten")
+            self.btn_scard.config(text=_t("mw.btn.smartcard_start"))
             self._pack_scard_buttons()
         self.btn_scard_help.pack_forget()
         self.btn_scard.pack_forget()
@@ -1345,21 +1350,21 @@ class TDFilamentStudioApp(AppTk):
         if state == "ok":
             self.connect_reader(show_errors=False)
         elif state == "no_reader":
-            self._set_status("Smartcard OK — Reader per USB verbinden", "warn")
+            self._set_status(_t("mw.notify.smartcard_ok_connect_usb"), "warn")
         elif state == "service_stuck":
-            self._set_status("Smartcard hängt — Tab Hilfe oder „Neu starten (UAC)“", "error")
+            self._set_status(_t("mw.smartcard.hangs_status"), "error")
             if not self._scard_help_shown:
                 self._scard_help_shown = True
                 self.notify(
-                    "Smartcard-Dienst hängt. Tab „Hilfe“ oder unten „Neu starten (UAC)“.",
+                    _t("mw.smartcard.hangs_explanation"),
                     "warn",
                 )
         else:
-            self._set_status("Smartcard-Dienst aus", "error")
+            self._set_status(_t("mw.notify.smartcard_off"), "error")
 
     def show_smartcard_help(self) -> None:
         self.notebook.select(self.tab_help)
-        self.notify("Smartcard-Anleitung — Tab „Hilfe“ → Programm-Anleitung", "info")
+        self.notify(_t("mw.notify.smartcard_help"), "info")
 
     def _start_smartcard_from_bar(self) -> None:
         self.start_smartcard_service()
@@ -1369,19 +1374,16 @@ class TDFilamentStudioApp(AppTk):
         if str(exc) == "SMARTCARD_STOPPED":
             state = probe_pcsc()
             if state == "service_stuck":
-                return ("Smartcard hängt — neu starten", scard_status_message(state), True)
-            return ("Smartcard-Dienst aus", scard_status_message(state), True)
+                return (_t("mw.smartcard.hangs_restart_status"), scard_status_message(state), True)
+            return (_t("mw.notify.smartcard_off"), scard_status_message(state), True)
         msg = str(exc)
         low = msg.lower()
         if "block " in low and "lesen fehlgeschlagen" in low:
             return (msg.split("\n", 1)[0][:64], msg, False)
         if "80100069" in msg or "entfernt wurde" in low or "removed card" in low:
             return (
-                "Kein Tag auf dem Reader",
-                "Der NFC-Reader ist angeschlossen.\n\n"
-                "Legen Sie einen MIFARE-Classic-1K-Tag (25 mm) flach auf die Lesefläche "
-                "und klicken Sie „Reader verbinden“ oder „Tag lesen“.\n\n"
-                "Ohne Tag auf dem Reader: nach App-Update „Reader verbinden“ erneut versuchen.",
+                _t("mw.smartcard.no_tag_short"),
+                _t("mw.smartcard.no_tag_long"),
                 False,
             )
         return (msg[:64], msg, False)
@@ -1404,18 +1406,18 @@ class TDFilamentStudioApp(AppTk):
             return False
         msg = scard_status_message(state)
         if state == "service_down":
-            self._set_status("Smartcard-Dienst aus", "error")
-            self.ask_confirm(msg + "\n\nJetzt starten?", self.start_smartcard_service)
+            self._set_status(_t("mw.notify.smartcard_off"), "error")
+            self.ask_confirm(msg + _t("mw.notify.start_now_q"), self.start_smartcard_service)
         elif state == "service_stuck":
-            self._set_status("Smartcard hängt", "error")
-            self.ask_confirm(msg + "\n\nJetzt neu starten?", self.start_smartcard_service)
+            self._set_status(_t("mw.smartcard.hangs_short"), "error")
+            self.ask_confirm(msg + _t("mw.notify.restart_now_q"), self.start_smartcard_service)
         else:
             self._set_status(msg.split("\n")[0][:64], "warn")
             self.notify(msg, "warn")
             self.show_alert_dialog(
                 msg + "\n\nDanach im RFID-Tab „Reader verbinden“.",
                 "warn",
-                title="NFC-Reader",
+                title=_t("mw.notify.title_nfc"),
             )
         return False
 
@@ -1440,16 +1442,16 @@ class TDFilamentStudioApp(AppTk):
                 return
             self.notify(detail, "error")
             if offer:
-                self.ask_confirm(detail + "\n\nAktion ausführen?", self.start_smartcard_service)
+                self.ask_confirm(detail + _t("mw.confirm.run_action"), self.start_smartcard_service)
             else:
-                self.show_alert_dialog(detail, "error", title="NFC")
+                self.show_alert_dialog(detail, "error", title=_t("mw.notify.title_nfc_short"))
             return
-        msg = str(exc) or "Unbekannter Fehler"
+        msg = str(exc) or _t("error.unknown")
         self._set_status(msg[:70], "error")
         if silent:
             return
         self.notify(msg, "error")
-        self.show_alert_dialog(msg, "error", title="NFC")
+        self.show_alert_dialog(msg, "error", title=_t("mw.notify.title_nfc_short"))
 
     # ── Settings & status helpers ───────────────────────────────────
 
@@ -1501,11 +1503,11 @@ class TDFilamentStudioApp(AppTk):
             from creality_nfc.creality_watch import watcher_is_running
 
             if watcher_is_running():
-                msg = f"{msg} — Wächter aktiv" if msg else "Creality-Wächter aktiv"
-            elif msg and "konnte nicht" not in msg:
-                msg = f"{msg} — Wächter nicht aktiv (Einstellungen erneut speichern)"
+                msg = f"{msg}{_t('mw.watcher.active_short')}" if msg else _t("mw.watcher.active")
+            elif msg and "konnte nicht" not in msg and "could not" not in msg:
+                msg = f"{msg}{_t('mw.watcher.inactive_short')}"
         if msg:
-            self._set_status(msg, "ok" if started or "aktiv" in msg else "warn")
+            self._set_status(msg, "ok" if started or _t("mw.status.active_keyword") in msg else "warn")
 
     def _save_settings(self) -> None:
         self.settings.save(DEFAULT_SETTINGS_PATH)
@@ -1513,20 +1515,20 @@ class TDFilamentStudioApp(AppTk):
     def _update_db_label(self) -> None:
         n = len(self.profiles)
         if self._demo_mode:
-            txt = f"⚠  {n} Demo-Materialien — bitte DB laden"
+            txt = _t("mw.status.demo_materials", n=n)
             self.db_label.config(text=txt)
             self.db_badge.config(text=txt, fg=ON_HEADER_WARN, bg=HEADER_SURFACE)
             return
         labels = {
             "cloud": "Creality Cloud",
-            "printer": "Drucker",
+            "printer": _t("mw.src.printer"),
             "file": "Datei",
             "merged": "gemergt",
             "local": "lokal",
         }
         src = labels.get(self._db_source, "?")
         name = self.db_path.name if self.db_path else "?"
-        txt = f"✓  {n} Materialien  ·  {src}  ·  {name}"
+        txt = _t("mw.status.materials_ok", n=n, src=src, name=name)
         self.db_label.config(text=txt)
         self.db_badge.config(
             text=f"{n} Profile  ·  {src}",
@@ -1615,7 +1617,7 @@ class TDFilamentStudioApp(AppTk):
         titles = {
             "id": "ID",
             "brand": "Marke",
-            "name": "Material",
+            "name": _t("mw.label.material"),
             "type": "Typ",
         }
         for col, base in titles.items():
@@ -1650,12 +1652,12 @@ class TDFilamentStudioApp(AppTk):
         total = len(self.profiles)
         if self._demo_mode:
             self._profile_list_title.config(
-                text=f"⚠ Demo: {shown} von {total} — bitte echte DB laden (Cloud/Drucker)"
+                text=_t("mw.profile.demo_banner", shown=shown, total=total)
             )
         elif q:
             self._profile_list_title.config(text=f"{shown} von {total} Profilen (gefiltert)")
         else:
-            self._profile_list_title.config(text=f"Alle {total} Material-Profile in der Datenbank")
+            self._profile_list_title.config(text=_t("mw.profile.all_count", total=total))
         self._update_profile_tree_headings()
         restore = [i for i in sel if self._profile_tree.exists(i)]
         if restore:
@@ -1695,16 +1697,18 @@ class TDFilamentStudioApp(AppTk):
     def _apply_profile_tree_selection(self) -> None:
         profile = self._profile_from_tree_selection()
         if not profile:
-            self.notify("Bitte zuerst ein Profil in der Liste auswählen.", "warn")
+            from creality_nfc.i18n import t as _t
+            self.notify(_t("notify.select_profile_first"), "warn")
             return
         self._select_profile_in_ui(profile)
         self.notebook.select(self.tab_tag)
-        self.notify(f"RFID-Tag: {profile.brand} — {profile.name}", "ok")
+        self.notify(_t("mw.notify.rfid_tag_profile", brand=profile.brand, name=profile.name), "ok")
 
     def _edit_profile_tree_selection(self) -> None:
         profile = self._profile_from_tree_selection()
         if not profile:
-            self.notify("Bitte zuerst ein Profil in der Liste auswählen.", "warn")
+            from creality_nfc.i18n import t as _t
+            self.notify(_t("notify.select_profile_first"), "warn")
             return
         self._select_profile_in_ui(profile)
         self._goto_profile_tab()
@@ -1727,11 +1731,12 @@ class TDFilamentStudioApp(AppTk):
     def _run_bg_job(self, label: str, work, *, on_ok=None) -> None:
         """Netzwerk/SSH im Hintergrund — UI bleibt reaktionsfähig."""
         if self._bg_job_running:
-            self.notify("Ein Vorgang läuft bereits — bitte warten.", "warn")
+            from creality_nfc.i18n import t as _t
+            self.notify(_t("notify.task_running"), "warn")
             return
         self._bg_job_running = True
         self._set_status(f"{label}…", "info")
-        self.notify(f"{label}… (kann 1–2 Minuten dauern)", "info")
+        self.notify(_t("mw.notify.task_duration", label=label), "info")
 
         def runner() -> None:
             err: Exception | None = None
@@ -1747,19 +1752,19 @@ class TDFilamentStudioApp(AppTk):
     def _finish_bg_job(self, label: str, err: Exception | None, result, on_ok) -> None:
         self._bg_job_running = False
         if err:
-            self._set_status(f"{label} fehlgeschlagen", "error")
+            self._set_status(_t("mw.status.task_failed", label=label), "error")
             self.notify(str(err), "error")
             messagebox.showerror(APP_NAME, f"{label}\n\n{err}")
             return
         if on_ok:
             on_ok(result)
         else:
-            self._set_status(f"{label} OK", "ok")
-            self.notify(f"{label} abgeschlossen.", "ok")
+            self._set_status(_t("mw.status.task_ok", label=label), "ok")
+            self.notify(_t("mw.notify.task_done", label=label), "ok")
 
     def sync_database(self) -> None:
         if MATERIAL_DB_PRINTER_ONLY:
-            self.notify("Creality-Cloud-Import ist deaktiviert — nur „Vom Drucker“.", "warn")
+            self.notify(_t("mw.notify.cloud_import_disabled"), "warn")
             return
         printer = self.printer_var.get().strip() or "K2 Pro"
 
@@ -1773,20 +1778,20 @@ class TDFilamentStudioApp(AppTk):
                 self._apply_database(merged, "cloud")
                 msg = f"{total} Profile (Cloud gemergt)\n+{added} neu, {updated} aktualisiert."
                 if skipped:
-                    msg += f"\n{skipped} geschützte Profile nicht überschrieben."
+                    msg += "\n" + _t("mw.db.protected_skipped", n=skipped)
             else:
                 self._apply_database(data, "cloud")
                 n = len(self.profiles)
-                msg = f"{n} Material-Profile von Creality Cloud geladen."
-            self._set_status("Cloud OK", "ok")
+                msg = _t("mw.notify.cloud_loaded", n=n)
+            self._set_status(_t("mw.status.cloud_ok"), "ok")
             self.notify(msg, "ok")
-            messagebox.showinfo(APP_NAME, msg + f"\n\n(Drucker: {printer})")
+            messagebox.showinfo(APP_NAME,  + _t("mw.notify.printer_line", printer=printer))
 
         self._run_bg_job(f"Creality Cloud ({printer})", work, on_ok=on_ok)
 
     def merge_cloud(self) -> None:
         if MATERIAL_DB_PRINTER_ONLY:
-            self.notify("Cloud-Merge ist deaktiviert — nur „Vom Drucker“.", "warn")
+            self.notify(_t("mw.notify.cloud_merge_disabled"), "warn")
             return
         if not self._ensure_db():
             return
@@ -1803,13 +1808,13 @@ class TDFilamentStudioApp(AppTk):
         def on_ok(payload) -> None:
             merged, added, updated, total, skipped = payload
             self._apply_database(merged, "merged")
-            self._set_status(f"Merge OK — {total} Profile", "ok")
-            extra = f"\n{skipped} geschützt (nicht überschrieben)." if skipped else ""
-            self.notify(f"+{added} neu, {updated} aktualisiert. Gesamt: {total}.{extra}", "ok")
+            self._set_status(_t("mw.status.merge_ok", total=total), "ok")
+            extra = ("\n" + _t("mw.db.protected_short", n=skipped)) if skipped else ""
+            self.notify(_t("mw.notify.merge_result", added=added, updated=updated, total=total, extra=extra), "ok")
             messagebox.showinfo(
                 APP_NAME,
-                f"Cloud mit lokaler DB zusammengeführt.\n\n"
-                f"+{added} neu\n{updated} aktualisiert\nGesamt: {total} Profile{extra}",
+                _t("mw.db.cloud_merged")
+                + _t("mw.db.cloud_merged_stats", added=added, updated=updated, total=total, extra=extra),
             )
 
         self._run_bg_job(f"Cloud mergen ({printer})", work, on_ok=on_ok)
@@ -1820,11 +1825,11 @@ class TDFilamentStudioApp(AppTk):
         host = normalize_host(self.ssh_host_var.get())
         if not host:
             msg = (
-                "Bitte Drucker-IP eintragen\n"
-                "(Tab „Material-Datenbank“ unten oder „RFID-Tag“)."
+                _t("mw.notify.enter_ip_msg")
             )
             if quiet:
-                self.notify("Keine Drucker-IP — SSH-Lesen nicht möglich.", "warn")
+                from creality_nfc.i18n import t as _t
+                self.notify(_t("notify.no_printer_ip"), "warn")
             else:
                 self.notify(msg.replace("\n", " "), "warn")
                 messagebox.showwarning(APP_NAME, msg)
@@ -1833,7 +1838,7 @@ class TDFilamentStudioApp(AppTk):
         try:
             save_settings(host, password, printer)
         except Exception as exc:
-            self.notify(f"Drucker-Einstellungen nicht gespeichert: {exc}", "warn")
+            self.notify(_t("mw.notify.printer_settings_not_saved", exc=exc), "warn")
         return host, password
 
     def _run_ssh_job(self, label: str, work, *, on_ok=None) -> None:
@@ -1846,8 +1851,9 @@ class TDFilamentStudioApp(AppTk):
         def work_wrap():
             if not printer_reachable(host, 22):
                 raise RuntimeError(
-                    f"{host}: Port 22 nicht erreichbar.\n"
-                    "IP prüfen, Drucker eingeschaltet, Root/SSH am K2 aktivieren."
+                    _t("mw.ssh.port_unreachable", host=host)
+                    + "\n"
+                    + _t("mw.ssh.check_hint")
                 )
             return work(host, password, printer)
 
@@ -1862,42 +1868,43 @@ class TDFilamentStudioApp(AppTk):
                 self._apply_database(data, "printer")
                 cache = self.db_path.name if self.db_path else "data/"
                 msg = (
-                    f"{len(self.profiles)} Material-Profile vom Drucker geladen.\n"
-                    f"Lokal gespeichert: {cache} (beim nächsten Start automatisch)."
+                    _t("mw.sync.loaded_profiles", n=len(self.profiles))
+                    + "\n"
+                    + _t("mw.sync.cache_saved", cache=cache)
                 )
             elif self.db_data and self.db_data.get("result", {}).get("list"):
                 merged = merge_databases(self.db_data, data, prefer="cloud")
                 added, updated, total, skipped = merge_stats(self.db_data, data)
                 self._apply_database(merged, "printer")
-                msg = f"{total} Profile (vom Drucker gemergt)\n+{added} neu, {updated} aktualisiert."
+                msg = _t("mw.sync.merged_summary", total=total, added=added, updated=updated)
                 if skipped:
-                    msg += f"\n{skipped} geschützte Profile nicht überschrieben."
+                    msg += "\n" + _t("mw.db.protected_skipped", n=skipped)
             else:
                 self._apply_database(data, "printer")
-                msg = f"{len(self.profiles)} Material-Profile vom Drucker geladen."
-            self._set_status("Drucker-DB OK", "ok")
+                msg = _t("mw.sync.loaded_profiles", n=len(self.profiles))
+            self._set_status(_t("mw.sync.printer_db_ok"), "ok")
             self.notify(msg, "ok")
             messagebox.showinfo(APP_NAME, msg)
 
-        self._run_ssh_job("Vom Drucker laden", work, on_ok=on_ok)
+        self._run_ssh_job(_t("mw.job.from_printer"), work, on_ok=on_ok)
 
     def pick_database(self) -> None:
         if MATERIAL_DB_PRINTER_ONLY:
-            self.notify("Datei-Import ist deaktiviert — nur „Vom Drucker (SSH)“.", "warn")
+            self.notify(_t("mw.notify.file_import_disabled"), "warn")
             return
         path = filedialog.askopenfilename(filetypes=[("JSON", "*.json"), ("Alle", "*.*")])
         if not path:
             return
         try:
             self._apply_database(load_database_raw(Path(path)), "file")
-            self.notify(f"{len(self.profiles)} Profile geladen.")
+            self.notify(_t("mw.notify.profiles_loaded", n=len(self.profiles)))
         except Exception as exc:
             self.notify(str(exc), "error")
 
     def import_slicer_profiles(self) -> None:
         """OrcaSlicer/Creality-Print Filament-JSONs in die Material-DB."""
         if MATERIAL_DB_PRINTER_ONLY:
-            self.notify("Slicer-Import ist deaktiviert — nur „Vom Drucker (SSH)“.", "warn")
+            self.notify(_t("mw.notify.slicer_import_disabled"), "warn")
             return
         if not self._ensure_db():
             return
@@ -1939,18 +1946,18 @@ class TDFilamentStudioApp(AppTk):
         self._apply_database(data, "slicer")
         messagebox.showinfo(
             APP_NAME,
-            f"{len(profiles)} Slicer-Profile verarbeitet.\n\n"
-            f"Neu: {added}\nAktualisiert: {updated}\n\n"
-            "Nur lokal gespeichert — der Drucker wird nicht überschrieben.",
+            _t("mw.slicer.processed_summary", n=len(profiles), added=added, updated=updated)
+            + "\n\n"
+            + _t("mw.local_save_only"),
             parent=self,
         )
 
     def save_database_as(self) -> None:
         if MATERIAL_DB_PRINTER_ONLY:
-            self.notify("„DB speichern unter“ ist deaktiviert — nur „Vom Drucker (SSH)“.", "warn")
+            self.notify(_t("mw.notify.save_db_disabled"), "warn")
             return
         if not self.db_data:
-            self.notify("Keine DB geladen.")
+            self.notify(_t("mw.notify.no_db_loaded"))
             return
         path = filedialog.asksaveasfilename(
             defaultextension=".json", filetypes=[("JSON", "*.json")], initialfile="material_database.json"
@@ -1961,7 +1968,7 @@ class TDFilamentStudioApp(AppTk):
 
     def export_options(self) -> None:
         if not self.db_data:
-            self.notify("Zuerst DB laden.")
+            self.notify(_t("mw.notify.load_db_first"))
             return
         path = filedialog.asksaveasfilename(
             defaultextension=".json", initialfile="material_options.json", filetypes=[("JSON", "*.json")]
@@ -1973,11 +1980,12 @@ class TDFilamentStudioApp(AppTk):
     def _ensure_db(self) -> bool:
         if self.db_data is None:
             msg = (
-                "Noch keine Material-Datenbank geladen.\n\n"
-                "Zuerst „Von Creality Cloud“ oder „Datei öffnen…“ nutzen,\n"
-                "dann erneut „Cloud mergen“."
+                _t("mw.db.not_loaded_yet")
+                + "\n\n"
+                + _t("mw.no_db_hint")
+                + _t("mw.db.then_merge")
             )
-            self.notify("Zuerst Datenbank laden (Cloud oder Datei).", "warn")
+            self.notify(_t("mw.db.load_first"), "warn")
             messagebox.showwarning(APP_NAME, msg)
             self.notebook.select(self.tab_db)
             return False
@@ -2001,7 +2009,7 @@ class TDFilamentStudioApp(AppTk):
 
     def add_filament(self) -> None:
         if MATERIAL_DB_PRINTER_ONLY:
-            self.notify("Neue Profile nur am Drucker / in Creality Print — nicht in TD Studio.", "warn")
+            self.notify(_t("mw.notify.new_profiles_printer_only"), "warn")
             return
         if not self._ensure_db():
             return
@@ -2025,7 +2033,8 @@ class TDFilamentStudioApp(AppTk):
             return
         profile = self._selected_profile()
         if not profile:
-            self.notify("Bitte zuerst Marke und Material im RFID-Tab wählen.", "warn")
+            from creality_nfc.i18n import t as _t
+            self.notify(_t("notify.no_brand_material"), "warn")
             self.notebook.select(self.tab_tag)
             return
         self._goto_profile_tab()
@@ -2086,10 +2095,10 @@ class TDFilamentStudioApp(AppTk):
             if self.db_data:
                 dup = len(list_items_for_id(self.db_data, profile.filament_id))
                 if dup > 1:
-                    text += f"  ·  Hinweis: {dup} DB-Einträge mit dieser ID"
+                    text += _t("mw.profile.dup_hint", dup=dup)
             self.selected_profile_var.set(text)
         else:
-            self.selected_profile_var.set("Kein Material gewählt — Suche oder Marke/Material oben wählen")
+            self.selected_profile_var.set(_t("mw.profile.none_selected"))
 
     def _sync_editor_to_selection(self) -> None:
         self._update_filament_selection_label()
@@ -2135,7 +2144,7 @@ class TDFilamentStudioApp(AppTk):
         sp.material_name = profile.name
         sp.filament_id = profile.filament_id
         sp.printer = printer_int_to_display(self.printer_var.get().strip())
-        if not sp.label or sp.label in ("Neue Spule", "Spule"):
+        if not sp.label or sp.label in (_t("mw.label.new_spool"), _t("mw.label.spool_default")):
             sp.label = format_spool_label(profile.brand, profile.name)[:80]
 
     def _sync_spool_after_tag(
@@ -2155,7 +2164,7 @@ class TDFilamentStudioApp(AppTk):
             self.apply_spool(existing)
             self._spool_panel.reload()
             self._spool_panel.select_spool(existing.id)
-            return f"Spule „{existing.label}“ aktualisiert"
+            return _t("mw.spools.updated", label=existing.label)
 
         active = self.inventory.get(self._active_spool_id) if self._active_spool_id else None
         if active and not active.tag_uid:
@@ -2164,7 +2173,7 @@ class TDFilamentStudioApp(AppTk):
             self.apply_spool(active)
             self._spool_panel.reload()
             self._spool_panel.select_spool(active.id)
-            return f"Spule „{active.label}“ mit Tag verknüpft"
+            return _t("mw.spools.tag_linked_short", label=active.label)
 
         sp = Spool(
             id=SpoolInventory.new_id(),
@@ -2182,7 +2191,7 @@ class TDFilamentStudioApp(AppTk):
         self.apply_spool(sp)
         self._spool_panel.reload()
         self._spool_panel.select_spool(sp.id)
-        return f"Spule „{sp.label}“ neu angelegt"
+        return _t("mw.spools.created_new", label=sp.label)
 
     def spool_from_form(self) -> Spool:
         profile = self._selected_profile()
@@ -2193,7 +2202,7 @@ class TDFilamentStudioApp(AppTk):
             material = profile.name
             fid = profile.filament_id
         else:
-            label = "Neue Spule"
+            label = _t("mw.label.new_spool")
             brand = self.brand_var.get()
             material = self.material_var.get()
             fid = ""
@@ -2215,22 +2224,20 @@ class TDFilamentStudioApp(AppTk):
         self._apply_spool_rfid_fields(spool)
 
     def _prompt_select_material_for_write(self) -> None:
-        self._set_status("Kein Material gewählt", "warn")
+        self._set_status(_t("mw.tag.no_material"), "warn")
         self.notify(
-            "Bitte Marke und Material wählen (Abschnitt „Filament für den Tag“).",
+            _t("mw.tag.no_brand_material"),
             "warn",
         )
         hint = (
-            "Im RFID-Tab nach unten zu „Filament für den Tag“ scrollen,\n"
-            "Marke und Material auswählen — darunter muss eine ID-Zeile erscheinen.\n\n"
-            "Oder: Tab „Meine Spulen“ → Spule wählen → „→ RFID-Tab“ "
-            "(Spule braucht eine Filament-ID oder passenden DB-Eintrag).\n\n"
-            "Suchfeld im RFID-Tab leeren, falls es noch Text enthält.\n\n"
-            "Dann erneut „Tag schreiben“ (Tag auf dem Reader lassen)."
+            _t("mw.tag.choose_filament_first")
+            + _t("mw.tag.choose_filament_spool_hint")
+            + _t("mw.tag.clear_search_hint")
+            + _t("mw.tag.then_write_again")
         )
         messagebox.showwarning(
             APP_NAME,
-            f"Kein Filament für den Tag gewählt.\n\n{hint}",
+            _t("mw.tag.no_filament_chosen", hint=hint),
             parent=self,
         )
 
@@ -2245,14 +2252,14 @@ class TDFilamentStudioApp(AppTk):
         self._show_tag_identity(uid, spool, apply_form=False)
         prof = self._selected_profile() or self._profile_for_spool(spool)
         if prof:
-            self._set_status(f"Spule: {spool.label} — {prof.name}", "ok")
+            self._set_status(_t("mw.status.spool_with_profile", label=spool.label, name=prof.name), "ok")
         elif spool.filament_id:
             self._set_status(
-                f"Spule: {spool.label} — ID {spool.filament_id} (Tag-Schreiben möglich)",
+                _t("mw.tag.spool_ready", label=spool.label, filament_id=spool.filament_id),
                 "ok",
             )
         else:
-            self._set_status(f"Spule: {spool.label}", "ok")
+            self._set_status(_t("mw.status.spool_only", label=spool.label), "ok")
 
     def apply_cfs_slot(self, slot: CfsSlotInfo) -> None:
         """Material aus CFS-Slot (Tab Drucker) in RFID-Formular übernehmen."""
@@ -2284,7 +2291,7 @@ class TDFilamentStudioApp(AppTk):
         if fid:
             msg += f" → Profil ID {fid}"
         else:
-            msg += " — kein exaktes DB-Profil, bitte Material prüfen"
+            msg += _t("mw.cfs.no_exact_db")
         self._set_status(msg, "ok" if fid else "warn")
         self.notify(msg, "ok" if fid else "warn")
         sp = find_spool_for_slot(self.inventory, slot)
@@ -2304,19 +2311,18 @@ class TDFilamentStudioApp(AppTk):
         from ui.dialog_theme import prepare_toplevel
 
         dlg = tk.Toplevel(self)
-        dlg.title(f"CFS {slot.label} — Spule zuweisen")
+        dlg.title(_t("mw.cfs.bind_title", label=slot.label))
         prepare_toplevel(
             dlg, self, width=420, height=280, geometry_key="cfs_bind_spool"
         )
 
         ttk.Label(
             dlg,
-            text=f"Slot {slot_label(slot_index)}: {slot.display}\n"
-            "Welche Spule aus „Meine Spulen“ steckt hier?",
+            text=_t("mw.cfs.bind_prompt", slot=slot_label(slot_index), display=slot.display),
             wraplength=380,
         ).pack(anchor="w", padx=12, pady=(12, 8))
 
-        choices = [("", "— Spule wählen —")]
+        choices = [("", _t("mw.choose_spool_placeholder"))]
         for s in self.inventory.sorted_spools():
             choices.append((s.id, s.display_name()))
         id_map = {label: sid for sid, label in choices if sid}
@@ -2331,7 +2337,7 @@ class TDFilamentStudioApp(AppTk):
             sp = find_spool_for_slot(self.inventory, slot)
             if not sp:
                 self.notify(
-                    "Keine passende Spule gefunden — bitte manuell wählen oder neue Spule anlegen.",
+                    _t("mw.spool.no_match"),
                     "warn",
                 )
                 return
@@ -2339,28 +2345,29 @@ class TDFilamentStudioApp(AppTk):
             self._spool_panel.reload()
             if hasattr(self, "_printer_device_panel"):
                 self._printer_device_panel.cfs_dashboard.set_inventory(self.inventory)
-            self.notify(f"Slot {slot_label(slot_index)} → „{sp.label}“", "ok")
+            self.notify(_t("mw.notify.slot_linked", slot=slot_label(slot_index), label=sp.label), "ok")
             dlg.destroy()
 
         def _save() -> None:
             sid = id_map.get(var.get())
             if not sid:
-                self.notify("Bitte eine Spule wählen.", "warn")
+                from creality_nfc.i18n import t as _t
+                self.notify(_t("notify.select_spool"), "warn")
                 return
             bind_slot(self.inventory, sid, slot_index)
             self._spool_panel.reload()
             if hasattr(self, "_printer_device_panel"):
                 self._printer_device_panel.cfs_dashboard.set_inventory(self.inventory)
             sp = self.inventory.get(sid)
-            self.notify(f"Slot {slot_label(slot_index)} → „{sp.label if sp else sid}“", "ok")
+            self.notify(_t("mw.notify.slot_linked", slot=slot_label(slot_index), label=sp.label if sp else sid), "ok")
             dlg.destroy()
 
         row = ttk.Frame(dlg)
         row.pack(fill="x", padx=12, pady=12)
-        ttk.Button(row, text="Automatisch", command=_auto, style="Secondary.TButton").pack(
+        ttk.Button(row, text=_t("mw.btn.auto"), command=_auto, style="Secondary.TButton").pack(
             side="left", padx=(0, 6)
         )
-        ttk.Button(row, text="Zuweisen", command=_save, style="Accent.TButton").pack(side="right")
+        ttk.Button(row, text=_t("mw.btn.assign"), command=_save, style="Accent.TButton").pack(side="right")
 
     def _gcode_entry_for_name(self, state: dict, filename: str) -> dict | None:
         if not filename:
@@ -2530,7 +2537,7 @@ class TDFilamentStudioApp(AppTk):
                             or material_hint_from_gcode_path(fname)
                         ),
                         default_grams=default_g,
-                        source=est[1] if est else "Schätzung",
+                        source=est[1] if est else _t("mw.deduct.estimate_source"),
                     )
                 )
         return dialog_rows
@@ -2568,7 +2575,7 @@ class TDFilamentStudioApp(AppTk):
                     settings=self.settings,
                 )
         else:
-            self.notify(f"Verbrauch abgezogen ({len(deductions)} Spule(n)).", "ok")
+            self.notify(_t("mw.notify.deduct_done", n=len(deductions)), "ok")
 
     def retroactive_deduct_from_history(self, record) -> None:
         """Verbrauch für einen Historie-Eintrag nachträglich abziehen."""
@@ -2580,8 +2587,8 @@ class TDFilamentStudioApp(AppTk):
         fname = (record.filename or "").strip()
         if not fname:
             self.notify(
-                "Für diesen Eintrag ist kein Dateiname gespeichert — "
-                "Abzug bitte unter „Meine Spulen“ manuell.",
+                _t("mw.deduct.retro_no_filename")
+                + _t("mw.deduct.retro_manual_hint"),
                 "warn",
             )
             return
@@ -2644,17 +2651,18 @@ class TDFilamentStudioApp(AppTk):
 
         spools = list(self.inventory.sorted_spools())
         if not spools:
-            self.notify("Keine Spulen in „Meine Spulen“ — bitte zuerst anlegen.", "warn")
+            self.notify(_t("mw.notify.no_spools_create_first"), "warn")
             return
 
         dlg = tk.Toplevel(self)
-        dlg.title("Verbrauch nachträglich")
+        dlg.title(_t("mw.deduct.retro_title"))
         prepare_toplevel(dlg, self, width=440, height=220, geometry_key="retro_deduct")
         fname = (record.filename or "").replace("\\", "/").rsplit("/", 1)[-1]
         ttk.Label(
             dlg,
-            text=f"Druck: {fname or '—'}\n"
-            "Keine automatische Zuordnung — Spule und Gramm wählen:",
+            text=_t("mw.deduct.retro_print_line", fname=(fname or "—"))
+            + "\n"
+            + _t("mw.deduct.retro_hint"),
             wraplength=400,
         ).pack(anchor="w", padx=12, pady=(12, 8))
 
@@ -2684,7 +2692,7 @@ class TDFilamentStudioApp(AppTk):
         )
         row_g = ttk.Frame(dlg)
         row_g.pack(fill="x", padx=12, pady=8)
-        ttk.Label(row_g, text="Gramm:").pack(side="left")
+        ttk.Label(row_g, text=_t("deduct.grams")).pack(side="left")
         ttk.Entry(row_g, textvariable=grams_var, width=10).pack(side="left", padx=8)
 
         result: list[tuple[str, int]] | None = None
@@ -2693,15 +2701,17 @@ class TDFilamentStudioApp(AppTk):
             nonlocal result
             sid = id_map.get(var.get())
             if not sid:
-                self.notify("Bitte eine Spule wählen.", "warn")
+                from creality_nfc.i18n import t as _t
+                self.notify(_t("notify.select_spool"), "warn")
                 return
             try:
                 grams = int(grams_var.get().strip())
             except ValueError:
-                self.notify("Bitte Gramm als Zahl eingeben.", "warn")
+                self.notify(_t("mw.notify.enter_grams_number"), "warn")
                 return
             if grams <= 0:
-                self.notify("Gramm muss größer als 0 sein.", "warn")
+                from creality_nfc.i18n import t as _t
+                self.notify(_t("notify.grams_positive"), "warn")
                 return
             result = [(sid, grams)]
             dlg.destroy()
@@ -2711,8 +2721,8 @@ class TDFilamentStudioApp(AppTk):
 
         btn_row = ttk.Frame(dlg)
         btn_row.pack(fill="x", padx=12, pady=12)
-        ttk.Button(btn_row, text="Abbrechen", command=_cancel).pack(side="left")
-        ttk.Button(btn_row, text="Abziehen", command=_ok, style="Accent.TButton").pack(
+        ttk.Button(btn_row, text=_t("btn.cancel"), command=_cancel).pack(side="left")
+        ttk.Button(btn_row, text=_t("deduct.btn_apply"), command=_ok, style="Accent.TButton").pack(
             side="right"
         )
         dlg.wait_window()
@@ -2733,7 +2743,7 @@ class TDFilamentStudioApp(AppTk):
         if total_new <= 0:
             return
         fname = (record.filename or "").strip()
-        note_print = f"Historie: {fname[:36]}" if fname else "Historie (nachträglich)"
+        note_print = _t("mw.history.note_print", fname=fname[:36]) if fname else _t("mw.history.note_print_retro")
         self._apply_deductions_to_spools(deductions, note=note_print)
 
         prev = int(record.deducted_g or 0)
@@ -2747,11 +2757,11 @@ class TDFilamentStudioApp(AppTk):
             fallback_slot=sp.cfs_slot if sp and sp.cfs_slot is not None else record.cfs_slot,
         )
         hist_note = (record.note or "").strip()
-        if "nachträg" not in hist_note.lower():
+        if "nachträg" not in hist_note.lower() and "later" not in hist_note.lower():
             hist_note = (
-                f"{hist_note} · Nachträglich abgezogen".strip(" ·")
+                _t("mw.history.combined", hist_note=hist_note).strip(" ·")
                 if hist_note and hist_note != "—"
-                else "Nachträglich abgezogen"
+                else _t("mw.history.retro_added")
             )
         if not self.print_history.update_record(
             record,
@@ -2763,8 +2773,7 @@ class TDFilamentStudioApp(AppTk):
             cfs_slot_label=slot_label or record.cfs_slot_label,
         ):
             self.notify(
-                "Verbrauch von der Spule abgezogen, aber der Historie-Eintrag "
-                "konnte nicht gespeichert werden — bitte App neu starten und erneut versuchen.",
+                _t("mw.history.save_failed"),
                 "warn",
             )
             return
@@ -2789,10 +2798,22 @@ class TDFilamentStudioApp(AppTk):
         if not manual:
             if fname and self.settings.is_post_print_deduct_handled(fname):
                 return
+            panel = getattr(self, "_printer_device_panel", None)
+            if (
+                panel
+                and fname
+                and getattr(panel, "_post_print_deduct_offered_for", "") == fname
+            ):
+                return
             if self._post_print_prompted:
                 return
             if not self.settings.prompt_deduct_after_print:
-                self._record_print_history(filename=fname, deductions=[], dialog_rows=[], state=printer_state or {})
+                self._record_print_history(
+                    filename=fname, deductions=[], dialog_rows=[], state=printer_state or {}
+                )
+                if fname:
+                    self.settings.remember_post_print_deduct(fname)
+                    self.settings.save(DEFAULT_SETTINGS_PATH)
                 return
 
         def _prepare_then_ask() -> None:
@@ -2890,25 +2911,20 @@ class TDFilamentStudioApp(AppTk):
 
         if not dialog_rows:
             parts = [
-                "Kein automatischer Abzug möglich.",
-                f"Datei: {fname or '—'}",
+                _t("mw.deduct.no_auto"),
+                _t("mw.deduct.file_line", fname=(fname or "—")),
             ]
             if not cfs_slots:
-                parts.append(
-                    "CFS-Slots vom Drucker fehlen — Tab „Drucker“ verbunden lassen."
-                )
+                parts.append(_t("mw.deduct.no_cfs_slots"))
             elif slot_hint is not None and 0 <= slot_hint < len(cfs_slots):
                 parts.append(
-                    f"Keine Spule mit CFS-Slot {cfs_slots[slot_hint].label} verknüpft "
-                    "(„Meine Spulen“ → Spule bearbeiten → CFS-Slot)."
+                    _t("mw.deduct.no_slot", slot=cfs_slots[slot_hint].label)
+                    + _t("mw.deduct.edit_cfs_hint")
                 )
             else:
-                parts.append(
-                    "G-Code ohne Filament-Gewicht und kein aktiver CFS-Slot erkannt."
-                )
+                parts.append(_t("mw.deduct.no_weight_no_slot"))
             parts.append(
-                "Tipp: Spule manuell abziehen oder in der Druck-Historie "
-                "„Verbrauch nachträglich…“ verwenden."
+                _t("mw.deduct.tip_manual") + _t("mw.deduct.use_retro")
             )
             self.notify("\n".join(parts), "warn")
             try:
@@ -2979,7 +2995,7 @@ class TDFilamentStudioApp(AppTk):
 
     def notify_print_finished(self, filename: str) -> None:
         fn = (filename or "").strip() or "Druck"
-        self.notify(f"Druck beendet: {fn}", "ok")
+        self.notify(_t("notify.print_finished", filename=fn), "ok")
         if getattr(self.settings, "alert_print_complete_toast", True):
             from creality_nfc.desktop_notify import show_desktop_notification
 
@@ -3036,7 +3052,7 @@ class TDFilamentStudioApp(AppTk):
                 cfs_slot_label=slot_label,
                 spool_label=spool_label,
                 spool_id=spool_id,
-                note="Abzug bestätigt" if ded else "Druck beendet (kein Abzug)",
+                note=_t("mw.history.confirmed") if ded else _t("mw.history.no_deduct"),
             )
         )
         if spool_id:
@@ -3055,7 +3071,7 @@ class TDFilamentStudioApp(AppTk):
     def _duplicate_last_tag_template(self) -> None:
         tpl = self._last_write_template
         if not tpl:
-            self.notify("Noch kein Tag geschrieben — zuerst einmal „Tag schreiben“.", "warn")
+            self.notify(_t("notify.tag_template_missing"), "warn")
             return
         self.brand_var.set(tpl.get("brand", ""))
         self._on_brand_change()
@@ -3076,7 +3092,7 @@ class TDFilamentStudioApp(AppTk):
         else:
             self.serial_var.set(tpl.get("serial", self.serial_var.get()))
         self.notebook.select(self.tab_tag)
-        self.notify("Material geladen — neuen Tag auflegen und „Tag schreiben“.", "ok")
+        self.notify(_t("mw.notify.material_loaded_rewrite"), "ok")
 
     def _set_tag_diagnostic_text(self, text: str) -> None:
         if not hasattr(self, "tag_diag_text"):
@@ -3088,15 +3104,15 @@ class TDFilamentStudioApp(AppTk):
 
     def _spool_match_line(self, matched: Spool | None) -> str:
         if matched is None:
-            return "Meine Spule: nicht verknüpft (UID unter „Meine Spulen“ speichern)"
-        parts = [matched.label or matched.material_name or "Spule"]
+            return _t("mw.spool.my_unlinked")
+        parts = [matched.label or matched.material_name or _t("mw.label.spool_default")]
         if matched.brand:
             parts.insert(0, matched.brand)
         if matched.cfs_slot is not None and 0 <= matched.cfs_slot <= 3:
             parts.append(f"CFS {matched.cfs_slot_label()}")
         if matched.remaining_g is not None:
-            parts.append(f"{matched.remaining_g} g übrig")
-        return "Meine Spule: " + " · ".join(parts)
+            parts.append(_t("mw.spool.remaining_g", grams=matched.remaining_g))
+        return _t("mw.spool.my_prefix") + " · ".join(parts)
 
     def _show_tag_identity(
         self,
@@ -3116,21 +3132,21 @@ class TDFilamentStudioApp(AppTk):
             matched = self._spool_for_tag_uid(uid_n)
         self.uid_label.config(text=uid_n or "—")
         if tag_empty:
-            self.spool_match_label.config(text="Tag leer — bereit zum Schreiben", fg=OK)
+            self.spool_match_label.config(text=_t("mw.tag.empty_ready"), fg=OK)
             if matched is not None:
-                inv = matched.label or matched.material_name or "Spule"
+                inv = matched.label or matched.material_name or _t("mw.label.spool_default")
                 self.tag_extra_label.config(
-                    text=f"Inventar: {inv} (nur UID verknüpft, kein Filament auf dem Chip)",
+                    text=_t("mw.spool.inventory_only_uid", info=inv),
                 )
             else:
                 self.tag_extra_label.config(
-                    text="Marke/Material unten wählen, dann „Tag schreiben“",
+                    text=_t("mw.spool.choose_brand_then"),
                 )
             if matched is not None and not self._selected_profile():
                 self._prefill_form_from_spool_for_write(matched)
             return matched
         if matched is not None:
-            title = matched.label or matched.material_name or "Spule"
+            title = matched.label or matched.material_name or _t("mw.label.spool_default")
             self.spool_match_label.config(text=title, fg=TEXT)
             extras: list[str] = []
             if matched.brand and matched.brand.lower() not in title.lower():
@@ -3140,19 +3156,19 @@ class TDFilamentStudioApp(AppTk):
             if matched.cfs_slot is not None and 0 <= matched.cfs_slot <= 3:
                 extras.append(f"CFS {matched.cfs_slot_label()}")
             if matched.remaining_g is not None:
-                extras.append(f"{matched.remaining_g} g übrig")
+                extras.append(_t("mw.spool.remaining_g", grams=matched.remaining_g))
             self.tag_extra_label.config(text=" · ".join(extras))
             if apply_form:
                 self.apply_spool(matched)
         elif uid_n:
-            self.spool_match_label.config(text="Nicht in „Meine Spulen“", fg=WARN)
+            self.spool_match_label.config(text=_t("mw.spool.not_in_my_spools"), fg=WARN)
             self.tag_extra_label.config(
-                text="Chip hat Daten — Spule unten wählen und „Spule speichern“, "
-                "oder vor dem Duplizieren die Vorlagen-Spule anlegen",
+                text=_t("mw.spool.chip_has_data")
+                + _t("mw.spool.chip_has_data_or_dup"),
             )
         else:
             self.spool_match_label.config(
-                text="— Tag auflegen oder „Tag lesen“ —",
+                text=_t("mw.spool.placeholder_read"),
                 fg=MUTED,
             )
             self.tag_extra_label.config(text="")
@@ -3191,7 +3207,7 @@ class TDFilamentStudioApp(AppTk):
             self._set_tag_diagnostic_text(text)
             return matched
         except Exception as exc:
-            self._set_tag_diagnostic_text(f"Diagnose fehlgeschlagen:\n{exc}")
+            self._set_tag_diagnostic_text(_t("mw.tag.diagnostic_failed", exc=exc))
             return None
 
     def _refresh_tag_diagnostic_manual(self) -> None:
@@ -3201,11 +3217,11 @@ class TDFilamentStudioApp(AppTk):
             session = self._session()
             uid = session.uid.hex().upper()
             matched = self._refresh_tag_diagnostic(session)
-            spool_txt = self._spool_match_line(matched).replace("Meine Spule: ", "")
+            spool_txt = self._spool_match_line(matched).replace(_t("mw.spool.my_prefix"), "")
             self._tag_finished(
-                "Auslesen — fertig",
-                f"UID: {uid}\nSpule: {spool_txt}\n\n"
-                "Rohdaten unten im Fenster „Tag-Rohdaten“.",
+                _t("mw.tag.read_done_title"),
+                f"{_t('mw.tag.uid_line', uid=uid)}\n{_t('mw.tag.spool_line', spool=spool_txt)}\n\n"
+                + _t("mw.tag.raw_data_below"),
                 "ok",
             )
         except Exception as exc:
@@ -3217,7 +3233,7 @@ class TDFilamentStudioApp(AppTk):
         def do_format() -> None:
             if not self._ensure_reader_for_tag():
                 return
-            self._set_status("Tag wird geleert…", "info")
+            self._set_status(_t("mw.status.clearing_tag"), "info")
             self.update_idletasks()
             try:
                 import time
@@ -3235,22 +3251,18 @@ class TDFilamentStudioApp(AppTk):
                         tag_empty=True,
                     )
                     self._tag_finished(
-                        "Tag leeren — fertig",
-                        f"UID: {uid}\n\n"
-                        "Der Tag ist leer und bereit zum Neu-Beschreiben.\n\n"
-                        "Hinweis: In den Rohdaten sehen Blöcke 4–6 oft so aus:\n"
-                        "C3B98E0E7A3D… (verschlüsseltes Leer — ist korrekt).\n"
-                        "Oben steht „Tag leer“, nicht der Spulenname vom Inventar.\n\n"
-                        f"{report}",
+                        _t("mw.tag.format_done_title"),
+                        _t("mw.tag.format_done_body", uid=uid)
+                        + _t("mw.tag.encrypted_empty_hint")
+                        + _t("mw.tag.format_done_inventory_hint")
+                        + f"{report}",
                         "ok",
                     )
                 else:
                     self._tag_finished(
-                        "Tag leeren — fehlgeschlagen",
-                        f"UID: {uid}\n\n"
-                        "Es sind noch Filament-Daten auf dem Tag.\n"
-                        "Tag kurz abheben, wieder auflegen, dann erneut „Tag leeren…“.\n\n"
-                        f"{report}",
+                        _t("mw.tag.format_failed_title"),
+                        _t("mw.tag.format_failed_body", uid=uid)
+                        + f"{report}",
                         "warn",
                     )
             except Exception as exc:
@@ -3258,7 +3270,7 @@ class TDFilamentStudioApp(AppTk):
 
         confirm(
             self,
-            "Tag wirklich leeren?\n\nCreality-Daten auf dem Tag werden gelöscht.",
+            _t("mw.tag.format_confirm"),
             do_format,
         )
 
@@ -3434,8 +3446,13 @@ class TDFilamentStudioApp(AppTk):
                     names = ", ".join(p.name for p in matches[:4])
                     extra = f" (+{len(matches) - 4})" if len(matches) > 4 else ""
                     self.notify(
-                        f"ID {material_id}: mehrere Profile ({names}{extra}).\n"
-                        "Bitte das richtige Material in der Liste wählen.",
+                        _t(
+                            "mw.tag.multiple_profiles",
+                            material_id=material_id,
+                            names=names,
+                            extra=extra,
+                        )
+                        + _t("mw.tag.pick_correct_material"),
                         "warn",
                     )
                     return False
@@ -3448,30 +3465,30 @@ class TDFilamentStudioApp(AppTk):
 
     def _do_restart_scard_uac(self) -> None:
         if not restart_scard_elevated():
-            self.notify("UAC-Dialog fehlgeschlagen.", "error")
+            self.notify(_t("mw.notify.uac_failed"), "error")
             return
-        self._set_status("Smartcard wird neu gestartet…", "warn")
+        self._set_status(_t("mw.status.scard_restarting"), "warn")
         self.after(4000, self._after_smartcard_start)
 
     def _do_start_scard_uac(self) -> None:
         if not start_scard_elevated():
-            self.notify("UAC-Dialog fehlgeschlagen.", "error")
+            self.notify(_t("mw.notify.uac_failed"), "error")
             return
-        self._set_status("Smartcard startet… UAC bestätigen", "warn")
+        self._set_status(_t("mw.smartcard.starting_uac"), "warn")
         self.after(3000, self._after_smartcard_start)
 
     def start_smartcard_service(self) -> None:
         state = probe_pcsc()
         if state == "ok":
             self._apply_nfc_ui()
-            self.notify("Bereit — NFC-Reader erkannt.", "ok")
+            self.notify(_t("mw.notify.reader_ready"), "ok")
             self.connect_reader(show_errors=False)
             return
         if state == "no_reader":
             self._apply_nfc_ui()
-            self._set_status("Reader nicht gefunden — USB prüfen", "warn")
+            self._set_status(_t("mw.smartcard.no_reader_usb"), "warn")
             self.notify(
-                "Dienst läuft. ACR122U per USB anschließen, dann „Reader verbinden“.",
+                _t("mw.smartcard.service_running"),
                 "warn",
             )
             return
@@ -3489,23 +3506,20 @@ class TDFilamentStudioApp(AppTk):
     def _after_smartcard_start(self) -> None:
         state = self._apply_nfc_ui()
         if state == "ok":
-            self._set_status("Smartcard aktiv", "ok")
+            self._set_status(_t("mw.status.scard_active"), "ok")
             self.connect_reader(show_errors=False)
         elif state == "no_reader":
-            self._set_status("Dienst OK — Reader per USB verbinden", "warn")
+            self._set_status(_t("mw.status.scard_ok_usb"), "warn")
         elif state == "service_stuck":
-            self._set_status("Noch hängend — „Anleitung“ oder PC neu starten", "error")
-            self.notify("Dienst antwortet noch nicht.\n\n"
-                "„Anleitung“ unten → Dienste (services.msc) → Smartcard neu starten,\n"
-                "oder PC neu booten. Ohne NFC: Rest der App geht weiter.",
-            )
+            self._set_status(_t("mw.smartcard.still_hanging"), "error")
+            self.notify(_t("mw.notify.service_stuck_restart"), "warn")
         else:
-            self._set_status("UAC mit „Ja“ bestätigen, dann erneut klicken", "warn")
+            self._set_status(_t("mw.smartcard.uac_confirm"), "warn")
 
     def connect_reader(self, show_errors: bool = True) -> None:
         state = self._apply_nfc_ui()
         if state == "service_down":
-            self._set_status("Smartcard-Dienst aus", "error")
+            self._set_status(_t("mw.notify.smartcard_off"), "error")
             if show_errors:
                 self.ask_confirm(
                     scard_status_message(state) + "\n\nJetzt starten?",
@@ -3513,14 +3527,14 @@ class TDFilamentStudioApp(AppTk):
                 )
             return
         if state == "service_stuck":
-            self._set_status("Smartcard hängt — neu starten", "error")
+            self._set_status(_t("mw.smartcard.hangs_restart"), "error")
             if show_errors:
                 self.start_smartcard_service()
             return
         if state == "no_reader":
-            self._set_status("Kein Reader — USB anschließen", "warn")
+            self._set_status(_t("mw.smartcard.no_reader_connect"), "warn")
             if show_errors:
-                self.notify("Smartcard-Dienst läuft.\n\nBitte ACR122U per USB verbinden.",
+                self.notify(_t("mw.smartcard.service_running_long"),
                 )
             return
         try:
@@ -3529,20 +3543,20 @@ class TDFilamentStudioApp(AppTk):
             self._apply_nfc_ui()
             short = name if len(name) <= 50 else name[:47] + "…"
             if self.reader.direct_mode:
-                self._set_status(f"Reader bereit — Tag auflegen: {short}", "ok")
+                self._set_status(_t("mw.status.reader_ready", short=short), "ok")
             else:
-                self._set_status(f"Reader verbunden: {short}", "ok")
+                self._set_status(_t("mw.status.reader_connected", short=short), "ok")
         except NfcReaderError as exc:
             short, detail, offer_start = self._nfc_error_message(exc)
             self._apply_nfc_ui()
             self._set_status(short, "error")
             if show_errors:
                 if offer_start:
-                    self.ask_confirm(detail + "\n\nAktion ausführen?", self.start_smartcard_service)
+                    self.ask_confirm(detail + _t("mw.confirm.run_action"), self.start_smartcard_service)
                 else:
                     self.notify(detail, "error")
         except Exception as exc:
-            self._set_status("Reader-Fehler", "error")
+            self._set_status(_t("mw.status.reader_error"), "error")
             if show_errors:
                 self.notify(str(exc), "error")
 
@@ -3611,14 +3625,14 @@ class TDFilamentStudioApp(AppTk):
         if self._chip_dup_step:
             if messagebox.askyesno(
                 APP_NAME,
-                "Der Kopiervorgang läuft noch.\n\nJetzt abbrechen?",
+                _t("mw.copy.in_progress"),
                 default="no",
             ):
                 self._chip_dup_cancel()
             return
         if not messagebox.askyesno(
             APP_NAME,
-            CHIP_DUP_INTRO + "\n\nJetzt starten?",
+            str(CHIP_DUP_INTRO) + "\n\n" + _t("mw.dup.start_q"),
             default="yes",
         ):
             return
@@ -3628,14 +3642,10 @@ class TDFilamentStudioApp(AppTk):
         self._chip_dup_source_uid = ""
         self._chip_dup_source_spool_id = ""
         self._chip_dup_show_step_hint("source")
-        self._set_status("Duplizieren Schritt 1/2: Vorlagen-Chip auflegen …", "info")
+        self._set_status(_t("mw.notify.dup_step1_status"), "info")
         messagebox.showinfo(
             APP_NAME,
-            "Schritt 1 von 2\n\n"
-            "Legen Sie den bereits beschriebenen Vorlagen-Chip "
-            "flach auf den NFC-Reader.\n\n"
-            "Die App liest ihn automatisch (nichts klicken). "
-            "Danach erscheint „Quell-Chip gelesen“ — dann den Chip wegnehmen.",
+            _t("mw.dup.step1_dialog"),
         )
 
     def _chip_dup_link_target_uid(self, target_uid: str) -> str:
@@ -3657,10 +3667,10 @@ class TDFilamentStudioApp(AppTk):
                 self._printer_device_panel.cfs_dashboard.set_inventory(self.inventory)
             n = len(sp.all_tag_uids())
             return (
-                f"Spule „{sp.label}“: Ziel-Chip in „Meine Spulen“ verknüpft "
-                f"({n} Tag{'s' if n != 1 else ''})."
+                _t("mw.duplicate.target_linked", label=sp.label)
+                + _t("mw.duplicate.tag_count", n=n, s=("s" if n != 1 else ""))
             )
-        return f"Spule „{sp.label}“: Ziel-Chip war bereits verknüpft."
+        return _t("mw.duplicate.target_already_linked", label=sp.label)
 
     def _chip_dup_cancel(self, *, notify: bool = True) -> None:
         if self._chip_dup_poll_after:
@@ -3679,8 +3689,8 @@ class TDFilamentStudioApp(AppTk):
             pass
         self._chip_dup_show_step_hint("")
         if notify:
-            self._set_status("Chip duplizieren abgebrochen", "info")
-            messagebox.showinfo(APP_NAME, "Kopieren abgebrochen. Sie können jederzeit neu starten.")
+            self._set_status(_t("mw.dup.cancelled_status"), "info")
+            messagebox.showinfo(APP_NAME, _t("mw.duplicate.cancelled"))
 
     def _chip_dup_on_tag(self) -> None:
         self._chip_dup_poll_after = None
@@ -3704,8 +3714,8 @@ class TDFilamentStudioApp(AppTk):
             raw = session.read_payload()
             if payload_is_empty(raw):
                 raise NfcReaderError(
-                    "Chip-Inhalt leer oder nicht lesbar.\n\n"
-                    "Zuerst mit „Tag schreiben“ beschreiben oder anderen Quell-Chip wählen."
+                    _t("mw.duplicate.chip_empty_or_unreadable")
+                    + _t("mw.duplicate.write_template_first")
                 )
             blob = payload_bytes_from_read(raw)
             if last_blob is not None and blob == last_blob:
@@ -3715,7 +3725,7 @@ class TDFilamentStudioApp(AppTk):
             if attempt < attempts - 1:
                 time.sleep(0.12)
         if last_blob is None:
-            raise NfcReaderError("Tag konnte nicht zuverlässig gelesen werden.")
+            raise NfcReaderError(_t("mw.duplicate.read_failed"))
         return last_raw, last_blob
 
     def _chip_dup_read_source(self) -> None:
@@ -3723,7 +3733,7 @@ class TDFilamentStudioApp(AppTk):
 
         if not self._ensure_reader_for_tag():
             self._chip_dup_cancel(notify=False)
-            messagebox.showerror(APP_NAME, "Reader nicht bereit — Vorgang abgebrochen.")
+            messagebox.showerror(APP_NAME, _t("mw.notify.reader_not_ready_abort"))
             return
         self._tag_busy = True
         self._suppress_auto_read_until = time.monotonic() + 60.0
@@ -3751,24 +3761,20 @@ class TDFilamentStudioApp(AppTk):
             self._chip_dup_step = "target"
             self._chip_dup_show_step_hint("target")
             spool_hint = (
-                f"Verknüpft mit Spule: „{src_spool.label or src_spool.material_name}“"
+                _t("mw.duplicate.linked_spool", label=(src_spool.label or src_spool.material_name))
                 if src_spool
-                else "Nicht in „Meine Spulen“ — bitte Spule anlegen, sonst wirkt der neue Chip „fremd“"
+                else _t("mw.dup.not_in_spools")
             )
-            detail = (
-                f"Vorlage erfolgreich gelesen.\n\n"
-                f"Chip-Nummer (UID): {uid}\n"
-                f"{spool_hint}\n\n"
-                "Jetzt:\n"
-                "1. Vorlagen-Chip vom Reader nehmen\n"
-                "2. Neuen/leeren Chip auflegen (andere UID)\n"
-                "3. Auf „Ja“ klicken, wenn gefragt wird"
+            detail = _t(
+                "mw.dup.step1_read_ok",
+                uid=uid,
+                spool_hint=spool_hint,
             )
-            self._tag_finished("Schritt 1 fertig — Vorlage gelesen", detail, "ok")
+            self._tag_finished(_t("mw.notify.dup_step1_done"), detail, "ok")
         except Exception as exc:
             self._report_tag_error(exc)
             self._chip_dup_cancel(notify=False)
-            messagebox.showerror(APP_NAME, "Lesen fehlgeschlagen — Vorgang abgebrochen.")
+            messagebox.showerror(APP_NAME, _t("mw.dup.read_failed_abort"))
         finally:
             self._tag_busy = False
 
@@ -3779,7 +3785,7 @@ class TDFilamentStudioApp(AppTk):
             self._chip_dup_cancel()
             return
         if not self._ensure_reader_for_tag():
-            messagebox.showerror(APP_NAME, "Reader nicht bereit.")
+            messagebox.showerror(APP_NAME, _t("mw.notify.reader_not_ready"))
             return
         self._tag_busy = True
         self._suppress_auto_read_until = time.monotonic() + 60.0
@@ -3793,26 +3799,23 @@ class TDFilamentStudioApp(AppTk):
                     pass
                 messagebox.showwarning(
                     APP_NAME,
-                    "Das ist noch derselbe Chip (gleiche UID).\n\n"
-                    "Bitte den Vorlagen-Chip wirklich wegnehmen und einen anderen "
-                    "Chip auflegen (z. B. die andere Seite der Spule).",
+                    _t("mw.dup.same_uid_title") + "\n\n" + _t("mw.dup.swap_chip_warn"),
                 )
                 return
             if not messagebox.askyesno(
                 APP_NAME,
-                f"Neuer Chip erkannt — jetzt kopieren?\n\n"
-                f"Neuer Chip (UID):     {uid}\n"
-                f"Vorlage hatte (UID):  {self._chip_dup_source_uid}\n\n"
-                "Die Filament-Daten der Vorlage werden auf diesen Chip geschrieben.\n"
-                "Die UID bleibt beim neuen Chip (ist normal).\n\n"
-                "Jetzt kopieren?",
+                _t(
+                    "mw.dup.copy_confirm",
+                    new_uid=uid,
+                    source_uid=self._chip_dup_source_uid,
+                ),
                 default="yes",
             ):
                 try:
                     self.reader.disconnect()
                 except Exception:
                     pass
-                self._set_status("Schreiben abgebrochen — Ziel-Chip erneut auflegen", "warn")
+                self._set_status(_t("mw.dup.write_cancelled"), "warn")
                 return
             verify_ok = False
             read_back = ""
@@ -3853,47 +3856,46 @@ class TDFilamentStudioApp(AppTk):
             except Exception:
                 pass
             self._suppress_auto_read_until = time.monotonic() + 5.0
-            spool_title = (matched.label or matched.material_name or "Spule") if matched else ""
-            body = (
-                "Kopie erfolgreich auf den neuen Chip geschrieben.\n\n"
-                f"Vorlage (UID): {self._chip_dup_source_uid}\n"
-                f"Neuer Chip:    {uid}\n"
+            spool_title = (matched.label or matched.material_name or _t("mw.label.spool_default")) if matched else ""
+            body = _t(
+                "mw.dup.copy_success",
+                source_uid=self._chip_dup_source_uid,
+                new_uid=uid,
             )
             if spool_title:
-                body += f"Spule in der App: „{spool_title}“\n"
+                body += _t("mw.dup.spool_in_app", title=spool_title) + "\n"
             body += "\n"
             if verify_ok:
-                body += "Prüfung: Inhalt stimmt mit der Vorlage überein.\n"
+                body += _t("mw.verify.content_matches")
             else:
                 body += (
-                    "Prüfung: Rücklesen war uneindeutig — Chip kurz wegnehmen, "
-                    "wieder auflegen, mit „Tag lesen“ testen oder nochmal duplizieren.\n"
+                    _t("mw.verify.ambiguous")
+                    + _t("mw.verify.try_again_hint")
                 )
             if link_msg:
                 body += f"\n{link_msg}"
             elif matched is None:
                 body += (
-                    "\nBitte unter „Meine Spulen“ die Spule öffnen und diese UID speichern — "
-                    "sonst steht oben „Nicht in Meine Spulen“ (der Chip funktioniert am Drucker trotzdem)."
+                    _t("mw.duplicate.save_uid_hint")
+                    + _t("mw.duplicate.save_uid_hint_extra")
                 )
             self._chip_dup_payload = None
             keep_spool = self._chip_dup_source_spool_id
             self._chip_dup_source_uid = ""
             self._chip_dup_source_spool_id = keep_spool
-            self._tag_finished("Schritt 2 fertig — Chip kopiert", body, "ok" if verify_ok else "warn")
+            self._tag_finished(_t("mw.duplicate.step2_done_title"), body, "ok" if verify_ok else "warn")
             if messagebox.askyesno(
                 APP_NAME,
-                "Noch einen Chip kopieren?\n\n"
-                "(z. B. zweiter Sticker auf der anderen Seite derselben Spule)",
+                _t("mw.duplicate.copy_another_q"),
                 default="no",
             ):
                 self._chip_dup_step = "target"
                 self._chip_dup_show_step_hint("target")
                 self._suppress_auto_read_until = time.monotonic() + 60.0
-                self._set_status("Duplizieren: nächsten Chip auflegen …", "info")
+                self._set_status(_t("mw.duplicate.next_chip_status"), "info")
                 messagebox.showinfo(
                     APP_NAME,
-                    "Nächsten Chip auf den Reader legen — wieder „Jetzt kopieren?“ bestätigen.",
+                    _t("mw.duplicate.next_chip_inst"),
                 )
             else:
                 self._chip_dup_step = ""
@@ -3902,13 +3904,13 @@ class TDFilamentStudioApp(AppTk):
                 self._suppress_auto_read_until = time.monotonic() + 3.0
         except Exception as exc:
             self._report_tag_error(exc)
-            if messagebox.askyesno(APP_NAME, "Fehler — Vorgang abbrechen?", default="yes"):
+            if messagebox.askyesno(APP_NAME, _t("mw.notify.dup_abort_q"), default="yes"):
                 self._chip_dup_cancel(notify=False)
         finally:
             self._tag_busy = False
 
     def pick_color(self) -> None:
-        _, hex_color = colorchooser.askcolor(color="#" + self.color_hex, title="Filamentfarbe")
+        _, hex_color = colorchooser.askcolor(color="#" + self.color_hex, title=_t("mw.color.title"))
         if hex_color:
             self._apply_color_hex(hex_color.lstrip("#"))
 
@@ -3955,7 +3957,7 @@ class TDFilamentStudioApp(AppTk):
     def pick_color_from_image(self) -> None:
         path = filedialog.askopenfilename(
             parent=self,
-            title="Filament-Foto wählen",
+            title=_t("mw.tag.color_photo_title"),
             filetypes=[
                 ("Bilder", "*.jpg *.jpeg *.png *.webp *.bmp"),
                 ("Alle", "*.*"),
@@ -3966,7 +3968,7 @@ class TDFilamentStudioApp(AppTk):
         try:
             hex_code = color_from_image_path(path)
             self._apply_color_hex(hex_code)
-            self.notify(f"Farbe aus Foto: #{hex_code}", "ok")
+            self.notify(_t("mw.notify.color_from_photo", hex_code=hex_code), "ok")
         except Exception as exc:
             self.notify(str(exc), "error")
 
@@ -3990,7 +3992,7 @@ class TDFilamentStudioApp(AppTk):
 
     def export_tag_data(self) -> None:
         if not self._last_tag_export:
-            self.notify("Zuerst „Tag lesen“ — dann kann exportiert werden.", "warn")
+            self.notify(_t("mw.notify.read_before_export"), "warn")
             return
         uid = self._last_tag_export.get("uid", "tag")
         path = filedialog.asksaveasfilename(
@@ -4004,7 +4006,7 @@ class TDFilamentStudioApp(AppTk):
             return
         try:
             save_tag_export(self._last_tag_export, Path(path))
-            self.notify(f"Tag-Daten gespeichert:\n{path}", "ok")
+            self.notify(_t("mw.notify.tag_exported", path=path), "ok")
         except OSError as exc:
             self.notify(str(exc), "error")
 
@@ -4047,19 +4049,19 @@ class TDFilamentStudioApp(AppTk):
             raw = session.read_payload()
             matched = self._refresh_tag_diagnostic(session)
             if payload_is_empty(raw):
-                self._set_status("Tag leer", "ok")
+                self._set_status(_t("mw.status.tag_empty"), "ok")
                 return
             info = parse_tag_payload(raw)
             self._apply_fields_from_tag(info, matched=matched)
             self._store_tag_export(uid, info)
-            self._set_status("Tag gelesen", "ok")
+            self._set_status(_t("mw.status.tag_read"), "ok")
         except Exception as exc:
             self._set_status(str(exc)[:70], "error")
 
     def read_tag(self) -> None:
         if not self._ensure_reader_for_tag():
             return
-        self._set_status("Tag wird gelesen…", "info")
+        self._set_status(_t("mw.status.tag_reading"), "info")
         self.update_idletasks()
         try:
             session = self._session()
@@ -4067,12 +4069,11 @@ class TDFilamentStudioApp(AppTk):
             raw = session.read_payload()
             matched = self._refresh_tag_diagnostic(session)
             if payload_is_empty(raw):
-                spool_txt = self._spool_match_line(matched).replace("Meine Spule: ", "")
+                spool_txt = self._spool_match_line(matched).replace(_t("mw.spool.my_prefix"), "")
                 self._tag_finished(
-                    "Tag lesen — fertig",
-                    f"UID: {uid}\nSpule: {spool_txt}\n\n"
-                    "Der Tag ist leer (keine Filament-Daten).\n"
-                    "Normal nach „Tag leeren“ — jetzt „Tag schreiben“.",
+                    _t("mw.tag.read_empty_title"),
+                    f"{_t('mw.tag.uid_line', uid=uid)}\n{_t('mw.tag.spool_line', spool=spool_txt)}\n\n"
+                    + _t("mw.tag.read_empty_body"),
                     "ok",
                 )
                 return
@@ -4083,15 +4084,15 @@ class TDFilamentStudioApp(AppTk):
                 info["weight_code"],
             )
             self._store_tag_export(uid, info)
-            spool_txt = self._spool_match_line(matched).replace("Meine Spule: ", "")
+            spool_txt = self._spool_match_line(matched).replace(_t("mw.spool.my_prefix"), "")
             self._tag_finished(
                 "Tag lesen — fertig",
-                f"UID: {uid}\nSpule: {spool_txt}\n\n"
-                f"Material-ID: {info['material_id']}\n"
+                f"{_t('mw.tag.uid_line', uid=uid)}\n{_t('mw.tag.spool_line', spool=spool_txt)}\n\n"
+                f"{_t('mw.tag.material_id', id=info['material_id'])}\n"
                 f"Farbe: {info['color']}\n"
                 f"Gewicht: {wlabel}\n"
                 f"Serie: {info.get('serial', '?')}\n"
-                f"Drucker: {info.get('printer', '') or '—'}",
+                f"{_t('mw.tag.printer_label', printer=info.get('printer', '') or '—')}",
                 "ok",
             )
         except Exception as exc:
@@ -4105,7 +4106,7 @@ class TDFilamentStudioApp(AppTk):
             return
         if self._demo_mode and not silent and not _demo_ok:
             self.notify(
-                "Demo-Materialien aktiv — für echte Profile „Datenbank laden…“ nutzen.",
+                _t("mw.materials.demo_hint"),
                 "warn",
             )
         if not self._ensure_reader_for_tag(show_dialog=not silent):
@@ -4115,7 +4116,7 @@ class TDFilamentStudioApp(AppTk):
         write_color = self._write_tag_color()
         serial = self._current_serial()
         if not silent:
-            self._set_status("Tag wird geschrieben…", "info")
+            self._set_status(_t("mw.status.tag_writing"), "info")
             self.update_idletasks()
         prev_busy = self._tag_busy
         self._tag_busy = True
@@ -4139,16 +4140,19 @@ class TDFilamentStudioApp(AppTk):
                         )
                         if not messagebox.askyesno(
                             APP_NAME,
-                            "Der Tag enthält bereits Filament-Daten:\n\n"
-                            f"Material-ID: {info.get('material_id', '?')}\n"
-                            f"Farbe: {info.get('color', '?')}\n"
-                            f"Gewicht: {wlabel}\n"
-                            f"Serie: {info.get('serial', '?')}\n\n"
-                            "Wirklich überschreiben?",
+                            _t("mw.tag.already_has_data")
+                            + _t(
+                                "mw.tag.existing_details",
+                                material_id=info.get("material_id", "?"),
+                                color=info.get("color", "?"),
+                                weight=wlabel,
+                                serial=info.get("serial", "?"),
+                            )
+                            + _t("mw.tag.overwrite_confirm"),
                             default="no",
                             parent=self,
                         ):
-                            self._set_status("Schreiben abgebrochen", "warn")
+                            self._set_status(_t("mw.tag.write_cancelled"), "warn")
                             return
                 except NfcReaderError:
                     pass
@@ -4194,10 +4198,16 @@ class TDFilamentStudioApp(AppTk):
                 self._last_auto_uid = uid
                 if not silent:
                     self._tag_finished(
-                        "Tag schreiben — fertig",
-                        f"UID: {uid}\n\n{profile.brand} — {profile.name}\n"
-                        f"ID {profile.filament_id}, SN {serial}\n\n"
-                        "Nächsten Tag auflegen (Stapelmodus).",
+                        _t("mw.tag.write_done_short"),
+                        _t(
+                            "mw.tag.write_done_body",
+                            uid=uid,
+                            brand=profile.brand,
+                            name=profile.name,
+                            filament_id=profile.filament_id,
+                            serial=serial,
+                        )
+                        + _t("mw.tag.next_in_batch"),
                         "ok" if not verify_errors else "warn",
                     )
             elif not silent:
@@ -4207,15 +4217,15 @@ class TDFilamentStudioApp(AppTk):
                     f"ID {profile.filament_id}, SN {serial}\n"
                 )
                 if verify_errors:
-                    body += "\nGeschrieben, Prüfung meldet:\n" + "\n".join(
+                    body += _t("mw.tag.written_verify_reports") + "\n".join(
                         f"• {e}" for e in verify_errors
                     )
                 else:
-                    body += "\nGeschrieben und geprüft — stimmt."
+                    body += _t("mw.tag.written_verified_ok")
                 if spool_msg:
                     body += f"\n\n{spool_msg}"
                 self._tag_finished(
-                    "Tag schreiben — fertig" if not verify_errors else "Tag schreiben — Prüfung",
+                    _t("mw.tag.write_done_short") if not verify_errors else _t("mw.tag.write_verify_short"),
                     body,
                     "warn" if verify_errors else "ok",
                 )
@@ -4234,7 +4244,7 @@ class TDFilamentStudioApp(AppTk):
 
     def open_settings(self) -> None:
         self.notebook.select(self.tab_settings)
-        self.notify("Einstellungen — Tab „Einstellungen“ oben", "info")
+        self.notify(_t("mw.notify.open_settings_tab"), "info")
 
     def _printer_panel(self) -> PrinterDevicePanel | None:
         return getattr(self, "_device_panel", None) or getattr(
@@ -4246,12 +4256,12 @@ class TDFilamentStudioApp(AppTk):
         panel = self._printer_panel()
         if panel is None:
             self._cfs_preview_var.set(False)
-            self.notify("Tab „Drucker“ ist noch nicht bereit — bitte kurz warten.", "warn")
+            self.notify(_t("mw.notify.printer_tab_not_ready"), "warn")
             return
         if panel._cfs_preview_boxes:
             self._cfs_preview_var.set(False)
             panel.force_cfs_demo_off()
-            self.notify("CFS-Vorschau beendet — wieder echte CFS-Daten vom Drucker.", "ok")
+            self.notify(_t("mw.notify.cfs_preview_ended"), "ok")
         else:
             self._cfs_preview_var.set(True)
             panel.set_cfs_preview(4)
@@ -4262,10 +4272,7 @@ class TDFilamentStudioApp(AppTk):
                     nb.select(2)
                 except tk.TclError:
                     pass
-            self.notify(
-                "CFS-Vorschau aktiv. Erneut: Navigation-Haken oder „Demo beenden“ im Tab Filament.",
-                "info",
-            )
+            self.notify(_t("mw.notify.cfs_preview_on"), "info")
 
     def open_printer_manager(self) -> None:
         def apply_profile(p) -> None:
@@ -4274,13 +4281,13 @@ class TDFilamentStudioApp(AppTk):
             model = normalize_printer_model(p.model or DEFAULT_PRINTER)
             if p.model and p.model.strip() != model:
                 self.notify(
-                    f"Modell „{p.model}“ wird nicht unterstützt — es gilt „{model}“ (K2/CFS).",
+                    _t("mw.printer.unsupported_model", p_model=p.model, model=model),
                     "warn",
                 )
             self.printer_var.set(model)
             save_settings(p.host, p.password, model)
-            self._set_status(f"Drucker „{p.name}“ übernommen ({p.host})", "ok")
-            self.notify(f"IP {p.host} · Modell {p.model}", "ok")
+            self._set_status(_t("mw.printer.adopted", name=p.name, host=p.host), "ok")
+            self.notify(_t("mw.notify.printer_ip_model", host=p.host, model=p.model), "ok")
 
         PrinterManagerDialog(self, on_apply=apply_profile)
 
@@ -4293,11 +4300,11 @@ class TDFilamentStudioApp(AppTk):
                         self._monitor = None
                     factory_reset_data_dir(DATA_DIR)
                 except OSError as exc:
-                    messagebox.showerror(APP_NAME, f"Zurücksetzen fehlgeschlagen:\n{exc}", parent=self)
+                    messagebox.showerror(APP_NAME, _t("mw.reset.failed", exc=exc), parent=self)
                     return
                 messagebox.showinfo(
                     APP_NAME,
-                    "Alle Daten wurden gelöscht.\n\nDas Programm startet jetzt neu.",
+                    _t("mw.reset.success"),
                     parent=self,
                 )
                 self.destroy()
@@ -4308,17 +4315,16 @@ class TDFilamentStudioApp(AppTk):
                     os.execv(sys.executable, [sys.executable, str(main_py), *sys.argv[1:]])
 
             self.ask_confirm(
-                "Letzte Warnung:\n\n"
-                "Wirklich ALLES löschen?\n"
-                "(Material-DB, Spulen, Modell-Bibliothek, Drucker, Einstellungen)",
+                _t("mw.reset.last_warning")
+                + _t("mw.reset.confirm_all")
+                + _t("mw.reset.confirm_all_targets"),
                 really_reset,
             )
 
         self.ask_confirm(
-            "Programm auf Werkseinstellung zurücksetzen?\n\n"
-            "Der komplette Ordner data/ wird gelöscht — wie bei einer Neuinstallation.\n\n"
-            "Tipp: Vorher „Datei → Daten sichern (ZIP)…“.\n\n"
-            "Fortfahren?",
+            _t("mw.reset.title")
+            + _t("mw.reset.backup_tip")
+            + _t("mw.reset.continue_q"),
             do_reset,
         )
 
@@ -4332,7 +4338,7 @@ class TDFilamentStudioApp(AppTk):
             return
         try:
             backup_data_dir(DATA_DIR, Path(path))
-            self.notify(f"Gesichert:\n{path}")
+            self.notify(_t("mw.notify.saved_backup", path=path))
         except Exception as exc:
             self.notify(str(exc), "error")
 
@@ -4345,11 +4351,11 @@ class TDFilamentStudioApp(AppTk):
                 n = restore_data_dir(Path(path), DATA_DIR)
                 self._load_materials()
                 self._refresh_spool_combo()
-                self.notify(f"{n} Dateien wiederhergestellt. App neu starten empfohlen.", "ok")
+                self.notify(_t("mw.notify.restore_count", n=n), "ok")
             except Exception as exc:
                 self.notify(str(exc), "error")
 
-        self.ask_confirm("data/ wird aus der ZIP überschrieben.\nFortfahren?", proceed)
+        self.ask_confirm(_t("mw.restore.confirm"), proceed)
 
     def import_cfs_zip(self) -> None:
         path = filedialog.askopenfilename(
@@ -4361,7 +4367,7 @@ class TDFilamentStudioApp(AppTk):
         try:
             out = import_cfs_rfid_zip(Path(path), DATA_DIR, self.printer_var.get().strip())
             self._load_materials()
-            self.notify(f"Material-DB importiert:\n{out.name}")
+            self.notify(_t("mw.notify.db_imported", name=out.name))
         except Exception as exc:
             self.notify(str(exc), "error")
 
@@ -4384,13 +4390,13 @@ class TDFilamentStudioApp(AppTk):
                 short = self.reader._reader_name or "Reader"
                 if len(short) > 45:
                     short = short[:42] + "…"
-                self._set_status(f"Reader: {short}", "ok")
+                self._set_status(_t("mw.status.reader_label", short=short), "ok")
             except Exception:
                 pass
         elif state == "no_reader":
             self._apply_nfc_ui()
             if self.uid_label.cget("text") == "—":
-                self._set_status("Reader einstecken…", "warn")
+                self._set_status(_t("mw.status.reader_plug_in"), "warn")
 
     def _schedule_automatic_update_check(self) -> None:
         """Beim Start und alle 4 h: GitHub-Release prüfen."""
@@ -4449,10 +4455,11 @@ class TDFilamentStudioApp(AppTk):
         if self._update_prompted_tag == info.tag:
             return
         self._update_prompted_tag = info.tag
-        self._set_status(f"Update verfügbar: {info.tag}", "warn")
+        self._set_status(_t("mw.update.available_status", tag=info.tag), "warn")
         self.notify(
-            f"Neue Version: {info.tag} (installiert: {APP_VERSION})\n"
-            "Update-Dialog wird geöffnet …",
+            _t("mw.update.new_version_line", tag=info.tag, installed=APP_VERSION)
+            + "\n"
+            + _t("mw.update.dialog_opening"),
             "warn",
         )
         self.after(200, lambda: self._offer_update_download(info))
@@ -4463,11 +4470,10 @@ class TDFilamentStudioApp(AppTk):
         info = fetch_latest_release()
         if not info:
             self.notify(
-                "Keine Release-Infos von GitHub.\n\n"
-                f"Repo: {GITHUB_RELEASES_REPO}\n"
-                f"{GITHUB_URL}/releases\n\n"
-                "Nach dem Upload: Release mit Tag (z. B. v1.5.52-stable) anlegen "
-                "und Setup-EXE als Asset anhängen.",
+                _t("mw.update.no_release_info")
+                + _t("mw.update.repo_line", repo=GITHUB_RELEASES_REPO, url=GITHUB_URL)
+                + _t("mw.update.upload_hint")
+                + _t("mw.update.no_setup_yet"),
                 "warn",
             )
             return
@@ -4516,7 +4522,7 @@ class TDFilamentStudioApp(AppTk):
         self._focus_app_for_dialog()
         dlg = tk.Toplevel(self)
         self._update_dialog = dlg
-        dlg.title("Update verfügbar")
+        dlg.title(_t("mw.update.title"))
         prepare_toplevel(
             dlg, parent=self, width=520, height=340, geometry_key="update_dialog", modal=True
         )
@@ -4554,14 +4560,13 @@ class TDFilamentStudioApp(AppTk):
             if self._bg_job_running:
                 messagebox.showwarning(
                     APP_NAME,
-                    "Ein anderer Hintergrund-Vorgang läuft noch.\n"
-                    "Bitte warten oder „Nach Updates suchen“ später erneut nutzen.",
+                    _t("mw.update.bg_task_running"),
                     parent=self,
                 )
                 return
             self._run_in_app_update(info)
 
-        rounded_button(btn_row, "Später", on_later, variant="secondary", compact=True).pack(
+        rounded_button(btn_row, _t("mw.update.later"), on_later, variant="secondary", compact=True).pack(
             side="right", padx=(8, 0)
         )
         if info.download_url:
@@ -4576,7 +4581,7 @@ class TDFilamentStudioApp(AppTk):
                 compact=True,
             ).pack(side="right")
         else:
-            rounded_button(btn_row, "Im Browser öffnen", on_browser, variant="accent", compact=True).pack(
+            rounded_button(btn_row, _t("mw.update.open_in_browser"), on_browser, variant="accent", compact=True).pack(
                 side="right"
             )
         dlg.protocol("WM_DELETE_WINDOW", on_later)
@@ -4588,11 +4593,11 @@ class TDFilamentStudioApp(AppTk):
         if self._bg_job_running:
             messagebox.showwarning(
                 APP_NAME,
-                "Ein Vorgang läuft bereits — bitte warten und Update danach erneut starten.",
+                _t("mw.update.task_running_short"),
                 parent=self,
             )
             return
-        self._set_status("Update: Setup wird geladen (ca. 60 MB) …", "info")
+        self._set_status(_t("mw.update.downloading"), "info")
         self.notify(
             "Update-Download gestartet — kann einige Minuten dauern.\n"
             "Fortschritt in der Statuszeile unten.",
@@ -4607,7 +4612,7 @@ class TDFilamentStudioApp(AppTk):
 
             def on_progress(received: int, total: int) -> None:
                 if total <= 0:
-                    text = f"Update: {received // (1024 * 1024)} MB geladen …"
+                    text = _t("mw.update.downloaded_mb", mb=received // (1024 * 1024))
                 else:
                     pct = min(100, int(received * 100 / total))
                     if pct == progress_state["last_pct"]:
@@ -4628,34 +4633,35 @@ class TDFilamentStudioApp(AppTk):
         def on_ok(result: tuple[Path | None, str]) -> None:
             path, err = result
             if not path:
-                self._set_status("Update-Download fehlgeschlagen", "error")
-                self.notify(f"Download fehlgeschlagen:\n{err}", "error")
+                self._set_status(_t("mw.update.download_failed_status"), "error")
+                self.notify(_t("mw.update.download_failed", err=err), "error")
                 if messagebox.askyesno(
                     APP_NAME,
-                    f"Download fehlgeschlagen:\n{err}\n\n"
-                    "Setup-Seite im Browser öffnen?",
+                    _t("mw.update.download_failed", err=err)
+                    + "\n\n"
+                    + _t("mw.update.setup_page_browser"),
                     parent=self,
                 ):
                     webbrowser.open(info.download_url or info.html_url)
                 return
             self._focus_app_for_dialog()
-            self._set_status("Update: Setup bereit — Installation bestätigen", "ok")
+            self._set_status(_t("mw.update.ready_install"), "ok")
             if not messagebox.askokcancel(
-                "Update installieren",
-                f"Setup bereit:\n{path}\n\n"
-                "OK = App beendet sich, nach wenigen Sekunden startet der Installer.\n"
-                "Windows kann „Trotzdem ausführen“ / SmartScreen zeigen — bestätigen.\n"
-                "Falls nichts passiert: Datei manuell aus dem Ordner Updates starten.\n\n"
-                "Abbrechen = Setup bleibt gespeichert.",
+                _t("mw.update.install_title"),
+                _t("mw.update.setup_ready", path=path)
+                + _t("mw.update.ok_quit_hint")
+                + _t("mw.update.smartscreen_hint")
+                + _t("mw.update.manual_start_hint")
+                + _t("mw.update.cancel_keeps"),
                 parent=self,
             ):
-                self.notify(f"Setup gespeichert:\n{path}", "info")
+                self.notify(_t("mw.update.setup_saved", path=path), "info")
                 return
             try:
                 from creality_nfc.app_update import install_downloaded_setup
 
                 self.notify(
-                    "Installer startet in wenigen Sekunden — App wird beendet …",
+                    _t("mw.update.installer_starting"),
                     "ok",
                 )
                 install_downloaded_setup(path)
@@ -4663,8 +4669,8 @@ class TDFilamentStudioApp(AppTk):
                 log_exception("update-install", exc)
                 messagebox.showerror(
                     APP_NAME,
-                    f"Installer konnte nicht gestartet werden:\n{exc}\n\n"
-                    f"Manuell ausführen:\n{path}",
+                    _t("mw.update.installer_failed", exc=exc)
+                    + _t("mw.update.run_manual", path=path),
                     parent=self,
                 )
 
@@ -4689,7 +4695,7 @@ class TDFilamentStudioApp(AppTk):
             return
         if not tray_supported():
             self.notify(
-                "Tray nicht verfügbar (Windows + pystray). Siehe requirements.txt.",
+                _t("mw.tray.unavailable"),
                 "warn",
             )
             return
@@ -4699,14 +4705,14 @@ class TDFilamentStudioApp(AppTk):
             on_quit=lambda: self.after(0, lambda: self._on_close(force=True)),
             tooltip=f"{APP_NAME} — im Hintergrund",
         ):
-            self.notify("Tray-Symbol konnte nicht gestartet werden.", "warn")
+            self.notify(_t("mw.notify.tray_start_failed"), "warn")
             return
         self._tray_hidden = True
         try:
             self.withdraw()
         except tk.TclError:
             pass
-        self._set_status("Im Hintergrund (Tray) — Doppelklick auf Symbol zum Öffnen", "ok")
+        self._set_status(_t("mw.tray.hidden_status"), "ok")
 
     def _show_from_tray(self) -> None:
         try:

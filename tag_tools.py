@@ -7,6 +7,7 @@ from tkinter import scrolledtext, ttk
 
 from ui.messaging import alert, confirm, notify
 
+from creality_nfc.i18n import t as _t
 from creality_nfc.reader import CrealityNfcReader, NfcReaderError
 from creality_nfc.smartcard_service import probe_pcsc, scard_status_message
 from creality_nfc.tag_io import TagSession, parse_tag_payload, payload_is_empty
@@ -16,17 +17,17 @@ from ui.dialog_theme import prepare_toplevel
 class TagToolsDialog(tk.Toplevel):
     def __init__(self, parent: tk.Misc, reader: CrealityNfcReader) -> None:
         super().__init__(parent)
-        self.title("Tag-Speicher")
+        self.title(_t("tt.title"))
         self.reader = reader
 
         pad = {"padx": 10, "pady": 4}
         btns = ttk.Frame(self)
         btns.pack(fill="x", **pad)
-        ttk.Button(btns, text="Speicher lesen", command=self.read_memory).pack(side="left")
-        ttk.Button(btns, text="Payload dekodieren", command=self.decode_payload).pack(
+        ttk.Button(btns, text=_t("tt.btn.read_memory"), command=self.read_memory).pack(side="left")
+        ttk.Button(btns, text=_t("tt.btn.decode"), command=self.decode_payload).pack(
             side="left", padx=8
         )
-        ttk.Button(btns, text="Tag formatieren…", command=self.format_tag).pack(side="right")
+        ttk.Button(btns, text=_t("tt.btn.format"), command=self.format_tag).pack(side="right")
 
         self.text = scrolledtext.ScrolledText(self, height=20, font=("Consolas", 9))
         self.text.pack(fill="both", expand=True, padx=10, pady=8)
@@ -43,9 +44,9 @@ class TagToolsDialog(tk.Toplevel):
             return True
         alert(
             self,
-            scard_status_message(state) + "\n\nReader per USB verbinden.",
+            scard_status_message(state) + _t("scard.msg.connect_usb_suffix"),
             "warn",
-            "NFC-Reader",
+            _t("mw.notify.title_nfc"),
         )
         return False
 
@@ -64,7 +65,7 @@ class TagToolsDialog(tk.Toplevel):
             self.text.delete("1.0", "end")
             self.text.insert("1.0", "\n".join(lines))
         except Exception as exc:
-            alert(self, str(exc), "error", "Tag-Speicher")
+            alert(self, str(exc), "error", _t("tt.alert.title"))
 
     def decode_payload(self) -> None:
         if not self._ensure_reader():
@@ -76,7 +77,7 @@ class TagToolsDialog(tk.Toplevel):
             if payload_is_empty(raw):
                 self.text.insert(
                     "1.0",
-                    f"UID: {session.uid.hex().upper()}\n\nTag ist leer (kein Filament-Payload).",
+                    f"UID: {session.uid.hex().upper()}\n\n" + _t("tt.tag.empty_payload"),
                 )
             else:
                 info = parse_tag_payload(raw)
@@ -87,7 +88,7 @@ class TagToolsDialog(tk.Toplevel):
                     + "\n".join(f"{k}: {v}" for k, v in info.items()),
                 )
         except Exception as exc:
-            alert(self, str(exc), "error", "Tag-Speicher")
+            alert(self, str(exc), "error", _t("tt.alert.title"))
 
     def format_tag(self) -> None:
         def do_format() -> None:
@@ -98,19 +99,18 @@ class TagToolsDialog(tk.Toplevel):
                 report, tag_empty = session.format_tag()
                 notify(
                     self,
-                    "Tag formatiert.\n\n" + report,
+                    _t("tt.notify.formatted", report=report),
                     "ok" if tag_empty else "warn",
                 )
                 self.text.delete("1.0", "end")
                 self.text.insert("1.0", session.describe_reading())
             except NfcReaderError as exc:
-                alert(self, str(exc), "error", "Tag-Speicher")
+                alert(self, str(exc), "error", _t("tt.alert.title"))
             except Exception as exc:
-                alert(self, str(exc), "error", "Tag-Speicher")
+                alert(self, str(exc), "error", _t("tt.alert.title"))
 
         confirm(
             self,
-            "Tag-Inhalt löschen (Sektoren 1–2)?\n"
-            "Nur für leere/neue Tags — nicht für fabrikversiegelte Creality-Spulen.",
+            _t("tt.confirm.format"),
             do_format,
         )

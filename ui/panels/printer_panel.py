@@ -10,6 +10,7 @@ from tkinter import scrolledtext, ttk
 from typing import TYPE_CHECKING
 
 from creality_nfc.db_compare import compare_databases, format_compare_report
+from creality_nfc.i18n import t as _t
 from creality_nfc.material_options import build_material_options
 from creality_nfc.printer_camera import printer_reachable
 from creality_nfc.printer_ssh import (
@@ -32,7 +33,7 @@ class PrinterDashboardPanel(ttk.LabelFrame):
     """Material-Sync & Options — Live-Steuerung im Tab „Drucker“."""
 
     def __init__(self, parent: tk.Misc, app: TDFilamentStudioApp) -> None:
-        super().__init__(parent, text="  Drucker-Dashboard (Material)  ")
+        super().__init__(parent, text=_t("printer.dashboard.title"))
         theme_dialog(self)
         self.app = app
         self._last_remote_db: dict | None = None
@@ -41,13 +42,13 @@ class PrinterDashboardPanel(ttk.LabelFrame):
         top = ttk.Frame(self)
         top.pack(fill="x", padx=8, pady=8)
 
-        self.status_var = tk.StringVar(value="IP eintragen → „Status prüfen“")
+        self.status_var = tk.StringVar(value=_t("printer.dashboard.status_initial"))
         ttk.Label(top, textvariable=self.status_var, wraplength=720, style="Muted.TLabel").pack(
             anchor="w", pady=(0, 4)
         )
         ttk.Label(
             top,
-            text="LED, Pause, Temperaturen, G-Code → Tab „Drucker“",
+            text=_t("printer.dashboard.led_hint"),
             style="Muted.TLabel",
         ).pack(anchor="w", pady=(0, 8))
 
@@ -63,18 +64,18 @@ class PrinterDashboardPanel(ttk.LabelFrame):
             panel.show_print_check()
 
         for text, cmd, help_txt in (
-            ("Status prüfen", self.check_status, "Erreichbarkeit des Druckers und SSH prüfen."),
+            (_t("printer.btn.status_check"), self.check_status, _t("printer.dashboard.tip_check_status")),
             (
-                "Druck-Check",
+                _t("printer.btn.print_check"),
                 _open_print_check,
-                "Markierte/zuletzt gewählte G-Code-Datei oder laufender Druck vs. CFS/Spulen (Tab Drucker).",
+                _t("printer.dashboard.tip_print_check"),
             ),
             (
-                "DB vergleichen",
+                _t("printer.btn.compare_db"),
                 self.compare_db,
-                "Lokale und Drucker-Datenbank vergleichen (Unterschiede anzeigen).",
+                _t("printer.dashboard.tip_compare_db"),
             ),
-            ("Options vom Drucker", self.pull_options, "Material-Options-Datei vom Drucker laden (nur Lesen)."),
+            (_t("printer.btn.pull_options"), self.pull_options, _t("printer.dashboard.tip_pull_options")),
         ):
             tip(
                 rounded_button(btns, text, cmd, variant="secondary", compact=True),
@@ -83,12 +84,12 @@ class PrinterDashboardPanel(ttk.LabelFrame):
         tip(
             rounded_button(
                 btns,
-                "→ Tab Drucker",
+                _t("printer.btn.goto_printer_tab"),
                 lambda: self.app.notebook.select(self.app.tab_printer),
                 variant="secondary",
                 compact=True,
             ),
-            "Zum Tab Drucker wechseln (Live-Steuerung, G-Code, CFS).",
+            _t("printer.dashboard.tip_goto_printer"),
         ).pack(side="left", padx=(8, 0), pady=4)
 
         self.compare_text = scrolledtext.ScrolledText(
@@ -96,7 +97,7 @@ class PrinterDashboardPanel(ttk.LabelFrame):
         )
         apply_text_area_style(self.compare_text, bg=BG_SUBTLE)
         self.compare_text.pack(fill="x", padx=8, pady=(0, 8))
-        self._log("Bereit. Live-Steuerung: Tab „Drucker“.")
+        self._log(_t("printer.dashboard.ready_hint"))
 
     def _log(self, text: str) -> None:
         ts = datetime.now().strftime("%H:%M:%S")
@@ -107,7 +108,7 @@ class PrinterDashboardPanel(ttk.LabelFrame):
 
     def _run_bg(self, label: str, work, on_ok=None) -> None:
         if self._busy:
-            notify(self, "Bitte warten — Vorgang läuft noch.", "warn")
+            notify(self, _t("printer.dashboard.notify_busy"), "warn")
             return
         self._busy = True
         self._log(f"{label}…")
@@ -136,7 +137,7 @@ class PrinterDashboardPanel(ttk.LabelFrame):
                 on_ok(result)
             else:
                 self._log(f"OK: {label}")
-            notify(self, f"{label} fertig.", "ok")
+            notify(self, _t("pp.notify.done", label=label), "ok")
 
     def _creds(self) -> tuple[str, str, str] | None:
         printer = self.app.printer_var.get().strip()
@@ -164,11 +165,11 @@ class PrinterDashboardPanel(ttk.LabelFrame):
             )
             self._log(f"Status OK — Box: {info.get('box_dir')}")
 
-        self._run_bg("Status prüfen", work, on_ok)
+        self._run_bg(_t("pp.bg.status_check"), work, on_ok)
 
     def compare_db(self) -> None:
         if not self.app.db_data:
-            notify(self, "Zuerst lokale Material-DB laden.", "warn")
+            notify(self, _t("pp.notify.load_db_first"), "warn")
             return
         creds = self._creds()
         if not creds:

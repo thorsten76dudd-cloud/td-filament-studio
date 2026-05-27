@@ -7,6 +7,7 @@ import sys
 from pathlib import Path
 
 from app.paths import app_dir
+from creality_nfc.i18n import t as _t
 
 # RFID-Tag-Halter für offizielle Creality-Kunststoffspulen (5 Teile)
 CHIP_TAG_PLASTIC_HOLDER_DIR = Path("downloads") / "creality-plastic-tag-holder"
@@ -54,7 +55,7 @@ def save_bundled_asset(
 
     src = bundled_asset_path(relative)
     if not src.is_file():
-        notify(parent, f"Datei fehlt im Programm:\n{relative}", "error")
+        notify(parent, _t("assets.file_missing", path=relative), "error")
         return None
     default_name = save_as_name or src.name
     dest = filedialog.asksaveasfilename(
@@ -68,7 +69,7 @@ def save_bundled_asset(
         return None
     path = Path(dest)
     shutil.copy2(src, path)
-    notify(parent, f"Gespeichert:\n{path}", "info")
+    notify(parent, _t("assets.saved", path=path), "info")
     return path
 
 
@@ -87,13 +88,13 @@ def save_bundled_plastic_holder_stls(parent) -> list[Path] | None:
         ]
         notify(
             parent,
-            "Tag-Halter-STL fehlen im Programm:\n" + "\n".join(missing),
+            _t("assets.holder_missing", missing="\n".join(missing)),
             "error",
         )
         return None
     dest_dir = filedialog.askdirectory(
         parent=parent,
-        title="Ordner für Tag-Halter STL (Creality Kunststoffspule)",
+        title=_t("assets.holder_folder_title"),
     )
     if not dest_dir:
         return None
@@ -105,8 +106,12 @@ def save_bundled_plastic_holder_stls(parent) -> list[Path] | None:
         saved.append(target)
     notify(
         parent,
-        f"{len(saved)} STL gespeichert in:\n{folder}\n\n"
-        + ", ".join(p.name for p in saved),
+        _t(
+            "assets.holder_saved",
+            count=len(saved),
+            folder=folder,
+            names=", ".join(p.name for p in saved),
+        ),
         "info",
     )
     return saved

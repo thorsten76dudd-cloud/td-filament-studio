@@ -8,6 +8,8 @@ import threading
 from collections.abc import Callable
 from typing import Any
 
+from creality_nfc.i18n import t as _t
+
 log = logging.getLogger(__name__)
 
 
@@ -61,7 +63,7 @@ class BackgroundTray:
             return False
 
         menu = pystray.Menu(
-            pystray.MenuItem("Öffnen", lambda *_: on_show(), default=True),
+            pystray.MenuItem(_t("tray.menu.open"), lambda *_: on_show(), default=True),
             pystray.MenuItem("Beenden", lambda *_: on_quit()),
         )
         icon = pystray.Icon("td_filament_studio", image, tooltip, menu)

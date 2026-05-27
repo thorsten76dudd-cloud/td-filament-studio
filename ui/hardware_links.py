@@ -2,28 +2,36 @@
 
 from __future__ import annotations
 
-# Kurz-URLs ohne Tracking-Parameter
+from creality_nfc.i18n import t as _t
+
 URL_AMAZON_ACR122U = "https://www.amazon.de/dp/B0DSC293JN"
 URL_AMAZON_MF1_S50_TAGS = "https://www.amazon.de/dp/B0BL2YJ5GB"
 
-# (Titel, Beschreibung, URL)
-AMAZON_HARDWARE_LINKS: tuple[tuple[str, str, str], ...] = (
-    (
-        "NFC-Lesegerät (ACR122U-kompatibel)",
-        "Ieron RFID/NFC Reader ACR122U, ISO 14443A/B — am PC mit Smartcard-Dienst.",
-        URL_AMAZON_ACR122U,
-    ),
-    (
-        "RFID-Tags (MF1 S50, 25 mm)",
-        "YARONGTECH MIFARE Classic 1K Sticker, 13,56 MHz, Durchmesser 25 mm (10 Stück).",
-        URL_AMAZON_MF1_S50_TAGS,
-    ),
-)
 
-HARDWARE_SHOP_HELP_TEXT = """
-Beispiel-Produkte (vom Entwickler getestet/gekauft, keine Werbung):
-• NFC-Reader: Ieron ACR122U-kompatibel — {reader}
-• RFID-Tags: YARONGTECH MF1 S50, 25 mm — {tags}
+def amazon_hardware_links() -> tuple[tuple[str, str, str], ...]:
+    return (
+        (
+            _t("hw.reader_label"),
+            _t("hw.reader_desc"),
+            URL_AMAZON_ACR122U,
+        ),
+        (
+            _t("hw.tags_title"),
+            _t("hw.tags_label"),
+            URL_AMAZON_MF1_S50_TAGS,
+        ),
+    )
 
-Andere Marken mit gleichem Chip-Typ (MIFARE Classic 1K) und ACR122U-Clones funktionieren meist ebenfalls.
-""".format(reader=URL_AMAZON_ACR122U, tags=URL_AMAZON_MF1_S50_TAGS).strip()
+
+AMAZON_HARDWARE_LINKS = amazon_hardware_links()
+
+
+def hardware_shop_help_text() -> str:
+    return _t(
+        "hw.shop_help",
+        reader=URL_AMAZON_ACR122U,
+        tags=URL_AMAZON_MF1_S50_TAGS,
+    )
+
+
+HARDWARE_SHOP_HELP_TEXT = hardware_shop_help_text()

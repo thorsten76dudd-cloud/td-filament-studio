@@ -10,6 +10,7 @@ from tkinter import ttk
 
 from creality_nfc.app_settings import DEFAULT_SETTINGS_PATH, AppSettings
 from creality_nfc.config import APP_VERSION, GITHUB_URL
+from creality_nfc.i18n import t as _t
 from creality_nfc.reader import CrealityNfcReader
 from ui.components import scrollable_tab
 from ui.dialog_theme import theme_dialog
@@ -37,99 +38,116 @@ class SettingsPanel(ttk.Frame):
         btn_row = ttk.Frame(footer)
         btn_row.pack(anchor="w")
         tip(
-            ttk.Button(btn_row, text="Einstellungen speichern", command=self._save, style="Accent.TButton"),
-            "Alle Einstellungen dauerhaft speichern und anwenden.",
+            ttk.Button(btn_row, text=_t("settings.save"), command=self._save, style="Accent.TButton"),
+            _t("settings.save.tip"),
         ).pack(side="left", padx=(0, 8))
         if on_show_setup:
             tip(
-                ttk.Button(btn_row, text="Ersteinrichtung…", command=on_show_setup, style="Secondary.TButton"),
-                "Checkliste: Smartcard, Reader, Datenbank.",
+                ttk.Button(btn_row, text=_t("settings.show_setup"), command=on_show_setup, style="Secondary.TButton"),
+                _t("settings.show_setup.tip"),
             ).pack(side="left", padx=(0, 8))
         if on_factory_reset:
             tip(
                 ttk.Button(
                     btn_row,
-                    text="Programm zurücksetzen…",
+                    text=_t("settings.factory_reset"),
                     command=on_factory_reset,
                     style="Secondary.TButton",
                 ),
-                "Alle lokalen Daten löschen (wie Neuinstallation). Vorher ZIP-Backup empfohlen!",
+                _t("settings.factory_reset.tip"),
             ).pack(side="left")
 
         body = ttk.Frame(self)
         body.pack(fill="both", expand=True)
         _canvas, inner = scrollable_tab(body)
 
-        auto = ttk.LabelFrame(inner, text="Automatik")
+        from creality_nfc.i18n import supported_languages, t
+
+        lang_box = ttk.LabelFrame(inner, text=_t("settings.language"))
+        lang_box.pack(fill="x", **frame_pad)
+        self.language_var = tk.StringVar(value=settings.language or "de")
+        lang_row = ttk.Frame(lang_box)
+        lang_row.pack(fill="x", padx=8, pady=4)
+        ttk.Label(lang_row, text=t("settings.language") + ":").pack(side="left")
+        for code in supported_languages():
+            ttk.Radiobutton(
+                lang_row,
+                text=t(f"language.{code}"),
+                value=code,
+                variable=self.language_var,
+            ).pack(side="left", padx=(8, 0))
+        ttk.Label(
+            lang_box,
+            text=t("settings.language.hint"),
+            style="Muted.TLabel",
+            wraplength=520,
+        ).pack(anchor="w", padx=8, pady=(0, 6))
+
+        auto = ttk.LabelFrame(inner, text=_t("settings.section.auto"))
         auto.pack(fill="x", **frame_pad)
         self.auto_read = tk.BooleanVar(value=settings.auto_read_tag)
         self.auto_write = tk.BooleanVar(value=settings.auto_write_tag)
         self.batch_write = tk.BooleanVar(value=settings.batch_write_mode)
         self.auto_sync_spool = tk.BooleanVar(value=settings.auto_sync_spool_on_tag)
-        ttk.Checkbutton(auto, text="Tag automatisch lesen", variable=self.auto_read).pack(anchor="w", padx=8)
-        ttk.Checkbutton(auto, text="Tag automatisch schreiben", variable=self.auto_write).pack(anchor="w", padx=8)
-        ttk.Checkbutton(auto, text="Stapelmodus", variable=self.batch_write).pack(anchor="w", padx=8)
+        ttk.Checkbutton(auto, text=_t("settings.auto_read"), variable=self.auto_read).pack(anchor="w", padx=8)
+        ttk.Checkbutton(auto, text=_t("settings.auto_write"), variable=self.auto_write).pack(anchor="w", padx=8)
+        ttk.Checkbutton(auto, text=_t("settings.batch_write"), variable=self.batch_write).pack(anchor="w", padx=8)
         ttk.Checkbutton(
             auto,
-            text="Nach Tag-Schreiben: Spule in „Meine Spulen“ anlegen/aktualisieren",
+            text=_t("settings.auto_sync_spool"),
             variable=self.auto_sync_spool,
         ).pack(anchor="w", padx=8)
         self.launch_with_creality = tk.BooleanVar(value=settings.launch_with_creality_print)
         ttk.Checkbutton(
             auto,
-            text="Mit Creality Print starten (Hintergrund-Wächter)",
+            text=_t("settings.launch_with_creality"),
             variable=self.launch_with_creality,
         ).pack(anchor="w", padx=8)
         ttk.Label(
             auto,
-            text="Ein Helfer läuft im Hintergrund (auch nach Windows-Anmeldung) und öffnet TD Filament Studio, "
-            "wenn Creality Print startet. Einstellung speichern — danach reicht Creality Print allein. "
-            "Status unten in der Statusleiste; Log: data\\creality_watch.log",
+            text=_t("settings.launch_with_creality.hint"),
             style="Muted.TLabel",
             wraplength=520,
         ).pack(anchor="w", padx=8, pady=(0, 6))
 
-        tray = ttk.LabelFrame(inner, text="Hintergrund (Tray)")
+        tray = ttk.LabelFrame(inner, text=_t("settings.section.tray_box"))
         tray.pack(fill="x", **frame_pad)
         self.tray_run_in_background = tk.BooleanVar(value=settings.tray_run_in_background)
         ttk.Checkbutton(
             tray,
-            text="Bei Schließen (X) im Hintergrund weiterlaufen (Tray-Symbol)",
+            text=_t("settings.tray_close_to_bg"),
             variable=self.tray_run_in_background,
         ).pack(anchor="w", padx=8, pady=(4, 0))
         ttk.Label(
             tray,
-            text="Wenn aktiv: Fenster schließen minimiert in die Taskleiste neben der Uhr — Druck-Monitor "
-            "und Filament-Abzug laufen weiter. Doppelklick auf das Symbol öffnet die App. "
-            "Beenden: Rechtsklick auf Tray → Beenden, oder Datei → Beenden. "
-            "Nur Windows.",
+            text=_t("settings.tray_close_to_bg.hint"),
             style="Muted.TLabel",
             wraplength=520,
         ).pack(anchor="w", padx=8, pady=(0, 6))
 
-        serial = ttk.LabelFrame(inner, text="Seriennummer")
+        serial = ttk.LabelFrame(inner, text=_t("settings.section.serial"))
         serial.pack(fill="x", **frame_pad)
         self.auto_serial = tk.BooleanVar(value=settings.auto_increment_serial)
-        ttk.Checkbutton(serial, text="Automatisch hochzählen", variable=self.auto_serial).pack(anchor="w", padx=8)
+        ttk.Checkbutton(serial, text=_t("settings.auto_serial"), variable=self.auto_serial).pack(anchor="w", padx=8)
         row = ttk.Frame(serial)
         row.pack(fill="x", padx=8, pady=4)
-        ttk.Label(row, text="Fest:").pack(side="left")
+        ttk.Label(row, text=_t("settings.serial_fixed")).pack(side="left")
         self.fixed_serial = tk.StringVar(value=settings.fixed_serial)
         ttk.Entry(row, textvariable=self.fixed_serial, width=10).pack(side="left", padx=6)
 
-        filament = ttk.LabelFrame(inner, text="Spulen & CFS")
+        filament = ttk.LabelFrame(inner, text=_t("settings.section.spool_cfs"))
         filament.pack(fill="x", **frame_pad)
         self.low_filament_g = tk.IntVar(value=settings.low_filament_threshold_g)
         fl_row = ttk.Frame(filament)
         fl_row.pack(fill="x", padx=8, pady=4)
-        ttk.Label(fl_row, text="Warnung Rest unter (g):").pack(side="left")
+        ttk.Label(fl_row, text=_t("settings.low_filament_label")).pack(side="left")
         ttk.Spinbox(fl_row, from_=50, to=2000, textvariable=self.low_filament_g, width=6).pack(
             side="left", padx=6
         )
         self.prompt_deduct = tk.BooleanVar(value=settings.prompt_deduct_after_print)
         ttk.Checkbutton(
             filament,
-            text="Nach Druckende: Verbrauch von CFS-Spule abfragen",
+            text=_t("settings.prompt_deduct"),
             variable=self.prompt_deduct,
         ).pack(anchor="w", padx=8)
         self.alert_print = tk.BooleanVar(value=getattr(settings, "alert_print_pause_error", True))
@@ -137,17 +155,17 @@ class SettingsPanel(ttk.Frame):
         self.alert_print_toast = tk.BooleanVar(value=getattr(settings, "alert_print_windows_toast", True))
         ttk.Checkbutton(
             filament,
-            text="Bei Pause oder Fehler am Drucker: Hinweis (Statusleiste + Meldungsprotokoll)",
+            text=_t("settings.alert_pause_error"),
             variable=self.alert_print,
         ).pack(anchor="w", padx=8, pady=(6, 0))
         ttk.Checkbutton(
             filament,
-            text="… zusätzlich Dialog-Fenster",
+            text=_t("settings.alert_popup"),
             variable=self.alert_print_popup,
         ).pack(anchor="w", padx=24)
         ttk.Checkbutton(
             filament,
-            text="… zusätzlich Windows-Benachrichtigung (wenn App im Hintergrund)",
+            text=_t("settings.alert_toast"),
             variable=self.alert_print_toast,
         ).pack(anchor="w", padx=24, pady=(0, 4))
         self.alert_complete_toast = tk.BooleanVar(
@@ -158,77 +176,75 @@ class SettingsPanel(ttk.Frame):
         )
         ttk.Checkbutton(
             filament,
-            text="Windows-Benachrichtigung wenn Druck fertig ist",
+            text=_t("settings.alert_complete_toast"),
             variable=self.alert_complete_toast,
         ).pack(anchor="w", padx=8)
         ttk.Checkbutton(
             filament,
-            text="Windows-Benachrichtigung bei niedrigem Filament-Rest",
+            text=_t("settings.alert_low_toast"),
             variable=self.alert_low_toast,
         ).pack(anchor="w", padx=8, pady=(0, 4))
         ttk.Label(
             filament,
-            text="Gilt nur bei laufendem Druck und aktiver Verbindung zum K2 (Tab Drucker).",
+            text=_t("settings.alert_low.hint"),
             style="Muted.TLabel",
             wraplength=520,
         ).pack(anchor="w", padx=8, pady=(0, 4))
         self.protect_tag = tk.BooleanVar(value=getattr(settings, "protect_tag_overwrite", True))
         ttk.Checkbutton(
             filament,
-            text="Vor Tag-Schreiben: warnen wenn Chip schon Daten hat",
+            text=_t("settings.protect_tag"),
             variable=self.protect_tag,
         ).pack(anchor="w", padx=8, pady=(2, 0))
         self.default_deduct_g = tk.IntVar(value=settings.default_post_print_deduct_g)
         d_row = ttk.Frame(filament)
         d_row.pack(fill="x", padx=8, pady=(2, 4))
-        ttk.Label(d_row, text="Standard-Abzug (g, 0 = schätzen):").pack(side="left")
+        ttk.Label(d_row, text=_t("settings.default_deduct")).pack(side="left")
         ttk.Spinbox(d_row, from_=0, to=500, textvariable=self.default_deduct_g, width=6).pack(
             side="left", padx=6
         )
-        reader = ttk.LabelFrame(inner, text="NFC-Reader")
+        reader = ttk.LabelFrame(inner, text=_t("settings.section.reader"))
         reader.pack(fill="x", **frame_pad)
         names = [""] + CrealityNfcReader.list_readers_safe()
         self.reader_var = tk.StringVar(value=settings.preferred_reader)
         ttk.Combobox(reader, textvariable=self.reader_var, values=names).pack(fill="x", padx=8, pady=4)
 
-        db_sync = ttk.LabelFrame(inner, text="Material-Datenbank (nur Lesen)")
+        db_sync = ttk.LabelFrame(inner, text=_t("settings.section.material_db"))
         db_sync.pack(fill="x", **frame_pad)
         ttk.Label(
             db_sync,
-            text="Der Drucker wird nicht per SSH beschrieben (sicherer Modus). "
-            "Profile nur mit „Vom Drucker“ holen und lokal bearbeiten. "
-            "Druckparameter am K2 änderst du in Creality Print.",
+            text=_t("settings.material_db.hint"),
             style="Muted.TLabel",
             wraplength=520,
         ).pack(anchor="w", padx=8, pady=(4, 8))
 
-        merge = ttk.LabelFrame(inner, text="DB-Merge")
+        merge = ttk.LabelFrame(inner, text=_t("settings.section.db_merge"))
         merge.pack(fill="x", **frame_pad)
         self.merge_var = tk.StringVar(value=settings.merge_prefer)
-        ttk.Radiobutton(merge, text="Konflikt: lokal behalten", value="local", variable=self.merge_var).pack(anchor="w", padx=8)
-        ttk.Radiobutton(merge, text="Konflikt: Cloud überschreiben", value="cloud", variable=self.merge_var).pack(anchor="w", padx=8)
+        ttk.Radiobutton(merge, text=_t("settings.merge.local"), value="local", variable=self.merge_var).pack(anchor="w", padx=8)
+        ttk.Radiobutton(merge, text=_t("settings.merge.cloud"), value="cloud", variable=self.merge_var).pack(anchor="w", padx=8)
         ttk.Label(
             merge,
-            text="Geschützte Profile (Haken im Filament-Editor) werden bei Cloud/Drucker nie überschrieben.",
+            text=_t("settings.merge.hint"),
             style="Muted.TLabel",
             wraplength=480,
         ).pack(anchor="w", padx=8, pady=(4, 0))
 
-        updates = ttk.LabelFrame(inner, text="Updates & GitHub")
+        updates = ttk.LabelFrame(inner, text=_t("settings.section.updates"))
         updates.pack(fill="x", **frame_pad)
         self.check_updates = tk.BooleanVar(value=settings.check_updates)
         ttk.Checkbutton(
             updates,
-            text="Automatisch auf Updates hinweisen (beim Start und alle 4 Stunden)",
+            text=_t("settings.updates.auto"),
             variable=self.check_updates,
         ).pack(anchor="w", padx=8)
         ttk.Label(
             updates,
-            text="Bei neuer Version erscheint ein Dialog mit Installations-Optionen.",
+            text=_t("settings.updates.hint"),
             style="Muted.TLabel",
             wraplength=520,
         ).pack(anchor="w", padx=8, pady=(0, 6))
-        self._github_stats_var = tk.StringVar(value="GitHub-Statistik: wird geladen …")
+        self._github_stats_var = tk.StringVar(value=_t("settings.github.loading"))
         ttk.Label(
             updates,
             textvariable=self._github_stats_var,
@@ -237,29 +253,29 @@ class SettingsPanel(ttk.Frame):
         gh_row = ttk.Frame(updates)
         gh_row.pack(anchor="w", padx=8, pady=(4, 10))
         tip(
-            ttk.Button(gh_row, text="GitHub-Statistik aktualisieren", command=self._refresh_github_stats),
-            "Lädt Release-Tag und Setup-Download-Zähler von GitHub (API).",
+            ttk.Button(gh_row, text=_t("settings.github.refresh"), command=self._refresh_github_stats),
+            _t("settings.github.refresh.tip"),
         ).pack(side="left", padx=(0, 8))
         tip(
             ttk.Button(
                 gh_row,
-                text="Releases im Browser",
+                text=_t("settings.github.releases"),
                 command=lambda: webbrowser.open(f"{GITHUB_URL}/releases"),
                 style="Secondary.TButton",
             ),
-            "GitHub-Releases-Seite öffnen.",
+            _t("settings.github.releases.tip"),
         ).pack(side="left")
         self.after(500, self._refresh_github_stats)
 
         self.show_setup_startup = tk.BooleanVar(value=settings.show_setup_on_startup)
         ttk.Checkbutton(
             inner,
-            text="Ersteinrichtung bei jedem Programmstart anzeigen",
+            text=_t("settings.show_setup_startup"),
             variable=self.show_setup_startup,
         ).pack(anchor="w", padx=12, pady=(4, 12))
 
     def _refresh_github_stats(self) -> None:
-        self._github_stats_var.set("GitHub-Statistik: wird geladen …")
+        self._github_stats_var.set(_t("settings.github.loading"))
 
         def work() -> None:
             from creality_nfc.update_check import fetch_latest_release, format_setup_downloads, is_newer
@@ -267,21 +283,17 @@ class SettingsPanel(ttk.Frame):
             try:
                 info = fetch_latest_release()
                 if not info:
-                    text = "GitHub: keine Release-Infos erreichbar."
+                    text = _t("settings.github.no_release")
                 else:
                     newer = is_newer(info.version, APP_VERSION)
-                    hint = " — Update verfügbar!" if newer else ""
+                    hint = _t("settings.github.update_hint") if newer else ""
                     dl = format_setup_downloads(
                         info.setup_download_count,
                         label=info.download_label,
                     )
-                    text = (
-                        f"Installiert: {APP_VERSION}{hint}\n"
-                        f"GitHub neuestes Release: {info.tag}\n"
-                        f"{dl}"
-                    )
+                    text = _t("settings.github.stats_line", version=APP_VERSION, hint=hint, tag=info.tag, downloads=dl)
             except Exception as exc:
-                text = f"GitHub-Statistik fehlgeschlagen: {exc}"
+                text = _t("settings.github.failed", exc=exc)
 
             self.after(0, lambda: self._github_stats_var.set(text))
 
@@ -310,4 +322,20 @@ class SettingsPanel(ttk.Frame):
         s.protect_tag_overwrite = self.protect_tag.get()
         s.launch_with_creality_print = self.launch_with_creality.get()
         s.tray_run_in_background = self.tray_run_in_background.get()
+        new_lang = (self.language_var.get() or "de").strip().lower()
+        language_changed = new_lang != (s.language or "de")
+        s.language = new_lang if new_lang in ("de", "en") else "de"
         self._on_save(s)
+        if language_changed:
+            try:
+                from tkinter import messagebox
+
+                from creality_nfc.i18n import t
+
+                messagebox.showinfo(
+                    title=t("settings.title"),
+                    message=t("settings.language.hint"),
+                    parent=self,
+                )
+            except Exception:
+                pass

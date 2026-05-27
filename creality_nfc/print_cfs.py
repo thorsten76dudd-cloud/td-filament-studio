@@ -12,6 +12,7 @@ from creality_nfc.cfs_feed import (
     infer_slot_from_gcode,
     wait_filament_ready,
 )
+from creality_nfc.i18n import t as _t
 from creality_nfc.gcode_filament import (
     GcodeFilamentSpec,
     build_preheat_params,
@@ -238,7 +239,7 @@ def resolve_print_slot(
     idx = pick_filament_slot(slots, preferred=pick, active_index=meta.active_index)
     if idx is None:
         raise PrinterControlError(
-            "Kein Filament im CFS — Slot mit Material wählen (z. B. 1A oder 3B) oder Spule einlegen."
+            _t("print_cfs.no_filament")
         )
     if not gcode_maps and gcode_path:
         gcode_maps = resolve_slots_from_gcode(
@@ -266,7 +267,7 @@ def build_print_steps(
         return (
             [{"opGcodeFile": f"printprt:{path}", "enableSelfTest": enable_self_test}],
             -1,
-            "Spulenhalter",
+            _t("print_cfs.spool_holder"),
             "external",
         )
 

@@ -7,6 +7,7 @@ from tkinter import ttk
 from typing import Callable, Literal
 
 from creality_nfc.cfs_adopt import CfsSlotInfo, SLOT_LABELS, parse_cfs_meta
+from creality_nfc.i18n import t as _t
 from creality_nfc.cfs_feed import active_slot_label
 from creality_nfc.cfs_layout import parse_cfs_layout
 from creality_nfc.cfs_slot_index import flat_slot_index
@@ -96,9 +97,9 @@ class CfsDashboard(ttk.Frame):
 
         top = ttk.Frame(self, style=self._sf)
         top.pack(fill="x", padx=8, pady=(8, 4))
-        title = "Filamenteinstellungen" if self._creality else "Filament"
+        title = _t("cfsd.title_creality") if self._creality else _t("cfsd.title_filament")
         ttk.Label(top, text=title, style=self._sh).pack(side="left")
-        self._cfs_summary_var = tk.StringVar(value="1 CFS am Drucker (1A–1D)")
+        self._cfs_summary_var = tk.StringVar(value=_t("cfsd.summary_one_cfs"))
         ttk.Label(top, textvariable=self._cfs_summary_var, style=self._sm).pack(
             side="left", padx=(12, 0)
         )
@@ -108,28 +109,28 @@ class CfsDashboard(ttk.Frame):
             self._preview_btn = tip(
                 rounded_button(
                     top,
-                    "4× CFS Demo",
+                    _t("cfsd.demo_start"),
                     on_preview_toggle,
                     variant="secondary",
                     compact=True,
                 ),
-                "Vier CFS-Einheiten nur zur Ansicht (ohne Drucker). Erneut klicken = aus.",
+                _t("cfsd.demo_tip"),
             )
             self._preview_btn.pack(side="right", padx=(0, 6))
         if on_batch_scan:
             tip(
                 rounded_button(
                     top,
-                    "Alle Slots",
+                    _t("cfsd.btn.all_slots"),
                     on_batch_scan,
                     variant="secondary",
                     compact=True,
                 ),
-                "Übersicht aller CFS-Slots (1A–4D) mit verknüpften Spulen.",
+                _t("cfsd.overview_tip"),
             ).pack(side="right", padx=(0, 6))
         tip(
             ttk.Button(top, text="↻", width=3, command=on_refresh, style=self._sb),
-            "CFS-Daten neu laden.",
+            _t("cfsd.refresh_tip"),
         ).pack(side="right")
 
         if self._creality:
@@ -139,18 +140,18 @@ class CfsDashboard(ttk.Frame):
 
         foot = ttk.Frame(self, style=self._sf)
         foot.pack(fill="x", padx=8, pady=(4, 4))
-        self._active_var = tk.StringVar(value="Aktiv: —")
+        self._active_var = tk.StringVar(value=_t("cfsd.active_none"))
         ttk.Label(foot, textvariable=self._active_var, style=self._sh).pack(
             anchor="w", fill="x", pady=(0, 2)
         )
         foot2 = ttk.Frame(self, style=self._sf)
         foot2.pack(fill="x", padx=8, pady=(0, 4))
-        self._humidity_var = tk.StringVar(value="Feuchtigkeit: —")
+        self._humidity_var = tk.StringVar(value=_t("cfsd.humidity_none"))
         ttk.Label(foot2, textvariable=self._humidity_var, style=self._sm).pack(side="right")
         self._status_var = tk.StringVar(
-            value="Slot wählen, dann Zufuhr oder Zurückziehen"
+            value=_t("pdp.cfs.choose_then")
             if self._creality
-            else "Slot wählen · → RFID übernimmt Material in den Editor"
+            else _t("pdp.cfs.choose_rfid")
         )
         ttk.Label(foot2, textvariable=self._status_var, style=self._sm, wraplength=480).pack(
             side="left", fill="x", expand=True
@@ -158,7 +159,7 @@ class CfsDashboard(ttk.Frame):
         if not self._creality:
             ttk.Label(
                 foot,
-                text="Oranger Rahmen = Filament im Einsatz",
+                text=_t("cfsd.frame_in_use"),
                 style=self._sm,
                 wraplength=520,
             ).pack(anchor="w", fill="x", pady=(0, 4))
@@ -168,13 +169,13 @@ class CfsDashboard(ttk.Frame):
         btns.pack(fill="x", padx=8, pady=(4, 10))
         cfs_font = ("Segoe UI", 10, "bold")
         self._feed_btn = tip(
-            rounded_button(btns, "Zufuhr", self._feed, variant="accent", font=cfs_font),
-            "Filament in den Drucker laden.",
+            rounded_button(btns, _t("cfsd.btn.feed"), self._feed, variant="accent", font=cfs_font),
+            _t("cfsd.feed_tip"),
         )
         self._feed_btn.pack(side="left", padx=(0, 8))
         self._retract_btn = tip(
-            rounded_button(btns, "Zurückziehen", self._retract, variant="secondary", font=cfs_font),
-            "Filament zurückziehen.",
+            rounded_button(btns, _t("cfsd.btn.retract"), self._retract, variant="secondary", font=cfs_font),
+            _t("cfsd.btn.retract_tip"),
         )
         self._retract_btn.pack(side="left")
         self._feed_btn.config(state="disabled")
@@ -184,7 +185,7 @@ class CfsDashboard(ttk.Frame):
             hint_style = "Printer.Hint.TLabel" if self._printer else self._sm
             hint = ttk.Label(
                 self,
-                text="Wählen Sie einen Slot und klicken Sie auf „Zufuhr“ / „Zurückziehen“",
+                text=_t("cfsd.placeholder_pick_slot"),
                 style=hint_style,
             )
             hint.pack(anchor="w", padx=12, pady=(0, 6))
@@ -199,7 +200,7 @@ class CfsDashboard(ttk.Frame):
         grid.columnconfigure(0, weight=0)
         grid.columnconfigure(1, weight=1)
 
-        ext_box = ttk.LabelFrame(grid, text="  Spulenhalter  ", padding=6)
+        ext_box = ttk.LabelFrame(grid, text=_t("cfsd.ext_spool_holder"), padding=6)
         ext_box.grid(row=0, column=0, sticky="nsew", padx=(0, 8), pady=4)
         self._ext_swatch = tk.Label(
             ext_box,
@@ -216,7 +217,7 @@ class CfsDashboard(ttk.Frame):
         self._ext_type = ttk.Label(ext_box, text="—", style=self._sm)
         self._ext_type.pack()
 
-        cfs_box = ttk.LabelFrame(grid, text="  CFS  ", padding=8)
+        cfs_box = ttk.LabelFrame(grid, text=_t("cfsd.cfs_box"), padding=8)
         cfs_box.grid(row=0, column=1, sticky="nsew", pady=4)
         self._slots_area = ttk.Frame(cfs_box, style=self._sf)
         self._slots_area.pack(fill="both", expand=True)
@@ -232,7 +233,7 @@ class CfsDashboard(ttk.Frame):
         row = ttk.Frame(self, style=self._sf)
         row.pack(fill="both", expand=True, padx=8, pady=6)
 
-        ext_box = ttk.LabelFrame(row, text="  Spulenhalter  ", padding=8, style=self._lf)
+        ext_box = ttk.LabelFrame(row, text=_t("cfsd.ext_spool_holder"), padding=8, style=self._lf)
         ext_box.pack(side="left", fill="y", padx=(0, 10))
         self._ext_swatch = tk.Label(
             ext_box,
@@ -303,7 +304,9 @@ class CfsDashboard(ttk.Frame):
 
     def set_preview_active(self, active: bool) -> None:
         if self._preview_btn is not None:
-            self._preview_btn.config(text="Demo beenden" if active else "4× CFS Demo")
+            self._preview_btn.config(
+                text=_t("cfsd.demo_end") if active else _t("cfsd.demo_start")
+            )
 
     def _sync_scroll_visibility(self, box_count: int, *, matrix_overview: bool = False) -> None:
         if not hasattr(self, "_slots_scroll"):
@@ -347,7 +350,7 @@ class CfsDashboard(ttk.Frame):
             self._box_filter = None
             return
         self._box_bar.pack(fill="x", pady=(0, 6), before=self._scroll_wrap)
-        ttk.Label(self._box_bar, text="CFS:", style=self._sm).pack(side="left", padx=(0, 6))
+        ttk.Label(self._box_bar, text=_t("cfs.cfs_label"), style=self._sm).pack(side="left", padx=(0, 6))
 
         def add_btn(label: str, bid: int | None) -> None:
             b = ttk.Button(
@@ -595,7 +598,7 @@ class CfsDashboard(ttk.Frame):
                         variant="secondary",
                         compact=True,
                     ),
-                    "Material in RFID-Tab übernehmen.",
+                    _t("cfsd.adopt_to_rfid_tip"),
                 )
                 adopt.pack(side="left", padx=(0, 2 if compact else 4))
                 adopt.config(state="disabled")
@@ -604,12 +607,12 @@ class CfsDashboard(ttk.Frame):
                     bind_btn = tip(
                         rounded_button(
                             btn_row,
-                            "Spule" if not compact else "Sp",
+                            _t("cfsd.label_spool") if not compact else _t("cfsd.label_spool_short"),
                             lambda idx=flat_i: on_bind(idx),
                             variant="secondary",
                             compact=True,
                         ),
-                        "Mit „Meine Spulen“ verknüpfen.",
+                        _t("cfsd.bind_spool_tip"),
                     )
                     bind_btn.pack(side="left")
                     bind_btn.config(state="disabled")
@@ -634,7 +637,7 @@ class CfsDashboard(ttk.Frame):
             lab = SLOT_LABELS[index] if index < 4 else f"Slot {index + 1}"
             if 0 <= index < len(self._slots):
                 lab = self._slots[index].label
-            self._status_var.set(f"{lab}: leer — Spule einlegen")
+            self._status_var.set(_t("cfsd.slot_empty", label=lab))
             self._feed_btn.config(state="disabled")
             self._retract_btn.config(state="disabled")
 
@@ -773,6 +776,6 @@ class CfsDashboard(ttk.Frame):
         if self._selected is not None and 0 <= self._selected < len(self._slots):
             slot = self._slots[self._selected]
             if not slot.empty:
-                self._status_var.set(f"Gewählt {slot.label}: {slot.display}")
+                self._status_var.set(_t("cfsd.selected", label=slot.label, display=slot.display))
             else:
                 self._status_var.set(f"{slot.label}: leer")

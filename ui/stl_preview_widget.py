@@ -7,6 +7,7 @@ import tkinter as tk
 from pathlib import Path
 from tkinter import ttk
 
+from creality_nfc.i18n import t as _t
 from creality_nfc.stl_preview_server import StlPreviewServer
 
 from ui.theme import BG_SUBTLE, MUTED, TEXT
@@ -28,7 +29,7 @@ class StlPreviewWidget(ttk.Frame):
 
         hdr = ttk.Frame(self)
         hdr.pack(fill="x")
-        ttk.Label(hdr, text="3D-Vorschau", style="Muted.TLabel").pack(side="left")
+        ttk.Label(hdr, text=_t("stl.title"), style="Muted.TLabel").pack(side="left")
         self._hint_lbl = ttk.Label(hdr, text="", style="Muted.TLabel")
         self._hint_lbl.pack(side="right")
 
@@ -38,9 +39,7 @@ class StlPreviewWidget(ttk.Frame):
 
         self._placeholder = tk.Label(
             self._host,
-            text="STL wählen — Vorschau lädt hier.\n\n"
-            "Drehen/Zoomen mit Maus (wie 3D-Viewer).\n"
-            "Einmalig Internet für Three.js nötig.",
+            text=_t("stl.placeholder"),
             bg=BG_SUBTLE,
             fg=MUTED,
             justify="center",
@@ -50,10 +49,10 @@ class StlPreviewWidget(ttk.Frame):
 
         btns = ttk.Frame(self)
         btns.pack(fill="x", pady=(6, 0))
-        ttk.Button(btns, text="Neu laden", command=self._reload, style="Secondary.TButton").pack(side="left")
+        ttk.Button(btns, text=_t("stl.btn.reload"), command=self._reload, style="Secondary.TButton").pack(side="left")
         ttk.Button(
             btns,
-            text="Windows 3D Viewer",
+            text=_t("stl.btn.win_viewer"),
             command=self._open_external,
             style="Secondary.TButton",
         ).pack(side="right")
@@ -114,23 +113,21 @@ class StlPreviewWidget(ttk.Frame):
         self._stop_embed()
         self._placeholder.config(
             text=message
-            or "STL wählen — Vorschau lädt hier.\n\nDrehen/Zoomen mit Maus.",
+            or _t("stl.placeholder_short"),
             fg=MUTED,
         )
 
     def load_stl(self, path: Path) -> bool:
         path = path.resolve()
         if not path.is_file():
-            self.clear("Datei nicht gefunden.")
+            self.clear(_t("stl.file_not_found"))
             return False
         self._path = path
         self._hint_lbl.config(text=path.name[:36] + ("…" if len(path.name) > 36 else ""))
         StlPreviewServer.state().set_file(path)
         if not self._start_embed():
             self._placeholder.config(
-                text="3D-Vorschau: Edge/Chrome nötig\n"
-                f"(STL: {path.name})\n\n"
-                "„Windows 3D Viewer“ für volle Ansicht.",
+                text=_t("stl.need_edge", name=path.name),
                 fg=MUTED,
             )
             self._placeholder.place(relx=0.5, rely=0.5, anchor="center")

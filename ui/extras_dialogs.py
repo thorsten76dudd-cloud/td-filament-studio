@@ -1,4 +1,4 @@
-"""Zusatz-Dialoge: Druck-Historie, CFS-Batch-Übersicht."""
+"""Zusatz-Dialoge: Druck-Historie, CFS-Batch-Uebersicht."""
 
 from __future__ import annotations
 
@@ -9,6 +9,7 @@ from collections.abc import Callable
 from typing import TYPE_CHECKING, Any
 
 from creality_nfc.cfs_adopt import CfsMeta, CfsSlotInfo, parse_cfs_meta, parse_cfs_slots
+from creality_nfc.i18n import t as _t
 from creality_nfc.cfs_layout import cfs_slot_label, parse_cfs_layout
 from creality_nfc.cfs_spool_link import find_spool_for_slot
 from creality_nfc.filament_alerts import find_low_filament_spools
@@ -42,7 +43,7 @@ def show_print_history_dialog(
     store.load()
     dlg, body, footer = begin_table_dialog(
         parent,
-        title=f"Druck-Historie ({len(store.list_entries())})",
+        title=_t("history.title", n=len(store.list_entries())),
         width=1020,
         height=540,
         min_width=860,
@@ -55,16 +56,16 @@ def show_print_history_dialog(
     def _export_csv() -> None:
         path = filedialog.asksaveasfilename(
             parent=dlg,
-            title="Historie als CSV",
+            title=_t("history.csv_title"),
             defaultextension=".csv",
             filetypes=[("CSV", "*.csv")],
-            initialfile="druck_historie.csv",
+            initialfile=_t("history.csv_default"),
         )
         if not path:
             return
         try:
             store.export_csv(path)
-            notify(dlg, f"Exportiert:\n{path}", "ok")
+            notify(dlg, _t("history.exported", path=path), "ok")
         except OSError as exc:
             notify(dlg, str(exc), "error")
 
@@ -80,14 +81,7 @@ def show_print_history_dialog(
         if not entries:
             empty = ttk.Label(
                 body,
-                text=(
-                    "Noch keine Einträge.\n\n"
-                    "Die Historie füllt sich, wenn ein Druck auf dem K2 endet und der "
-                    "Tab Drucker verbunden ist — auch wenn du den Filament-Dialog "
-                    "überspringst.\n\n"
-                    "Einstellungen: „Nach Druckende: Verbrauch abfragen“ kann aus sein; "
-                    "der Eintrag wird trotzdem gespeichert."
-                ),
+                text=_t("history.empty"),
                 style="Muted.TLabel",
                 wraplength=760,
                 justify="left",
@@ -124,11 +118,11 @@ def show_print_history_dialog(
             return
         sel = tree.selection()
         if not sel:
-            notify(dlg, "Bitte zuerst einen Druck in der Liste wählen.", "warn")
+            notify(dlg, _t("history.no_selection"), "warn")
             return
         entry = store.get(sel[0])
         if entry is None:
-            notify(dlg, "Eintrag nicht gefunden.", "warn")
+            notify(dlg, _t("history.entry_not_found"), "warn")
             return
         on_retro_deduct(entry)
         store.load()
@@ -141,29 +135,26 @@ def show_print_history_dialog(
             tree.selection_set(tree.get_children()[0])
 
     rounded_button(
-        foot_inner, "CSV exportieren…", _export_csv, variant="secondary", compact=True
+        foot_inner, _t("history.btn.export_csv"), _export_csv, variant="secondary", compact=True
     ).pack(side="left")
     if on_retro_deduct:
-        tip_retro = (
-            "Verbrauch für den gewählten Druck nachträglich von der Spule abziehen "
-            "(gleicher Dialog wie nach Druckende)."
-        )
+        tip_retro = _t("history.tip_retro")
         rounded_button(
             foot_inner,
-            "Verbrauch nachträglich…",
+            _t("history.btn.retro_deduct"),
             _retro_deduct,
             variant="secondary",
             compact=True,
         ).pack(side="left", padx=(8, 0))
-    rounded_button(foot_inner, "Schließen", dlg.destroy, variant="accent", compact=True).pack(
+    rounded_button(foot_inner, _t("btn.close"), dlg.destroy, variant="accent", compact=True).pack(
         side="right"
     )
 
     top = ttk.Frame(body, padding=10)
     top.pack(fill="x")
-    hint = "Abgeschlossene Drucke (lokal gespeichert)"
+    hint = _t("history.basic_hint")
     if on_retro_deduct:
-        hint += " — Zeile wählen → „Verbrauch nachträglich…“"
+        hint += _t("history.basic_hint_retro")
     ttk.Label(top, text=hint, style="Muted.TLabel").pack(anchor="w")
 
     tree_wrap = ttk.Frame(body)
@@ -173,12 +164,12 @@ def show_print_history_dialog(
 
     cols = ("ts", "file", "deducted", "slot", "spool", "note")
     tree = ttk.Treeview(tree_wrap, columns=cols, show="headings", height=18)
-    tree.heading("ts", text="Zeit")
-    tree.heading("file", text="Datei")
-    tree.heading("deducted", text="Abgezogen")
-    tree.heading("slot", text="Slot")
-    tree.heading("spool", text="Spule")
-    tree.heading("note", text="Notiz")
+    tree.heading("ts", text=_t("history.col.time"))
+    tree.heading("file", text=_t("history.col.file"))
+    tree.heading("deducted", text=_t("history.col.deducted"))
+    tree.heading("slot", text=_t("history.col.slot"))
+    tree.heading("spool", text=_t("history.col.spool"))
+    tree.heading("note", text=_t("history.col.note"))
     tree.column("ts", width=158, minwidth=140, stretch=False)
     tree.column("file", width=280, minwidth=180, stretch=True)
     tree.column("deducted", width=100, minwidth=96, stretch=False)
@@ -207,7 +198,7 @@ def show_cfs_batch_dialog(
     meta: CfsMeta | None = None,
 ) -> None:
     dlg = tk.Toplevel(parent)
-    dlg.title("CFS — alle Slots")
+    dlg.title(_t("extras.cfs_slots.title"))
     dlg.configure(bg=BG)
     prepare_toplevel(
         dlg,
@@ -223,7 +214,7 @@ def show_cfs_batch_dialog(
     foot = tk.Frame(dlg, bg=BG)
     foot_inner = tk.Frame(foot, bg=BG)
     foot_inner.pack(fill="x", padx=14, pady=12)
-    rounded_button(foot_inner, "Schließen", dlg.destroy, variant="accent", compact=True).pack(
+    rounded_button(foot_inner, _t("btn.close"), dlg.destroy, variant="accent", compact=True).pack(
         side="right"
     )
 
@@ -231,7 +222,7 @@ def show_cfs_batch_dialog(
 
     ttk.Label(
         body,
-        text="Live vom Drucker (WebSocket). RFID-Chips am PC: Tab RFID-Tag.",
+        text=_t("extras.cfs_slots.intro"),
         style="Muted.TLabel",
         wraplength=860,
     ).pack(anchor="w", padx=12, pady=(10, 6))
@@ -244,14 +235,14 @@ def show_cfs_batch_dialog(
     cols = ("cfs", "slot", "mat", "color", "rfid", "spool", "rest", "status")
     tree = ttk.Treeview(tree_wrap, columns=cols, show="headings", height=8)
     for c, t, w, stretch in (
-        ("cfs", "CFS", 48, False),
-        ("slot", "Slot", 52, False),
-        ("mat", "Material", 88, False),
-        ("color", "Farbe", 88, False),
+        ("cfs", _t("extras.col.cfs"), 48, False),
+        ("slot", _t("extras.col.slot"), 52, False),
+        ("mat", _t("extras.col.material"), 88, False),
+        ("color", _t("extras.col.color"), 88, False),
         ("rfid", "RFID", 100, False),
-        ("spool", "Meine Spule", 260, True),
-        ("rest", "Rest", 80, False),
-        ("status", "Status", 130, True),
+        ("spool", _t("sld.col.spool"), 260, True),
+        ("rest", _t("extras.col.rest"), 80, False),
+        ("status", _t("extras.col.status"), 130, True),
     ):
         tree.heading(c, text=t)
         tree.column(c, width=w, minwidth=max(44, w // 2), stretch=stretch)
@@ -290,7 +281,7 @@ def show_cfs_batch_dialog(
         bid = getattr(info, "box_id", 1) or 1
         lab = cfs_slot_label(bid, info.index)
         if info.empty:
-            hint = "keine CFS-Daten" if not has_box else "leer"
+            hint = _t("extras.cfs_slots.no_data") if not has_box else _t("extras.cfs_slots.empty")
             tree.insert(
                 "",
                 tk.END,
@@ -309,9 +300,9 @@ def show_cfs_batch_dialog(
             cfs_meta.loaded_index == info.index
             or cfs_meta.feeding_index == info.index
         ) and layout.box_count() <= 1
-        status = "im Einsatz" if in_use else "bereit"
+        status = _t("extras.cfs_slots.in_use") if in_use else _t("extras.cfs_slots.ready")
         if sp and is_low_filament(sp, threshold_g):
-            status = f"niedrig (<{threshold_g}g)"
+            status = _t("extras.cfs_slots.low", n=threshold_g)
         tree.insert(
             "",
             tk.END,
@@ -320,13 +311,13 @@ def show_cfs_batch_dialog(
 
     low = find_low_filament_spools(inventory, threshold_g)
     if low:
-        msg = "Niedriger Rest: " + ", ".join(s.label for s, _ in low[:4])
+        msg = _t("extras.cfs_slots.low_prefix") + ", ".join(s.label for s, _ in low[:4])
         ttk.Label(body, text=msg, foreground="#c9a227").pack(anchor="w", padx=12, pady=4)
 
     if not has_box and all(s.empty for s in slot_list):
         ttk.Label(
             body,
-            text="Tipp: Tab Filament muss CFS-Daten zeigen — dann ↻ oder neu verbinden.",
+            text=_t("extras.cfs_slots.tip"),
             style="Muted.TLabel",
             wraplength=560,
         ).pack(anchor="w", padx=12, pady=4)

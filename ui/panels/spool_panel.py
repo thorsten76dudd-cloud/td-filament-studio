@@ -9,6 +9,7 @@ from tkinter import colorchooser, filedialog, ttk
 from typing import TYPE_CHECKING, Callable
 
 from app.constants import printer_int_to_display
+from creality_nfc.i18n import t as _t
 from creality_nfc.cfs_adopt import SLOT_LABELS
 from creality_nfc.cfs_layout import cfs_slot_label
 from creality_nfc.cfs_ui_options import cfs_box_count_from_app, cfs_slot_combobox_values
@@ -34,7 +35,7 @@ if TYPE_CHECKING:
 
 class SpoolEditPanel(ttk.LabelFrame):
     def __init__(self, parent: tk.Misc) -> None:
-        super().__init__(parent, text="Spule bearbeiten")
+        super().__init__(parent, text=_t("spools.editor.title"))
         theme_dialog(self)
         self._spool_id = SpoolInventory.new_id()
         self._tag_uid = ""
@@ -61,14 +62,14 @@ class SpoolEditPanel(ttk.LabelFrame):
         _canvas, form = scrollable_tab(body)
 
         fields = (
-            ("Bezeichnung", self.label_var),
-            ("Bemerkung", self.notes_var),
+            (_t("spools.field.label"), self.label_var),
+            (_t("spools.field.notes"), self.notes_var),
             ("Marke", self.brand_var),
-            ("Material", self.material_var),
-            ("Filament-ID (5 Ziffern)", self.fid_var),
-            ("Seriennummer", self.serial_var),
-            ("Restgewicht (g)", self.remaining_var),
-            ("Drucker am Tag", self.printer_var),
+            (_t("spools.field.material"), self.material_var),
+            (_t("spools.field.filament_id"), self.fid_var),
+            (_t("spools.field.serial"), self.serial_var),
+            (_t("spools.field.remaining"), self.remaining_var),
+            (_t("spools.field.printer_tag"), self.printer_var),
         )
         for text, var in fields:
             ttk.Label(form, text=text, style="Muted.TLabel").pack(anchor="w", **pad)
@@ -79,15 +80,15 @@ class SpoolEditPanel(ttk.LabelFrame):
         self._btn_from_db = tip(
             ttk.Button(
                 db_row,
-                text="Aus Material-DB übernehmen…",
+                text=_t("spools.editor.adopt_from_db"),
                 command=self._apply_from_material_db,
                 style="Accent.TButton",
             ),
-            "Marke, Material, Filament-ID und Profilfarbe aus der Material-Datenbank laden.",
+            _t("spools.editor.adopt_tip"),
         )
         self._btn_from_db.pack(side="left")
 
-        ttk.Label(form, text="Farbe", style="Muted.TLabel").pack(anchor="w", **pad)
+        ttk.Label(form, text=_t("spools.editor.color"), style="Muted.TLabel").pack(anchor="w", **pad)
         color_row = ttk.Frame(form)
         color_row.pack(fill="x", padx=8, pady=(0, 3))
         self._color_preview = tk.Label(
@@ -103,21 +104,21 @@ class SpoolEditPanel(ttk.LabelFrame):
         ttk.Entry(color_row, textvariable=self.color_var, width=10).pack(side="left")
         self.color_var.trace_add("write", lambda *_: self._update_color_preview())
         self._btn_color_pick = tip(
-            ttk.Button(color_row, text="Farbe…", command=self._pick_color_dialog, style="Secondary.TButton"),
-            "Windows-Farbauswahl (wie im RFID-Tab).",
+            ttk.Button(color_row, text=_t("spools.editor.color_btn"), command=self._pick_color_dialog, style="Secondary.TButton"),
+            _t("spools.editor.color_dialog_tip"),
         )
         self._btn_color_pick.pack(side="left", padx=(6, 0))
         self._btn_color_presets = tip(
-            ttk.Button(color_row, text="Presets", command=self._show_color_presets, style="Secondary.TButton"),
-            "Standard-Filamentfarben (Schwarz, Weiß, Creality Blau …).",
+            ttk.Button(color_row, text=_t("spools.editor.color_presets"), command=self._show_color_presets, style="Secondary.TButton"),
+            _t("spools.editor.color_presets_tip"),
         )
         self._btn_color_presets.pack(side="left", padx=(4, 0))
-        ttk.Label(form, text="Hex ohne # — oder Farbe… / Presets", style="Muted.TLabel").pack(
+        ttk.Label(form, text=_t("spools.editor.hex_hint"), style="Muted.TLabel").pack(
             anchor="w", padx=8, pady=(0, 4)
         )
         self._update_color_preview()
 
-        ttk.Label(form, text="Gewichtsklasse", style="Muted.TLabel").pack(anchor="w", **pad)
+        ttk.Label(form, text=_t("spools.editor.weight_class"), style="Muted.TLabel").pack(anchor="w", **pad)
         ttk.Combobox(
             form,
             textvariable=self.weight_var,
@@ -125,7 +126,7 @@ class SpoolEditPanel(ttk.LabelFrame):
             state="readonly",
         ).pack(fill="x", **pad)
 
-        ttk.Label(form, text="CFS-Slot (am Drucker)", style="Muted.TLabel").pack(anchor="w", **pad)
+        ttk.Label(form, text=_t("spools.editor.cfs_slot"), style="Muted.TLabel").pack(anchor="w", **pad)
         self._cfs_slot_combo = ttk.Combobox(
             form,
             textvariable=self.cfs_slot_var,
@@ -134,8 +135,8 @@ class SpoolEditPanel(ttk.LabelFrame):
         )
         self._cfs_slot_combo.pack(fill="x", **pad)
 
-        ttk.Label(form, text="Standort (physisch)", style="Muted.TLabel").pack(anchor="w", **pad)
-        loc_vals = [""] + [p.name for p in load_printers()] + ["Lager / Regal"]
+        ttk.Label(form, text=_t("spools.editor.location"), style="Muted.TLabel").pack(anchor="w", **pad)
+        loc_vals = [""] + [p.name for p in load_printers()] + [_t("spools.location.storage")]
         self.location_printer_var = tk.StringVar(value="")
         ttk.Combobox(
             form,
@@ -143,12 +144,12 @@ class SpoolEditPanel(ttk.LabelFrame):
             values=loc_vals,
         ).pack(fill="x", **pad)
 
-        passport = ttk.LabelFrame(form, text="  Filament-Passport  ", padding=6)
+        passport = ttk.LabelFrame(form, text=_t("spools.editor.passport"), padding=6)
         passport.pack(fill="x", **pad)
-        ttk.Label(passport, text="Geöffnet am (YYYY-MM-DD)", style="Muted.TLabel").pack(anchor="w")
+        ttk.Label(passport, text=_t("spools.editor.opened_at"), style="Muted.TLabel").pack(anchor="w")
         self.opened_at_var = tk.StringVar(value="")
         ttk.Entry(passport, textvariable=self.opened_at_var, width=16).pack(anchor="w", pady=(0, 4))
-        ttk.Label(passport, text="Charge / Batch-ID", style="Muted.TLabel").pack(anchor="w")
+        ttk.Label(passport, text=_t("spools.editor.batch"), style="Muted.TLabel").pack(anchor="w")
         self.batch_id_var = tk.StringVar(value="")
         ttk.Entry(passport, textvariable=self.batch_id_var).pack(fill="x", pady=(0, 4))
         self._passport_last_var = tk.StringVar(value="—")
@@ -160,7 +161,7 @@ class SpoolEditPanel(ttk.LabelFrame):
             justify="left",
         ).pack(anchor="w")
 
-        ttk.Label(form, text="RFID-Chips (UIDs)", style="Muted.TLabel").pack(anchor="w", **pad)
+        ttk.Label(form, text=_t("spools.editor.rfid_uids"), style="Muted.TLabel").pack(anchor="w", **pad)
         self._tag_uids_label = ttk.Label(
             form,
             text="—",
@@ -182,28 +183,28 @@ class SpoolEditPanel(ttk.LabelFrame):
         self._tag_remove_btn = tip(
             ttk.Button(
                 tag_btns,
-                text="Chip entfernen",
+                text=_t("spools.editor.unlink_chip"),
                 command=self._remove_selected_tag,
                 style="Secondary.TButton",
             ),
-            "Verknüpfung dieses Chips mit der Spule lösen (Chip am Drucker bleibt unverändert).",
+            _t("spools.editor.unlink_chip_tip"),
         )
         self._tag_remove_btn.pack(side="left", padx=(6, 0))
         self._tag_remove_btn.config(state="disabled")
         tip(
             ttk.Button(
                 tag_btns,
-                text="Alle trennen",
+                text=_t("spools.editor.unlink_all"),
                 command=self._clear_all_tags,
                 style="Secondary.TButton",
             ),
-            "Alle Chip-UIDs von dieser Spule entfernen.",
+            _t("spools.editor.unlink_all_tip"),
         ).pack(side="left", padx=(6, 0))
 
         rest_row = ttk.Frame(form)
         rest_row.pack(fill="x", padx=8, pady=(0, 3))
         tip(
-            ttk.Button(rest_row, text="Volle Spule", command=self._set_full_weight, style="Secondary.TButton"),
+            ttk.Button(rest_row, text=_t("spools.editor.full_spool"), command=self._set_full_weight, style="Secondary.TButton"),
             "Restgewicht = Gewichtsklasse der Spule (z. B. 1000 g).",
         ).pack(side="right")
 
@@ -212,11 +213,11 @@ class SpoolEditPanel(ttk.LabelFrame):
         btns = ttk.Frame(footer)
         btns.pack(fill="x", pady=10, padx=8)
         tip(
-            ttk.Button(btns, text="Neu / Leeren", command=self.load_new, style="Secondary.TButton"),
-            "Formular für eine neue, leere Spule zurücksetzen.",
+            ttk.Button(btns, text=_t("spools.editor.new_or_empty"), command=self.load_new, style="Secondary.TButton"),
+            _t("spools.editor.new_or_empty_tip"),
         ).pack(side="left")
         tip(
-            ttk.Button(btns, text="Speichern", command=self._save_click, style="Accent.TButton"),
+            ttk.Button(btns, text=_t("spools.editor.save"), command=self._save_click, style="Accent.TButton"),
             "Eingegebene Spulendaten im Inventar speichern.",
         ).pack(side="right")
         self._save_cb = None
@@ -268,7 +269,7 @@ class SpoolEditPanel(ttk.LabelFrame):
         self._tag_uid = ""
         self._extra_tag_uids = []
         self._usage_log = []
-        self._tag_uids_label.config(text="— (kein Tag verknüpft)")
+        self._tag_uids_label.config(text=_t("spools.editor.no_tag_linked"))
         self._refresh_tag_chip_ui()
         self.label_var.set("")
         self.brand_var.set("")
@@ -299,7 +300,7 @@ class SpoolEditPanel(ttk.LabelFrame):
         _, hex_color = colorchooser.askcolor(
             parent=self.winfo_toplevel(),
             color="#" + current,
-            title="Filamentfarbe",
+            title=_t("spools.color.title"),
         )
         if hex_color:
             self._apply_color_hex(hex_color.lstrip("#"))
@@ -309,15 +310,11 @@ class SpoolEditPanel(ttk.LabelFrame):
 
     def _apply_from_material_db(self) -> None:
         if not self._profiles_fn:
-            notify(self, "Material-DB nicht verbunden.", "error")
+            notify(self, _t("spools.notify.db_disconnected"), "error")
             return
         profiles = list(self._profiles_fn() or [])
         if not profiles:
-            notify(
-                self,
-                "Keine Profile geladen — Tab „Material-DB“ → „Vom Drucker (SSH)“.",
-                "warn",
-            )
+            notify(self, _t("spools.notify.no_profiles"), "warn")
             return
         picked = ask_filament_profile(self, profiles)
         if not picked:
@@ -340,7 +337,7 @@ class SpoolEditPanel(ttk.LabelFrame):
         self._update_color_preview()
         notify(
             self,
-            f"Übernommen: {picked.brand} — {picked.name} (ID {picked.filament_id})",
+            _t("spools.notify.adopted", brand=picked.brand, name=picked.name, filament_id=picked.filament_id),
             "ok",
         )
 
@@ -358,7 +355,7 @@ class SpoolEditPanel(ttk.LabelFrame):
     def _tag_lines_from_state(self) -> str:
         uids = self._listed_tag_uids()
         if not uids:
-            return "— (kein Tag verknüpft)"
+            return _t("spools.editor.no_tag_linked")
         return "\n".join(f"Chip {i}: {u}" for i, u in enumerate(uids, 1))
 
     def _refresh_tag_chip_ui(self) -> None:
@@ -386,7 +383,7 @@ class SpoolEditPanel(ttk.LabelFrame):
     def _remove_selected_tag(self) -> None:
         uid = Spool.normalize_uid(self._uid_from_pick())
         if not uid:
-            notify(self, "Kein Chip ausgewählt.", "warn")
+            notify(self, _t("spools.notify.no_chip_selected"), "warn")
             return
         label = self.label_var.get().strip() or "diese Spule"
 
@@ -405,21 +402,19 @@ class SpoolEditPanel(ttk.LabelFrame):
             self._persist_after_tag_change()
             notify(
                 self,
-                f"Chip {uid} von „{label}“ getrennt.\n"
-                "Der physische Tag ist unverändert — nur die Verknüpfung hier entfernt.",
+                _t("spools.notify.chip_unlinked", uid=uid, label=label) + "\n" + _t("spools.notify.tag_physical_unchanged"),
                 "ok",
             )
 
         confirm(
             self,
-            f"Chip {uid} von „{label}“ entfernen?\n\n"
-            "Die Spule bleibt gespeichert; nur die UID-Verknüpfung in der App wird gelöscht.",
+            _t("spools.notify.chip_unlink_confirm", uid=uid, label=label) + "\n\n" + _t("spools.notify.spool_unlink_only"),
             do_remove,
         )
 
     def _clear_all_tags(self) -> None:
         if not self._listed_tag_uids():
-            notify(self, "Keine Chips verknüpft.", "warn")
+            notify(self, _t("spools.notify.no_chips_linked"), "warn")
             return
         label = self.label_var.get().strip() or "diese Spule"
 
@@ -430,12 +425,11 @@ class SpoolEditPanel(ttk.LabelFrame):
             self._extra_tag_uids = []
             self._refresh_tag_chip_ui()
             self._persist_after_tag_change()
-            notify(self, f"Alle Chip-Verknüpfungen von „{label}“ entfernt.", "ok")
+            notify(self, _t("spools.notify.unlinked_all", label=label), "ok")
 
         confirm(
             self,
-            f"Alle RFID-Chips von „{label}“ trennen?\n\n"
-            f"Es werden {count} Verknüpfung(en) gelöscht.",
+            _t("spools.notify.unlink_all_confirm", label=label) + "\n\n" + _t("spools.notify.unlink_count", count=count),
             do_clear,
         )
 
@@ -474,7 +468,7 @@ class SpoolEditPanel(ttk.LabelFrame):
     def build_spool(self) -> Spool | None:
         fid = self.fid_var.get().strip()
         if fid and (len(fid) != 5 or not fid.isdigit()):
-            notify(self, "Filament-ID: genau 5 Ziffern oder leer.", "warn")
+            notify(self, _t("spools.notify.id_5digits"), "warn")
             return None
         rem_raw = self.remaining_var.get().strip()
         remaining: int | None = None
@@ -482,7 +476,7 @@ class SpoolEditPanel(ttk.LabelFrame):
             try:
                 remaining = int(rem_raw)
             except ValueError:
-                notify(self, "Restgewicht muss eine Zahl sein.", "warn")
+                notify(self, _t("spools.notify.remaining_must_be_number"), "warn")
                 return None
         color = self.color_var.get().strip().lstrip("#").upper()[:6] or "FFFFFF"
         box_id, cfs_slot = self._parse_cfs_slot()
@@ -523,46 +517,46 @@ class SpoolManagerPanel(ttk.Frame):
 
         top = ttk.Frame(self)
         top.pack(fill="x", padx=8, pady=8)
-        tip(ttk.Button(top, text="Neu", command=self._new), "Neue leere Spule anlegen.").pack(
+        tip(ttk.Button(top, text=_t("spools.toolbar.new"), command=self._new), _t("spools.toolbar.new_tip")).pack(
             side="left", padx=2
         )
         tip(
-            ttk.Button(top, text="Löschen", command=self._delete),
-            "Ausgewählte Spule aus dem Inventar entfernen.",
+            ttk.Button(top, text=_t("spools.toolbar.delete"), command=self._delete),
+            _t("spools.toolbar.delete_tip"),
         ).pack(side="left", padx=2)
         tip(
-            ttk.Button(top, text="Aus RFID-Tab übernehmen", command=self._from_current),
-            "Aktuelle Daten aus dem RFID-Tab als neue Spule übernehmen.",
+            ttk.Button(top, text=_t("spools.toolbar.from_rfid"), command=self._from_current),
+            _t("spools.toolbar.from_rfid_tip"),
         ).pack(side="left", padx=6)
         tip(
             ttk.Button(
                 top,
-                text="Aus Material-DB…",
+                text=_t("spool.btn.from_db"),
                 command=self._from_material_db_toolbar,
                 style="Secondary.TButton",
             ),
-            "Profil aus Material-DB in die bearbeitete Spule übernehmen.",
+            _t("spools.toolbar.from_db_tip"),
         ).pack(side="left", padx=2)
         tip(
-            ttk.Button(top, text="Duplizieren", command=self._duplicate_selected, style="Secondary.TButton"),
-            "Ausgewählte Spule als Kopie anlegen.",
+            ttk.Button(top, text=_t("spools.toolbar.duplicate"), command=self._duplicate_selected, style="Secondary.TButton"),
+            _t("spools.toolbar.duplicate_tip"),
         ).pack(side="left", padx=2)
         tip(
-            ttk.Button(top, text="Verlauf", command=self._show_usage_history, style="Secondary.TButton"),
+            ttk.Button(top, text=_t("spools.toolbar.history"), command=self._show_usage_history, style="Secondary.TButton"),
             "Verbrauchshistorie der Spule.",
         ).pack(side="left", padx=2)
         tip(
-            ttk.Button(top, text="→ RFID-Tab", command=self._apply_to_tag, style="Accent.TButton"),
-            "Gewählte Spule in den RFID-Tab laden (zum Tag-Schreiben).",
+            ttk.Button(top, text=_t("spools.toolbar.to_rfid"), command=self._apply_to_tag, style="Accent.TButton"),
+            _t("spools.toolbar.to_rfid_tip"),
         ).pack(side="right", padx=4)
         tip(
-            ttk.Button(top, text="Etikett speichern…", command=self._label),
+            ttk.Button(top, text=_t("spools.toolbar.save_label"), command=self._label),
             "Spulen-Etikett als Bilddatei exportieren.",
         ).pack(side="right", padx=4)
         tip(
             ttk.Button(
                 top,
-                text="Standort-Übersicht",
+                text=_t("spools.toolbar.location_overview"),
                 command=self._show_locations,
                 style="Secondary.TButton",
             ),
@@ -603,7 +597,7 @@ class SpoolManagerPanel(ttk.Frame):
             style="Spool.Treeview",
             selectmode="browse",
         )
-        self.tree.heading("#0", text="Farbe", anchor="center")
+        self.tree.heading("#0", text=_t("spools.col.color"), anchor="center")
         self.tree.column("#0", width=52, stretch=False, minwidth=52, anchor="center")
         for c in self._tree_cols:
             anchor = "center" if c in ("cfs", "weight", "rest", "serial") else "w"
@@ -635,11 +629,11 @@ class SpoolManagerPanel(ttk.Frame):
 
         deduct_row = ttk.Frame(left)
         deduct_row.pack(fill="x", pady=6)
-        ttk.Label(deduct_row, text="Verbrauch (g):").pack(side="left")
+        ttk.Label(deduct_row, text=_t("spools.deduct.label")).pack(side="left")
         self._deduct_var = tk.StringVar(value="50")
         ttk.Entry(deduct_row, textvariable=self._deduct_var, width=8).pack(side="left", padx=6)
         tip(
-            ttk.Button(deduct_row, text="Abziehen", command=self._deduct_apply),
+            ttk.Button(deduct_row, text=_t("spools.deduct.btn"), command=self._deduct_apply),
             "Verbrauch in Gramm vom Restgewicht der Spule abziehen.",
         ).pack(side="left")
 
@@ -655,7 +649,7 @@ class SpoolManagerPanel(ttk.Frame):
 
         ttk.Label(
             self,
-            text="Links auswählen, rechts bearbeiten und „Speichern“. Doppelklick = Daten in den RFID-Tab.",
+            text=_t("spools.list.hint"),
             style="Muted.TLabel",
             wraplength=900,
         ).pack(anchor="w", padx=12, pady=(0, 8))
@@ -829,7 +823,7 @@ class SpoolManagerPanel(ttk.Frame):
     def _delete(self) -> None:
         sp = self._selected()
         if not sp:
-            notify(self, "Bitte eine Spule auswählen.", "warn")
+            notify(self, _t("spool.notify.select_any"), "warn")
             return
 
         def do_delete() -> None:
@@ -839,9 +833,9 @@ class SpoolManagerPanel(ttk.Frame):
             self.app._refresh_spool_combo()
             self.reload()
             self.edit_panel.load_new()
-            notify(self, f"„{sp.label}“ gelöscht.", "ok")
+            notify(self, _t("spool.notify.deleted", label=sp.label), "ok")
 
-        confirm(self, f"Spule „{sp.label}“ löschen?", do_delete)
+        confirm(self, _t("spool.confirm.delete_named", label=sp.label), do_delete)
 
     def _from_current(self) -> None:
         self.edit_panel.load_spool(self.app.spool_from_form())
@@ -853,15 +847,15 @@ class SpoolManagerPanel(ttk.Frame):
     def _deduct_apply(self) -> None:
         sp = self._selected()
         if not sp:
-            notify(self, "Bitte eine Spule in der Liste wählen.", "warn")
+            notify(self, _t("spool.notify.select_list"), "warn")
             return
         try:
             grams = int(self._deduct_var.get().strip())
         except ValueError:
-            notify(self, "Gramm als Zahl eingeben.", "warn")
+            notify(self, _t("spool.notify.grams_number"), "warn")
             return
         if grams < 1 or grams > 5000:
-            notify(self, "Wert zwischen 1 und 5000 g.", "warn")
+            notify(self, _t("spool.notify.grams_range"), "warn")
             return
         if sp.remaining_g is None:
             sp.remaining_g = weight_class_to_grams(sp.weight)
@@ -881,7 +875,7 @@ class SpoolManagerPanel(ttk.Frame):
     def _duplicate_selected(self) -> None:
         sp = self._selected()
         if not sp:
-            notify(self, "Bitte eine Spule auswählen.", "warn")
+            notify(self, _t("spool.notify.select_any"), "warn")
             return
         copy = Spool(
             id=SpoolInventory.new_id(),
@@ -903,12 +897,12 @@ class SpoolManagerPanel(ttk.Frame):
         self.reload()
         self.tree.selection_set(copy.id)
         self.edit_panel.load_spool(copy)
-        notify(self, f"Kopie „{copy.label}“ angelegt.", "ok")
+        notify(self, _t("spool.notify.duplicated", label=copy.label), "ok")
 
     def _show_usage_history(self) -> None:
         sp = self._selected()
         if not sp:
-            notify(self, "Bitte eine Spule wählen.", "warn")
+            notify(self, _t("notify.select_spool"), "warn")
             return
         dlg = tk.Toplevel(self)
         dlg.title(f"Verlauf — {sp.label}")
@@ -930,12 +924,12 @@ class SpoolManagerPanel(ttk.Frame):
                     line += f"  → Rest {rest} g"
                 txt.insert("end", line + "\n")
         txt.config(state="disabled")
-        ttk.Button(dlg, text="Schließen", command=dlg.destroy).pack(pady=8)
+        ttk.Button(dlg, text=_t("btn.close"), command=dlg.destroy).pack(pady=8)
 
     def _label(self) -> None:
         sp = self._selected()
         if not sp:
-            notify(self, "Bitte eine Spule auswählen.", "warn")
+            notify(self, _t("spool.notify.select_any"), "warn")
             return
         path = filedialog.asksaveasfilename(
             defaultextension=".html",
@@ -952,7 +946,7 @@ class SpoolManagerPanel(ttk.Frame):
             if str(path).lower().endswith(".html"):
                 write_spool_label_html(Path(path), sp)
                 webbrowser.open(Path(path).as_uri())
-                notify(self, f"Etikett (HTML) — im Browser drucken:\n{path}", "ok")
+                notify(self, _t("spool.notify.label_html", path=path), "ok")
             else:
                 lines = [
                     f"Spule: {sp.label}",
@@ -962,7 +956,7 @@ class SpoolManagerPanel(ttk.Frame):
                     f"UID: {sp.tag_uid or '—'}",
                 ]
                 Path(path).write_text("\n".join(lines), encoding="utf-8")
-                notify(self, f"Etikett: {path}", "ok")
+                notify(self, _t("spool.notify.label_txt", path=path), "ok")
         except OSError as exc:
             notify(self, str(exc), "error")
 
@@ -971,12 +965,12 @@ class SpoolManagerPanel(ttk.Frame):
         if not sp:
             sp = self.edit_panel.build_spool()
         if not sp:
-            notify(self, "Keine Spule zum Übernehmen.", "warn")
+            notify(self, _t("spool.notify.no_adopt"), "warn")
             return
         self.app.notebook.select(self.app.tab_tag)
         self.app.update_idletasks()
         try:
             self.app.apply_spool(sp)
         except Exception as exc:
-            notify(self, f"Daten teilweise übernommen: {exc}", "warn")
-        notify(self, f"„{sp.label}“ → RFID-Tab übernommen.", "ok")
+            notify(self, _t("spool.notify.partial_adopt", exc=exc), "warn")
+        notify(self, _t("spool.notify.to_rfid", label=sp.label), "ok")

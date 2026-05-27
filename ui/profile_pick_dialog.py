@@ -1,9 +1,10 @@
-"""Dialog: Filament-Profil aus der Material-Datenbank wählen."""
+"""Dialog: Filament-Profil aus der Material-Datenbank waehlen."""
 
 from __future__ import annotations
 
 import tkinter as tk
 from tkinter import ttk
+from creality_nfc.i18n import t as _t
 from creality_nfc.materials import FilamentProfile
 from ui.dialog_theme import prepare_toplevel, theme_dialog
 from ui.tooltip import tip
@@ -29,7 +30,7 @@ def ask_filament_profile(
 
     ttk.Label(
         dlg,
-        text="Profil wählen — Marke, Material und Filament-ID werden in die Spule übernommen.",
+        text=_t("profile_pick.intro"),
         style="Muted.TLabel",
         wraplength=560,
     ).pack(anchor="w", padx=12, pady=(12, 6))
@@ -37,7 +38,7 @@ def ask_filament_profile(
     search_var = tk.StringVar()
     search_row = ttk.Frame(dlg)
     search_row.pack(fill="x", padx=12, pady=(0, 6))
-    ttk.Label(search_row, text="Suche").pack(side="left", padx=(0, 6))
+    ttk.Label(search_row, text=_t("profile_pick.search")).pack(side="left", padx=(0, 6))
     search_entry = ttk.Entry(search_row, textvariable=search_var)
     search_entry.pack(side="left", fill="x", expand=True)
 
@@ -106,12 +107,12 @@ def ask_filament_profile(
     btn_row = ttk.Frame(dlg)
     btn_row.pack(fill="x", padx=12, pady=12)
     tip(
-        ttk.Button(btn_row, text="Abbrechen", command=dlg.destroy, style="Secondary.TButton"),
-        "Dialog schließen ohne Übernahme.",
+        ttk.Button(btn_row, text=_t("profile_pick.cancel"), command=dlg.destroy, style="Secondary.TButton"),
+        _t("profile_pick.cancel.tip"),
     ).pack(side="left")
     tip(
-        ttk.Button(btn_row, text="Übernehmen", command=pick_selected, style="Accent.TButton"),
-        "Gewähltes Profil in die Spule übernehmen.",
+        ttk.Button(btn_row, text=_t("profile_pick.adopt"), command=pick_selected, style="Accent.TButton"),
+        _t("profile_pick.adopt.tip"),
     ).pack(side="right")
 
     dlg.protocol("WM_DELETE_WINDOW", dlg.destroy)

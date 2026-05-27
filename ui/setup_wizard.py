@@ -1,256 +1,128 @@
 """Kurzer Ersteinrichtungs-Dialog."""
 
-
-
 from __future__ import annotations
 
-
-
 import tkinter as tk
-
 from collections.abc import Callable
-
 from tkinter import ttk
 
-
-
-from creality_nfc.smartcard_service import probe_pcsc, scard_status_message
-
-from ui.components import scrollable_tab
-
-from ui.dialog_theme import prepare_toplevel
-
 from creality_nfc.config import MATERIAL_DB_PRINTER_ONLY
-
-
-
+from creality_nfc.i18n import t as _t
+from creality_nfc.smartcard_service import probe_pcsc, scard_status_message
+from ui.components import scrollable_tab
+from ui.dialog_theme import prepare_toplevel
 
 
 class SetupWizardDialog(tk.Toplevel):
-
     def __init__(
-
         self,
-
         parent: tk.Misc,
-
         *,
-
         has_database: bool,
-
         show_on_startup: bool = False,
-
         on_open_help: Callable[[], None],
-
         on_connect_reader: Callable[[], None],
-
         on_load_db: Callable[[], None],
-
         on_done: Callable[[bool], None],
-
     ) -> None:
-
         super().__init__(parent)
-
-        self.title("Ersteinrichtung — TD Filament Studio")
-
+        self.title(_t("wiz.title"))
         self.minsize(500, 420)
 
-
-
         footer = ttk.Frame(self, padding=(14, 10))
-
         footer.pack(side="bottom", fill="x")
 
-
-
         self.show_on_startup_var = tk.BooleanVar(value=show_on_startup)
-
         ttk.Checkbutton(
-
             footer,
-
-            text="Ersteinrichtung bei jedem Programmstart anzeigen",
-
+            text=_t("wiz.show_on_startup"),
             variable=self.show_on_startup_var,
-
         ).pack(anchor="w", pady=(0, 10))
 
-
-
         btns = ttk.Frame(footer)
-
         btns.pack(fill="x")
-
-        ttk.Button(btns, text="Hilfe öffnen", command=on_open_help, style="Secondary.TButton").pack(
-
+        ttk.Button(btns, text=_t("wiz.btn.open_help"), command=on_open_help, style="Secondary.TButton").pack(
             side="left", padx=(0, 8)
-
         )
-
-        ttk.Button(btns, text="Reader verbinden", command=on_connect_reader, style="Secondary.TButton").pack(
-
+        ttk.Button(btns, text=_t("wiz.btn.connect_reader"), command=on_connect_reader, style="Secondary.TButton").pack(
             side="left", padx=(0, 8)
-
         )
-
         if not has_database:
-
-            load_label = "Vom Drucker laden" if MATERIAL_DB_PRINTER_ONLY else "Cloud laden"
-
+            load_label = _t("wiz.btn.load_printer") if MATERIAL_DB_PRINTER_ONLY else _t("wiz.btn.load_cloud")
             ttk.Button(btns, text=load_label, command=on_load_db, style="Secondary.TButton").pack(
-
                 side="left", padx=(0, 8)
-
             )
-
         ttk.Button(
-
             btns,
-
-            text="Fertig",
-
+            text=_t("wiz.btn.done"),
             command=lambda: self._finish(on_done),
-
             style="Accent.TButton",
-
         ).pack(side="right")
 
-
-
         body = ttk.Frame(self)
-
         body.pack(fill="both", expand=True)
-
         _canvas, scroll = scrollable_tab(body)
 
-
-
         pad = {"padx": 14, "pady": 6}
-
         ttk.Label(
-
             scroll,
-
-            text="Willkommen! Diese Checkliste hilft beim Start.",
-
+            text=_t("wiz.welcome"),
             font=("Segoe UI", 11, "bold"),
-
         ).pack(anchor="w", **pad)
-
-
 
         ttk.Label(
-
             scroll,
-
-            text="Für RFID-Tags brauchst du Reader + Tags + Material-DB.\n"
-
-            "„Meine Spulen“ ist optional — Restgewicht und RFID-Verknüpfung lokal.",
-
+            text=_t("wiz.intro.body"),
             wraplength=480,
-
             justify="left",
-
             style="Muted.TLabel",
-
         ).pack(anchor="w", **pad)
-
-
 
         state = probe_pcsc()
-
         checks = [
-
             (
-
-                "Windows Smartcard-Dienst",
-
+                _t("wiz.check.scard"),
                 state in ("ok", "no_reader"),
-
                 scard_status_message(state),
-
             ),
-
             (
-
-                "NFC-Reader (ACR122U o.ä.)",
-
+                _t("wiz.hw.reader"),
                 state == "ok",
-
-                "USB-Reader anschließen, dann „Reader verbinden“ im RFID-Tab.",
-
+                _t("wiz.hw.reader_hint"),
             ),
-
             (
-
-                "Material-Datenbank",
-
+                _t("wiz.check.materialdb"),
                 has_database,
-
                 (
-
-                    "Tab Material-Datenbank → „Vom Drucker (SSH)“ (Drucker-IP, Root-SSH)."
-
+                    _t("wiz.check.materialdb_hint_printer")
                     if MATERIAL_DB_PRINTER_ONLY
-
-                    else "Tab Material-Datenbank → „Creality Cloud“ oder „Vom Drucker“."
-
+                    else _t("wiz.check.materialdb_hint_cloud")
                 ),
-
             ),
-
             (
-
-                "Tags: MIFARE Classic 1K, 25 mm",
-
+                _t("wiz.check.tags"),
                 True,
-
-                "Siehe Hilfe → „Benötigte Hardware & Tags“ oder „Tag-Halter (Links)…“ (Amazon-Beispiele).",
-
+                _t("wiz.hw.see_help"),
             ),
-
         ]
 
-
-
         for title, ok, hint in checks:
-
             row = ttk.Frame(scroll)
-
             row.pack(fill="x", **pad)
-
-            mark = "✓" if ok else "○"
-
+            mark = "\u2713" if ok else "\u25cb"
             color = "#4ade9a" if ok else "#9aa0a6"
-
             ttk.Label(row, text=f"{mark}  {title}", foreground=color).pack(anchor="w")
-
             ttk.Label(row, text=hint, wraplength=460, style="Muted.TLabel").pack(anchor="w", padx=(18, 0))
 
-
-
         ttk.Label(
-
             scroll,
-
-            text="Reader verbinden → Material wählen → Tag auflegen → „Tag schreiben“.",
-
+            text=_t("wiz.flow.body"),
             wraplength=480,
-
             justify="left",
-
         ).pack(anchor="w", padx=14, pady=(8, 12))
-
-
 
         prepare_toplevel(self, parent, width=560, height=520, geometry_key="setup_wizard")
 
-
-
     def _finish(self, on_done: Callable[[bool], None]) -> None:
-
         on_done(self.show_on_startup_var.get())
-
         self.destroy()
-

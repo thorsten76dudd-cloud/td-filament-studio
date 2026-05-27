@@ -12,7 +12,7 @@ DEFAULT_DELAY_MS = 450
 class ToolTip:
     def __init__(self, widget: tk.Misc, text: str, *, delay_ms: int = DEFAULT_DELAY_MS) -> None:
         self.widget = widget
-        self.text = text.strip()
+        self.text = str(text).strip()
         self.delay_ms = delay_ms
         self._tw: tk.Toplevel | None = None
         self._after_id: str | None = None
@@ -21,7 +21,7 @@ class ToolTip:
             widget.bind("<Leave>", self._hide, add="+")
 
     def set_text(self, text: str) -> None:
-        self.text = text.strip()
+        self.text = str(text).strip()
 
     def _schedule(self, _event=None) -> None:
         self._hide()

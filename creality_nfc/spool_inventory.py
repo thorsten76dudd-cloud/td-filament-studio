@@ -114,7 +114,7 @@ class Spool:
     def tag_uids_lines(self) -> str:
         uids = self.all_tag_uids()
         if not uids:
-            return "— (kein Tag verknüpft)"
+            return _t("spools.editor.no_tag_linked")
         return "\n".join(f"Chip {i}: {u}" for i, u in enumerate(uids, 1))
 
     def register_tag_uid(self, uid: str) -> bool:

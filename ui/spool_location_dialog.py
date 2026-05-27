@@ -6,6 +6,7 @@ import tkinter as tk
 from tkinter import ttk
 from typing import TYPE_CHECKING
 
+from creality_nfc.i18n import t as _t
 from creality_nfc.printer_store import load_printers
 from creality_nfc.spool_location import spools_at_printer, spools_in_storage
 from ui.color_swatch import make_swatch_photo
@@ -26,15 +27,15 @@ def _build_sections(inventory: SpoolInventory) -> list[tuple[str, list]]:
             continue
         items = spools_at_printer(inventory, pname)
         if items:
-            sections.append((f"Drucker: {pname}", items))
+            sections.append((_t("sld.section.printer", name=pname), items))
             seen.update(sp.id for sp in items)
     storage = spools_in_storage(inventory)
     if storage:
-        sections.append(("Nur Lager / unzugeordnet", storage))
+        sections.append((_t("sld.section.storage"), storage))
         seen.update(sp.id for sp in storage)
     rest = [sp for sp in inventory.sorted_spools() if sp.id not in seen]
     if rest:
-        sections.append(("Alle Spulen (Meine Spulen)", rest))
+        sections.append((_t("sld.section.all"), rest))
     return sections
 
 
@@ -44,7 +45,7 @@ def show_spool_location_dialog(parent: tk.Misc, inventory: SpoolInventory) -> No
 
     dlg, body, footer = begin_table_dialog(
         parent,
-        title=f"Spulen-Standort ({row_count})",
+        title=_t("sld.title", n=row_count),
         width=980,
         height=580,
         min_width=820,
@@ -53,13 +54,13 @@ def show_spool_location_dialog(parent: tk.Misc, inventory: SpoolInventory) -> No
 
     foot_inner = tk.Frame(footer, bg=BG)
     foot_inner.pack(fill="x")
-    rounded_button(foot_inner, "Schließen", dlg.destroy, variant="accent", compact=True).pack(
+    rounded_button(foot_inner, _t("sld.btn.close"), dlg.destroy, variant="accent", compact=True).pack(
         side="right"
     )
 
     ttk.Label(
         body,
-        text="Physische Zuordnung und zuletzt am Drucker gesehen (CFS).",
+        text=_t("sld.intro"),
         style="Muted.TLabel",
         wraplength=760,
     ).pack(anchor="w", padx=12, pady=(10, 4))
@@ -72,15 +73,15 @@ def show_spool_location_dialog(parent: tk.Misc, inventory: SpoolInventory) -> No
     swatch_cache: dict[str, tk.PhotoImage] = {}
     cols = ("label", "material", "rest", "location", "seen", "slot")
     tree = ttk.Treeview(tree_wrap, columns=cols, show="tree headings", height=18)
-    tree.heading("#0", text="Farbe", anchor="center")
+    tree.heading("#0", text=_t("sld.col.color"), anchor="center")
     tree.column("#0", width=44, minwidth=44, stretch=False, anchor="center")
     for c, t, w, mn, stretch in (
-        ("label", "Spule", 200, 120, True),
-        ("material", "Material", 120, 90, False),
-        ("rest", "Rest", 80, 64, False),
-        ("location", "Zugeordnet", 180, 120, True),
-        ("seen", "Zuletzt gesehen", 180, 130, True),
-        ("slot", "CFS-Slot", 88, 72, False),
+        ("label", _t("sld.col.spool"), 200, 120, True),
+        ("material", _t("sld.col.material"), 120, 90, False),
+        ("rest", _t("sld.col.rest"), 80, 64, False),
+        ("location", _t("sld.col.location"), 180, 120, True),
+        ("seen", _t("sld.col.seen"), 180, 130, True),
+        ("slot", _t("sld.col.slot"), 88, 72, False),
     ):
         tree.heading(c, text=t)
         tree.column(c, width=w, minwidth=mn, stretch=stretch)
@@ -97,7 +98,7 @@ def show_spool_location_dialog(parent: tk.Misc, inventory: SpoolInventory) -> No
             tk.END,
             text="",
             values=(
-                "(keine Spulen in Meine Spulen)",
+                _t("sld.empty"),
                 "—",
                 "—",
                 "—",
@@ -133,10 +134,7 @@ def show_spool_location_dialog(parent: tk.Misc, inventory: SpoolInventory) -> No
 
     ttk.Label(
         body,
-        text=(
-            "Tipp: CFS-Slot und „zuletzt gesehen“ werden beim Drucker-Verbinden aktualisiert. "
-            "Standort rechts in „Meine Spulen“ bearbeiten."
-        ),
+        text=_t("sld.footer"),
         style="Muted.TLabel",
         wraplength=760,
     ).pack(anchor="w", padx=12, pady=(0, 8))

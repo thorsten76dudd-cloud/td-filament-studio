@@ -6,6 +6,7 @@ import tkinter as tk
 from dataclasses import dataclass
 from tkinter import ttk
 
+from creality_nfc.i18n import t as _t
 from ui.dialog_theme import add_dialog_footer, center_toplevel, theme_dialog
 from ui.theme import BG
 
@@ -39,10 +40,10 @@ def ask_post_print_deductions(
         from tkinter import simpledialog
 
         detail = _row_detail(r, compact=False)
+        suffix = f": {filename}" if filename else ""
         grams = simpledialog.askinteger(
-            "Filament-Verbrauch",
-            f"Druck beendet{f': {filename}' if filename else ''}.\n\n{detail}\n\n"
-            "Wie viel Gramm vom Rest abziehen?",
+            _t("deduct.title"),
+            _t("deduct.single_prompt", suffix=suffix, detail=detail),
             initialvalue=r.default_grams,
             minvalue=0,
             maxvalue=5000,
@@ -53,14 +54,15 @@ def ask_post_print_deductions(
         return [(r.spool_id, grams)]
 
     win = tk.Toplevel(parent)
-    win.title("Filament-Verbrauch")
+    win.title(_t("deduct.title"))
     theme_dialog(win)
     win.transient(parent)
     win.configure(bg=BG)
 
     header = ttk.Frame(win)
     short_name = filename.replace("\\", "/").rsplit("/", 1)[-1] if filename else ""
-    title = f"Druck beendet{f': {short_name}' if short_name else ''}"
+    suffix = f": {short_name}" if short_name else ""
+    title = _t("deduct.dialog_header", suffix=suffix)
     ttk.Label(
         header,
         text=title,
@@ -69,7 +71,7 @@ def ask_post_print_deductions(
     ).pack(anchor="w")
     ttk.Label(
         header,
-        text="Verbrauch pro Farbe — Gramm prüfen, Häkchen zum Abziehen:",
+        text=_t("deduct.subhint"),
         wraplength=580,
     ).pack(anchor="w", pady=(4, 0))
 
@@ -128,7 +130,7 @@ def ask_post_print_deductions(
         ).grid(row=0, column=1, sticky="w")
         gram_f = ttk.Frame(row_f)
         gram_f.grid(row=0, column=2, rowspan=2, sticky="ne", padx=(12, 0))
-        ttk.Label(gram_f, text="Gramm:").pack(side="left", padx=(0, 4))
+        ttk.Label(gram_f, text=_t("deduct.grams")).pack(side="left", padx=(0, 4))
         ttk.Entry(gram_f, textvariable=grams_var, width=8).pack(side="left")
         row_f.columnconfigure(1, weight=1)
         entries.append((r, enabled, grams_var))
@@ -162,8 +164,8 @@ def ask_post_print_deductions(
         win,
         on_ok=_ok,
         on_cancel=_cancel,
-        ok_text="Abziehen",
-        cancel_text="Abbrechen",
+        ok_text=_t("deduct.btn_apply"),
+        cancel_text=_t("deduct.btn_cancel"),
     )
     header.pack(side="top", fill="x", padx=14, pady=(12, 6))
     list_host.pack(side="top", fill="both", expand=True, padx=14, pady=(0, 4))
@@ -207,13 +209,17 @@ def _row_detail(r: DeductRow, *, compact: bool) -> str:
     cfs = r.cfs_filament or "—"
     if compact:
         mat = f" · {r.material}" if r.material else ""
-        return (
-            f"CFS {r.slot_label}: „{r.spool_label}“{mat}\n"
-            f"Im CFS: {cfs} — Vorschlag ca. {r.default_grams} g"
+        return _t(
+            "deduct.row_compact",
+            slot=r.slot_label,
+            label=r.spool_label,
+            mat=mat,
+            cfs=cfs,
+            grams=r.default_grams,
         )
-    parts = [f"CFS {r.slot_label} (Drucker: {cfs}) → Spule „{r.spool_label}“"]
+    parts = [_t("deduct.row_full", slot=r.slot_label, cfs=cfs, label=r.spool_label)]
     if r.material:
         parts.append(r.material)
     if r.source:
-        parts.append(f"({r.source}: ca. {r.default_grams} g)")
+        parts.append(_t("deduct.source_grams", source=r.source, grams=r.default_grams))
     return " · ".join(parts)

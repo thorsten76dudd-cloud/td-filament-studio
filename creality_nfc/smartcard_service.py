@@ -32,26 +32,21 @@ def scard_status() -> str:
 
 
 def scard_status_message(state: str | None = None) -> str:
+    from creality_nfc.i18n import t as _t
+
     state = state or probe_pcsc()
     if state == "service_stuck":
-        return (
-            "Windows meldet „Dienst läuft“, aber NFC antwortet nicht.\n"
-            "„Smartcard neu starten“ (UAC) — oder PC neu starten."
-        )
+        return _t("scard.msg.stuck")
     if state == "no_reader":
-        return "Smartcard-Dienst OK. Bitte ACR122U per USB anschließen."
+        return _t("scard.msg.ok_connect_usb")
     s = scard_status()
     if s == "running" and state == "ok":
-        return "Smartcard-Dienst läuft."
+        return _t("scard.msg.running")
     if s == "stopped":
-        return (
-            "Smartcard-Dienst (SCardSvr) ist gestoppt.\n"
-            "Einmal „Dienst starten“ — Windows fragt kurz nach Admin (UAC).\n"
-            "Danach funktioniert die .exe normal ohne Admin."
-        )
+        return _t("scard.msg.stopped")
     if s == "missing":
-        return "Smartcard-Dienst nicht installiert (ungewöhnlich auf Windows 10/11)."
-    return "Smartcard-Dienst-Status unbekannt."
+        return _t("scard.msg.missing")
+    return _t("scard.msg.unknown")
 
 
 def probe_pcsc() -> str:

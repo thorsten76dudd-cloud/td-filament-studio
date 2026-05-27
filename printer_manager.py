@@ -7,7 +7,8 @@ from tkinter import ttk
 
 from ui.messaging import confirm, notify
 
-from app.constants import DEFAULT_PRINTER, PRINTER_OPTIONS, SUPPORTED_PRINTERS_SHORT
+from app.constants import DEFAULT_PRINTER, PRINTER_OPTIONS
+from creality_nfc.i18n import t as _t
 from creality_nfc.printer_ssh import default_password
 from creality_nfc.printer_store import PrinterProfile, load_printers, save_printers
 from ui.dialog_theme import prepare_toplevel
@@ -18,11 +19,11 @@ class PrinterManagerDialog(tk.Toplevel):
     def __init__(self, parent: tk.Misc, on_apply=None) -> None:
         super().__init__(parent)
         self._on_apply = on_apply
-        self.title("Drucker verwalten")
+        self.title(_t("pm.dialog_title"))
         self.minsize(560, 380)
 
         # Fußzeile zuerst packen — sonst werden Buttons auf Höhe 0 gequetscht
-        bar = ttk.LabelFrame(self, text="  Aktionen  ", padding=(12, 10))
+        bar = ttk.LabelFrame(self, text=_t("pm.actions_label"), padding=(12, 10))
         bar.pack(side="bottom", fill="x", padx=12, pady=(0, 12))
 
         btn_row = ttk.Frame(bar)
@@ -35,31 +36,31 @@ class PrinterManagerDialog(tk.Toplevel):
             ).pack(side="left", padx=(0, 8))
 
         action_btn(
-            "Hinzufügen",
+            _t("pm.btn.add"),
             self._add,
             "Secondary.TButton",
-            "Neuen Drucker zur Liste hinzufügen.",
+            _t("pm.btn.add_tip"),
         )
         action_btn(
-            "Bearbeiten",
+            _t("pm.btn.edit"),
             self._edit,
             "Secondary.TButton",
-            "IP, Modell und Passwort des Druckers ändern.",
+            _t("pm.btn.edit_tip"),
         )
         action_btn(
-            "Löschen",
+            _t("pm.btn.delete"),
             self._delete,
             "Secondary.TButton",
-            "Ausgewählten Drucker aus der Liste entfernen.",
+            _t("pm.btn.delete_tip"),
         )
         if on_apply is not None:
             action_btn(
-                "Übernehmen",
+                _t("pm.btn.adopt"),
                 self._apply_selected,
                 "Accent.TButton",
-                "Gewählten Drucker (IP, Passwort) in die App übernehmen.",
+                _t("pm.btn.adopt_tip"),
             )
-        action_btn("Schließen", self.destroy, "Secondary.TButton", "Dialog schließen.")
+        action_btn(_t("pm.btn.close"), self.destroy, "Secondary.TButton", _t("pm.btn.close_tip"))
 
         body = ttk.Frame(self)
         body.pack(side="top", fill="both", expand=True, padx=12, pady=12)
@@ -67,9 +68,9 @@ class PrinterManagerDialog(tk.Toplevel):
         self.tree = ttk.Treeview(
             body, columns=("name", "host", "model"), show="headings", height=10
         )
-        self.tree.heading("name", text="Name")
-        self.tree.heading("host", text="IP / Host")
-        self.tree.heading("model", text="Modell")
+        self.tree.heading("name", text=_t("pm.col.name"))
+        self.tree.heading("host", text=_t("pm.col.host"))
+        self.tree.heading("model", text=_t("pm.col.model"))
         self.tree.column("name", width=140)
         self.tree.column("host", width=180)
         self.tree.column("model", width=120)
@@ -99,7 +100,7 @@ class PrinterManagerDialog(tk.Toplevel):
     def _apply_selected(self) -> None:
         p = self._selected()
         if not p:
-            notify(self, "Bitte einen Drucker wählen.", "warn")
+            notify(self, _t("pm.notify.pick_printer"), "warn")
             return
         if self._on_apply:
             self._on_apply(p)
@@ -111,13 +112,13 @@ class PrinterManagerDialog(tk.Toplevel):
     def _edit(self) -> None:
         p = self._selected()
         if not p:
-            notify(self, "Bitte einen Eintrag wählen.", "warn")
+            notify(self, _t("pm.notify.pick_entry"), "warn")
             return
         self._edit_dialog(p)
 
     def _edit_dialog(self, profile: PrinterProfile | None) -> None:
         dlg = tk.Toplevel(self)
-        dlg.title("Drucker" if profile else "Neuer Drucker")
+        dlg.title(_t("pm.edit.title_edit") if profile else _t("pm.edit.title_new"))
         dlg.minsize(440, 400)
 
         btn_bar = ttk.Frame(dlg, padding=(12, 12))
@@ -126,7 +127,7 @@ class PrinterManagerDialog(tk.Toplevel):
         form = ttk.Frame(dlg, padding=12)
         form.pack(fill="both", expand=True)
 
-        name_v = tk.StringVar(value=profile.name if profile else "Mein K2")
+        name_v = tk.StringVar(value=profile.name if profile else _t("pm.edit.default_name"))
         host_v = tk.StringVar(value=profile.host if profile else "")
         pass_v = tk.StringVar(
             value=profile.password if profile else default_password(DEFAULT_PRINTER)
@@ -137,15 +138,15 @@ class PrinterManagerDialog(tk.Toplevel):
             value=normalize_printer_model(profile.model if profile else DEFAULT_PRINTER)
         )
         pad = {"padx": 0, "pady": 5}
-        for label, var in (
-            ("Name", name_v),
-            ("IP-Adresse", host_v),
-            ("SSH-Passwort", pass_v),
+        for label, var, is_pwd in (
+            (_t("pm.edit.label_name"), name_v, False),
+            (_t("pm.edit.label_ip"), host_v, False),
+            (_t("pm.edit.label_password"), pass_v, True),
         ):
             ttk.Label(form, text=label).pack(anchor="w", **pad)
-            show = "*" if "Passwort" in label else ""
+            show = "*" if is_pwd else ""
             ttk.Entry(form, textvariable=var, show=show).pack(fill="x", **pad)
-        ttk.Label(form, text="Modell (Material-DB)").pack(anchor="w", **pad)
+        ttk.Label(form, text=_t("pm.edit.label_model")).pack(anchor="w", **pad)
         ttk.Combobox(
             form,
             textvariable=model_v,
@@ -154,20 +155,20 @@ class PrinterManagerDialog(tk.Toplevel):
         ).pack(fill="x", **pad)
         ttk.Label(
             form,
-            text=SUPPORTED_PRINTERS_SHORT,
+            text=_t("app.supported_printers_short"),
             style="Muted.TLabel",
             wraplength=400,
         ).pack(anchor="w", pady=(0, 8))
 
         def ok() -> None:
             if not host_v.get().strip():
-                notify(dlg, "IP fehlt.", "warn")
+                notify(dlg, _t("pm.edit.ip_missing"), "warn")
                 return
             model = model_v.get().strip()
             if model not in PRINTER_OPTIONS:
                 notify(
                     dlg,
-                    "Bitte ein unterstütztes K2-Modell wählen (K2 Pro, Plus, K2, Max, SE).",
+                    _t("pm.notify.pick_supported"),
                     "warn",
                 )
                 return
@@ -175,7 +176,7 @@ class PrinterManagerDialog(tk.Toplevel):
 
             upsert_printer(
                 PrinterProfile(
-                    name_v.get().strip() or "Drucker",
+                    name_v.get().strip() or _t("pm.edit.default_fallback"),
                     host_v.get().strip(),
                     pass_v.get(),
                     model,
@@ -184,10 +185,10 @@ class PrinterManagerDialog(tk.Toplevel):
             dlg.destroy()
             self._reload()
 
-        ttk.Button(btn_bar, text="Abbrechen", command=dlg.destroy, style="Secondary.TButton").pack(
+        ttk.Button(btn_bar, text=_t("btn.cancel"), command=dlg.destroy, style="Secondary.TButton").pack(
             side="right", padx=(8, 0)
         )
-        ttk.Button(btn_bar, text="OK", command=ok, style="Accent.TButton").pack(side="right")
+        ttk.Button(btn_bar, text=_t("btn.ok"), command=ok, style="Accent.TButton").pack(side="right")
         prepare_toplevel(dlg, self, width=460, height=420, geometry_key="printer_edit")
 
     def _delete(self) -> None:
@@ -199,4 +200,4 @@ class PrinterManagerDialog(tk.Toplevel):
             save_printers([x for x in load_printers() if x.name != p.name])
             self._reload()
 
-        confirm(self, f"„{p.name}“ löschen?", do_delete)
+        confirm(self, _t("pm.confirm.delete", name=p.name), do_delete)

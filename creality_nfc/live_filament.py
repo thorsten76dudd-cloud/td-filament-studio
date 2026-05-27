@@ -8,6 +8,7 @@ from typing import Any
 from creality_nfc.cfs_adopt import CfsSlotInfo
 from creality_nfc.cfs_layout import cfs_slot_label
 from creality_nfc.gcode_filament import estimate_grams_for_slot, total_job_filament_grams
+from creality_nfc.i18n import t as _t
 
 
 def _remaining_time_hint(state: dict[str, Any], progress_pct: int) -> str:
@@ -66,7 +67,7 @@ def format_live_filament_status(
         local_path=local_gcode,
     )
     if not job:
-        return "Filament: Schätzung aus G-Code nicht verfügbar"
+        return _t("live_filament.no_estimate")
     total_g, _src = job
     if total_g < 1:
         return ""
@@ -102,6 +103,6 @@ def format_live_filament_status(
         after = max(0, spool_remaining_g - used)
         parts.append(f"Rest Spule danach ca. {after} g")
         if left_job > 0 and spool_remaining_g < left_job:
-            parts.append("⚠ Rest evtl. knapp für Job-Ende")
+            parts.append(_t("live_filament.low_warning"))
 
     return " · ".join(parts)
