@@ -19,7 +19,7 @@ _INNO_SETUP_ARGS = "/FORCECLOSEAPPLICATIONS"
 
 _CREATE_BREAKAWAY_FROM_JOB = 0x01000000
 _DETACHED_PROCESS = 0x00000008
-_CREATE_NO_WINDOW = 0x08000000
+_SW_SHOW_NORMAL = 1
 
 
 def _update_log(message: str) -> None:
@@ -70,7 +70,7 @@ def unblock_setup_file(setup_path: Path) -> None:
 def kill_all_app_processes() -> None:
     """
     Haupt-App und Wächter beenden.
-    WICHTIG: ohne /T — sonst werden frisch gestartete Installer-Helfer (cmd/wscript) mit beendet.
+    WICHTIG: ohne /T — sonst werden frisch gestartete Installer-Helfer mit beendet.
     """
     if sys.platform != "win32":
         return
@@ -130,7 +130,7 @@ def validate_setup_exe(setup_path: Path) -> None:
 
 
 def stage_setup_for_install(setup_path: Path) -> Path:
-    """Setup in Updates-Ordner legen (für Installer + VBS-Helfer)."""
+    """Setup in Updates-Ordner legen (für Installer)."""
     dest = default_setup_download_path()
     setup_path = setup_path.resolve()
     if setup_path != dest.resolve():
@@ -138,64 +138,42 @@ def stage_setup_for_install(setup_path: Path) -> Path:
     return dest
 
 
-def _shell_execute(file: str, params: str = "", *, show: int = 1) -> None:
-    import ctypes
-
+def _shell_execute(file: str, params: str = "", *, show: int = _SW_SHOW_NORMAL) -> None:
     ret = ctypes.windll.shell32.ShellExecuteW(None, "open", file, params or None, None, show)
     if ret <= 32:
         raise OSError(f"ShellExecute fehlgeschlagen (Code {ret})")
 
 
-def _launch_installer_exe(setup_path: Path) -> None:
-    """Installer direkt starten (Fallback wenn wscript blockiert ist)."""
+def _launch_installer(setup_path: Path) -> None:
+    """Installer sichtbar starten (Inno Setup braucht ein normales Fenster)."""
     setup_path = setup_path.resolve()
     unblock_setup_file(setup_path)
-    args = [str(setup_path), _INNO_SETUP_ARGS]
-    flags = _DETACHED_PROCESS | _CREATE_NO_WINDOW | _CREATE_BREAKAWAY_FROM_JOB
-    subprocess.Popen(args, close_fds=True, creationflags=flags)
-    _update_log(f"Installer direkt gestartet: {setup_path}")
-
-
-def _schedule_windows_installer(setup_path: Path) -> None:
-    """
-    Installer per WScript starten — eigener Prozess, überlebt taskkill/os._exit.
-    """
-    setup_path = setup_path.resolve()
-    unblock_setup_file(setup_path)
-    vbs_path = setup_path.parent / "_td_run_setup.vbs"
-    run_cmd = f'"{setup_path}" {_INNO_SETUP_ARGS}'.replace('"', '""')
-    vbs_path.write_text(
-        "WScript.Sleep 4000\n"
-        "Set sh = CreateObject(\"WScript.Shell\")\n"
-        f'sh.Run "{run_cmd}", 1, False\n',
-        encoding="utf-8",
-    )
-    _update_log(f"VBS-Launcher geschrieben: {vbs_path}")
     try:
-        flags = _DETACHED_PROCESS | _CREATE_NO_WINDOW | _CREATE_BREAKAWAY_FROM_JOB
-        subprocess.Popen(
-            ["wscript.exe", "//B", str(vbs_path)],
-            close_fds=True,
-            creationflags=flags,
-        )
-        _update_log("wscript.exe gestartet (Installer in ~4 s)")
+        _shell_execute(str(setup_path), _INNO_SETUP_ARGS, show=_SW_SHOW_NORMAL)
+        _update_log(f"ShellExecute Installer: {setup_path}")
+        return
     except OSError as exc:
-        _update_log(f"wscript fehlgeschlagen ({exc}) — direkter Start")
-        _launch_installer_exe(setup_path)
+        _update_log(f"ShellExecute fehlgeschlagen ({exc}) — cmd start")
+    flags = _DETACHED_PROCESS | _CREATE_BREAKAWAY_FROM_JOB
+    subprocess.Popen(
+        ["cmd.exe", "/c", "start", "", str(setup_path), *_INNO_SETUP_ARGS.split()],
+        close_fds=True,
+        creationflags=flags,
+    )
+    _update_log(f"cmd start Installer: {setup_path}")
 
 
 def install_downloaded_setup(setup_path: Path) -> None:
-    """Installer starten und diesen Prozess sofort beenden (kein Datei-Lock)."""
+    """Installer starten und Prozess sofort beenden (kein Datei-Lock, kein Zurück zur GUI)."""
     staged = stage_setup_for_install(setup_path)
     unblock_setup_file(staged)
     validate_setup_exe(staged)
     _update_log(f"install_downloaded_setup: {staged}")
     if sys.platform == "win32":
-        _schedule_windows_installer(staged)
-        time.sleep(1.2)
+        _launch_installer(staged)
+        time.sleep(1.0)
         kill_all_app_processes()
     else:
         subprocess.Popen([str(staged)], close_fds=True)
-    from app.shutdown import hard_exit_frozen
-
-    hard_exit_frozen(0)
+    # Immer hart beenden — sonst bleibt Tk offen und der Installer startet nicht zuverlässig.
+    os._exit(0)

@@ -8,11 +8,11 @@ from unittest.mock import patch
 from creality_nfc.app_update import (
     _SETUP_NAME,
     default_setup_download_path,
+    install_downloaded_setup,
     kill_all_app_processes,
     stage_setup_for_install,
     unblock_setup_file,
     validate_setup_exe,
-    _schedule_windows_installer,
 )
 
 
@@ -43,21 +43,24 @@ class AppUpdateTests(unittest.TestCase):
         self.assertIn("TD Filament Studio", str(p))
         self.assertIn("Updates", str(p))
 
-    @patch("creality_nfc.app_update.subprocess.Popen")
+    @patch("creality_nfc.app_update.os._exit")
+    @patch("creality_nfc.app_update.kill_all_app_processes")
+    @patch("creality_nfc.app_update._shell_execute")
     @patch("creality_nfc.app_update.unblock_setup_file")
     @patch("creality_nfc.app_update.sys.platform", "win32")
-    def test_schedule_installer_uses_wscript(self, _mock_unblock, mock_popen) -> None:
+    def test_install_launches_and_exits(
+        self, _mock_platform, _mock_unblock, mock_shell, _mock_kill, mock_exit
+    ) -> None:
         with tempfile.TemporaryDirectory() as tmp:
             setup = Path(tmp) / "TD-Filament-Studio-Setup.exe"
             setup.write_bytes(b"MZ" + b"\0" * 5_000_001)
-            _schedule_windows_installer(setup)
-            vbs = setup.parent / "_td_run_setup.vbs"
-            self.assertTrue(vbs.is_file())
-            text = vbs.read_text(encoding="utf-8")
-            self.assertIn("WScript.Sleep", text)
-            self.assertIn("FORCECLOSEAPPLICATIONS", text)
-            mock_popen.assert_called_once()
-            self.assertEqual(mock_popen.call_args[0][0][0], "wscript.exe")
+            with patch(
+                "creality_nfc.app_update.default_setup_download_path",
+                return_value=setup,
+            ):
+                install_downloaded_setup(setup)
+            mock_shell.assert_called_once()
+            mock_exit.assert_called_once_with(0)
 
     @patch("creality_nfc.app_update.sys.platform", "win32")
     @patch("creality_nfc.app_update.ctypes.windll")

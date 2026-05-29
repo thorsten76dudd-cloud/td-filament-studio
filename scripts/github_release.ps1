@@ -4,8 +4,8 @@
 # or -DeleteAllOldReleases to wipe everything except the current $Tag.
 
 param(
-    [string]$Version = "1.5.133",
-    [string]$Tag = "v1.5.133-stable",
+    [string]$Version = "1.5.134",
+    [string]$Tag = "v1.5.134-stable",
     [string]$Repo = "thorsten76dudd-cloud/td-filament-studio",
     [string]$RemoveTag = "",
     [switch]$DeleteAllOldReleases
@@ -34,8 +34,8 @@ $notes = @(
     "## TD Filament Studio $Version",
     "",
     "### Fixes",
-    "* Verbrauchs-Dialog nach Druckende erscheint wieder (Auto-Abzug war blockiert).",
-    "* Nachholen nach Verbindungsabbruch, wenn der Abzug noch offen ist.",
+    "* In-App-Update: Setup-Installer startet sichtbar, App beendet sich zuverlaessig.",
+    "* Verbrauchs-Dialog nach Druckende (v1.5.133).",
     "",
     "Details: STABLE-v$Version.md im Repository."
 ) -join [Environment]::NewLine
