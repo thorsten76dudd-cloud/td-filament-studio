@@ -67,13 +67,27 @@ def unblock_setup_file(setup_path: Path) -> None:
         _update_log(f"Unblock-File fehlgeschlagen: {exc}")
 
 
+def prepare_shutdown_for_update() -> None:
+    """Tray-Wächter und Hintergrund-Helfer beenden, bevor der Installer startet."""
+    if sys.platform != "win32":
+        return
+    try:
+        from creality_nfc.creality_watch import stop_watcher
+
+        stop_watcher()
+        _update_log("Creality-Wächter gestoppt")
+    except Exception as exc:
+        _update_log(f"stop_watcher: {exc}")
+
+
 def kill_all_app_processes() -> None:
     """
-    Haupt-App und Wächter beenden.
+    Haupt-App, Wächter und zweite Instanzen beenden.
     WICHTIG: ohne /T — sonst werden frisch gestartete Installer-Helfer mit beendet.
     """
     if sys.platform != "win32":
         return
+    prepare_shutdown_for_update()
     flags = getattr(subprocess, "CREATE_NO_WINDOW", 0)
     for _ in range(3):
         subprocess.run(
@@ -163,6 +177,30 @@ def _launch_installer(setup_path: Path) -> None:
     _update_log(f"cmd start Installer: {setup_path}")
 
 
+def _launch_installer_after_exit(setup_path: Path) -> None:
+    """
+    Installer erst nach App-Ende starten (Tray/Hintergrund-EXE sonst blockiert).
+    """
+    setup_path = setup_path.resolve()
+    unblock_setup_file(setup_path)
+    bat = setup_path.parent / "_td_run_setup_after_exit.bat"
+    bat.write_text(
+        "@echo off\r\n"
+        "timeout /t 2 /nobreak >nul\r\n"
+        f'start "" "{setup_path}" {_INNO_SETUP_ARGS}\r\n'
+        'del "%~f0"\r\n',
+        encoding="utf-8",
+    )
+    flags = _DETACHED_PROCESS | _CREATE_BREAKAWAY_FROM_JOB
+    subprocess.Popen(
+        ["cmd.exe", "/c", str(bat)],
+        close_fds=True,
+        creationflags=flags,
+        cwd=str(setup_path.parent),
+    )
+    _update_log(f"Deferred-Installer-Batch: {bat}")
+
+
 def install_downloaded_setup(setup_path: Path) -> None:
     """Installer starten und Prozess sofort beenden (kein Datei-Lock, kein Zurück zur GUI)."""
     staged = stage_setup_for_install(setup_path)
@@ -170,10 +208,10 @@ def install_downloaded_setup(setup_path: Path) -> None:
     validate_setup_exe(staged)
     _update_log(f"install_downloaded_setup: {staged}")
     if sys.platform == "win32":
-        _launch_installer(staged)
-        time.sleep(1.0)
+        prepare_shutdown_for_update()
+        _launch_installer_after_exit(staged)
+        time.sleep(0.4)
         kill_all_app_processes()
     else:
         subprocess.Popen([str(staged)], close_fds=True)
-    # Immer hart beenden — sonst bleibt Tk offen und der Installer startet nicht zuverlässig.
     os._exit(0)

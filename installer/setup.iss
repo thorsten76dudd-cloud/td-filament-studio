@@ -2,7 +2,7 @@
 ; Kompilieren: iscc installer\setup.iss  (Inno Setup 6)
 
 #define MyAppName "TD Filament Studio"
-#define MyAppVersion "1.5.134"
+#define MyAppVersion "1.5.135"
 #define MyAppPublisher "TD"
 #define MyAppExeName "TD Filament Studio.exe"
 

@@ -4481,7 +4481,19 @@ class TDFilamentStudioApp(AppTk):
             )
             self._offer_update_download(info, allow_reinstall=True)
 
+    def _ensure_window_visible(self) -> None:
+        """Fenster aus Tray holen — sonst sind Dialoge/Update unsichtbar."""
+        if getattr(self, "_tray_hidden", False):
+            self._do_show_from_tray()
+        else:
+            try:
+                self.deiconify()
+                self.lift()
+            except tk.TclError:
+                pass
+
     def _focus_app_for_dialog(self) -> None:
+        self._ensure_window_visible()
         try:
             self.lift()
             self.attributes("-topmost", True)
@@ -4491,6 +4503,7 @@ class TDFilamentStudioApp(AppTk):
             pass
 
     def _offer_update_download(self, info: ReleaseInfo, *, allow_reinstall: bool = False) -> None:
+        self._ensure_window_visible()
         if getattr(self, "_update_dialog", None) is not None:
             try:
                 if self._update_dialog.winfo_exists():
@@ -4663,6 +4676,9 @@ class TDFilamentStudioApp(AppTk):
             try:
                 from creality_nfc.app_update import install_downloaded_setup
 
+                self._ensure_window_visible()
+                self._stop_background_tray()
+                self.update_idletasks()
                 self.notify(
                     _t("mw.update.installer_starting"),
                     "ok",

@@ -45,11 +45,11 @@ class AppUpdateTests(unittest.TestCase):
 
     @patch("creality_nfc.app_update.os._exit")
     @patch("creality_nfc.app_update.kill_all_app_processes")
-    @patch("creality_nfc.app_update._shell_execute")
+    @patch("creality_nfc.app_update._launch_installer_after_exit")
     @patch("creality_nfc.app_update.unblock_setup_file")
     @patch("creality_nfc.app_update.sys.platform", "win32")
     def test_install_launches_and_exits(
-        self, _mock_unblock, mock_shell, _mock_kill, mock_exit
+        self, _mock_unblock, mock_deferred, _mock_kill, mock_exit
     ) -> None:
         with tempfile.TemporaryDirectory() as tmp:
             setup = Path(tmp) / "TD-Filament-Studio-Setup.exe"
@@ -59,7 +59,7 @@ class AppUpdateTests(unittest.TestCase):
                 return_value=setup,
             ):
                 install_downloaded_setup(setup)
-            mock_shell.assert_called_once()
+            mock_deferred.assert_called_once()
             mock_exit.assert_called_once_with(0)
 
     @patch("creality_nfc.app_update.sys.platform", "win32")
