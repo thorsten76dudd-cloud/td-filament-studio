@@ -49,7 +49,7 @@ class AppUpdateTests(unittest.TestCase):
     @patch("creality_nfc.app_update.unblock_setup_file")
     @patch("creality_nfc.app_update.sys.platform", "win32")
     def test_install_launches_and_exits(
-        self, _mock_platform, _mock_unblock, mock_shell, _mock_kill, mock_exit
+        self, _mock_unblock, mock_shell, _mock_kill, mock_exit
     ) -> None:
         with tempfile.TemporaryDirectory() as tmp:
             setup = Path(tmp) / "TD-Filament-Studio-Setup.exe"
