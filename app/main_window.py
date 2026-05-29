@@ -2798,13 +2798,6 @@ class TDFilamentStudioApp(AppTk):
         if not manual:
             if fname and self.settings.is_post_print_deduct_handled(fname):
                 return
-            panel = getattr(self, "_printer_device_panel", None)
-            if (
-                panel
-                and fname
-                and getattr(panel, "_post_print_deduct_offered_for", "") == fname
-            ):
-                return
             if self._post_print_prompted:
                 return
             if not self.settings.prompt_deduct_after_print:

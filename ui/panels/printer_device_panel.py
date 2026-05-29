@@ -1661,7 +1661,13 @@ class PrinterDevicePanel(ttk.Frame):
             return
         if self.app.settings.is_post_print_deduct_handled(candidate):
             return
-        if self._post_print_deduct_offered_for == candidate:
+        # Vorheriger Auto-Versuch ohne Dialog (z. B. Verbindungsabbruch): Nachholen erlauben.
+        if (
+            self._post_print_deduct_offered_for == candidate
+            and not self.app.settings.is_post_print_deduct_handled(candidate)
+        ):
+            self._post_print_deduct_offered_for = ""
+        elif self._post_print_deduct_offered_for == candidate:
             return
         if not self.printer_job_looks_finished(
             s,
