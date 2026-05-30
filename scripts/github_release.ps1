@@ -26,7 +26,7 @@ Write-Host "Sync installer version + rebuild ..."
 Push-Location $Root
 python scripts\sync_installer_version.py
 if ($LASTEXITCODE -ne 0) { Pop-Location; Write-Error "sync_installer_version failed" }
-cmd /c build_setup.bat
+cmd /c "set TD_BUILD_NO_PAUSE=1&& build_setup.bat"
 Pop-Location
 if (-not (Test-Path $Setup)) { Write-Error "Setup missing: $Setup" }
 $iss = Get-Content (Join-Path $Root "installer\setup.iss") -Raw

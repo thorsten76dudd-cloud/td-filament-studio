@@ -67,4 +67,4 @@ if not "%ISCC%"=="" (
 )
 
 echo.
-pause
+if not defined TD_BUILD_NO_PAUSE pause
