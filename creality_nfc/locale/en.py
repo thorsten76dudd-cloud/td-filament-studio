@@ -496,6 +496,7 @@ STRINGS = {
     "menu.nav.tag_holder_links": "Tag holder (STL links)\u2026",
     "menu.nav.cfs_preview": "CFS preview (4 boxes, display only)",
     "menu.nav.check_updates": "Check for updates",
+    "menu.nav.reinstall_setup": "Re-download setup (repair)",
 
     # === Notifications (general) ===
     "notify.select_profile_first": "Please select a profile in the list first.",
@@ -842,8 +843,13 @@ STRINGS = {
     "mw.update.setup_saved": "Setup saved:\n{path}",
     "mw.update.installer_starting": "Installer starts in a few seconds \u2014 app will quit \u2026",
     "mw.update.installer_failed": "Installer could not be launched:\n{exc}\n\n",
-    "mw.update.already_current": "You already have the latest version ({version}).\nGitHub release: {tag}\n\nRe-download setup = repair install (e.g. after a failed browser download).",
-    "mw.update.reinstall_intro": "Version {version} is current (GitHub: {tag}).",
+    "mw.update.already_current": "You already have the latest version ({version}).\nGitHub release: {tag}",
+    "mw.update.up_to_date_title": "Up to date",
+    "mw.update.up_to_date_body": "TD Filament Studio {version} is the latest published version.\n\nGitHub release: {tag}",
+    "mw.update.up_to_date_status": "Version {version} \u2014 up to date ({tag})",
+    "mw.update.reinstall_title": "Re-download setup",
+    "mw.update.reinstall_intro": "Version {version} is current (GitHub: {tag}).\nRepair install: re-download the setup from this release.",
+    "mw.update.no_setup_asset": "No setup EXE found in release {tag}.\nOpen the release page in your browser.",
     "mw.update.download_install": "Download & install setup",
     "mw.update.reinstall_setup": "Re-download setup",
     "mw.update.browser_btn": "In browser",

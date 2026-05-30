@@ -326,6 +326,7 @@ class TDFilamentStudioApp(AppTk):
             command=self._toggle_cfs_preview,
         )
         m_extra.add_command(label=_t("menu.nav.check_updates"), command=self.check_updates)
+        m_extra.add_command(label=_t("menu.nav.reinstall_setup"), command=self.check_updates_reinstall)
 
     def _build_header(self) -> None:
         hdr = tk.Frame(self, bg=HEADER)
@@ -4473,13 +4474,39 @@ class TDFilamentStudioApp(AppTk):
         if is_newer(info.version, APP_VERSION):
             self._offer_update_download(info)
         else:
-            extra = "\n".join(release_stats_lines(info))
-            self.notify(
-                _t("mw.update.already_current", version=APP_VERSION, tag=info.tag)
-                + f"\n\n{extra}",
+            self._focus_app_for_dialog()
+            messagebox.showinfo(
+                _t("mw.update.up_to_date_title"),
+                _t("mw.update.up_to_date_body", version=APP_VERSION, tag=info.tag),
+                parent=self,
+            )
+            self._set_status(
+                _t("mw.update.up_to_date_status", version=APP_VERSION, tag=info.tag),
                 "ok",
             )
-            self._offer_update_download(info, allow_reinstall=True)
+
+    def check_updates_reinstall(self) -> None:
+        """Setup vom aktuellen Release erneut laden (Reparatur nach fehlgeschlagenem Update)."""
+        from tkinter import messagebox
+
+        info = fetch_latest_release()
+        if not info:
+            self.notify(
+                _t("mw.update.no_release_info")
+                + _t("mw.update.repo_line", repo=GITHUB_RELEASES_REPO, url=GITHUB_URL)
+                + _t("mw.update.upload_hint")
+                + _t("mw.update.no_setup_yet"),
+                "warn",
+            )
+            return
+        if not info.download_url:
+            messagebox.showwarning(
+                APP_NAME,
+                _t("mw.update.no_setup_asset", tag=info.tag),
+                parent=self,
+            )
+            return
+        self._offer_update_download(info, allow_reinstall=True)
 
     def _ensure_window_visible(self) -> None:
         """Fenster aus Tray holen — sonst sind Dialoge/Update unsichtbar."""
@@ -4536,7 +4563,9 @@ class TDFilamentStudioApp(AppTk):
         self._focus_app_for_dialog()
         dlg = tk.Toplevel(self)
         self._update_dialog = dlg
-        dlg.title(_t("mw.update.title"))
+        dlg.title(
+            _t("mw.update.reinstall_title") if allow_reinstall else _t("mw.update.title")
+        )
         prepare_toplevel(
             dlg, parent=self, width=520, height=340, geometry_key="update_dialog", modal=True
         )
