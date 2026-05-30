@@ -935,6 +935,11 @@ class TDFilamentStudioApp(AppTk):
                     _t("mw.tip.db_ssh"),
                 ),
                 (
+                    _t("mw.db.change_id"),
+                    self.change_filament_id,
+                    _t("mw.tip.db_change_id"),
+                ),
+                (
                     _t("mw.db.cfs_zip"),
                     self.import_cfs_zip,
                     "Backup-ZIP mit Datenbank und Einstellungen importieren.",
@@ -1041,7 +1046,17 @@ class TDFilamentStudioApp(AppTk):
                 style="Secondary.TButton",
             ),
             _t("mw.db.open_profile_tab_tip"),
-        ).pack(side="left")
+        ).pack(side="left", padx=(0, 8))
+        if MATERIAL_DB_PRINTER_ONLY:
+            tip(
+                ttk.Button(
+                    tree_btns,
+                    text=_t("mw.db.change_id"),
+                    command=self.change_filament_id,
+                    style="Secondary.TButton",
+                ),
+                _t("mw.tip.db_change_id"),
+            ).pack(side="left")
 
         foot = ttk.Frame(top)
         foot.grid(row=2, column=0, sticky="ew", padx=4, pady=(0, 6))
@@ -1978,6 +1993,8 @@ class TDFilamentStudioApp(AppTk):
                     )
                     if raw_n <= prev_raw and prev_raw > 0:
                         msg += "\n\n" + _t("mw.sync.count_unchanged", prev=prev_raw, now=raw_n)
+                    if skipped_n:
+                        msg += "\n\n" + _t("mw.sync.skipped_custom_hint")
                     msg += "\n" + _t("mw.sync.cache_saved", cache=cache)
                 elif self.db_data and self.db_data.get("result", {}).get("list"):
                     merged = merge_databases(self.db_data, data, prefer="cloud")
@@ -1997,6 +2014,90 @@ class TDFilamentStudioApp(AppTk):
                 messagebox.showerror(APP_NAME, str(exc), parent=self)
 
         self._run_ssh_job(_t("mw.job.from_printer"), work, on_ok=on_ok)
+
+    def change_filament_id(self) -> None:
+        """Material-ID eines Profils ändern; optional material_database.json auf K2 schreiben."""
+        from tkinter import messagebox
+
+        from creality_nfc.db_id_change import change_profile_filament_id, id_collision
+        from ui.change_filament_id_dialog import ask_change_filament_id
+
+        if self._demo_mode or not self.db_data:
+            messagebox.showwarning(
+                APP_NAME,
+                _t("id_change.err.no_db"),
+                parent=self,
+            )
+            return
+        profile = self._profile_from_tree_selection()
+        if not profile:
+            messagebox.showwarning(
+                APP_NAME,
+                _t("id_change.err.no_selection"),
+                parent=self,
+            )
+            return
+
+        def on_apply(new_id: str, push_to_printer: bool) -> None:
+            try:
+                hit = id_collision(
+                    self.db_data,
+                    new_id,
+                    brand=profile.brand,
+                    name=profile.name,
+                )
+                if hit:
+                    if not messagebox.askyesno(
+                        APP_NAME,
+                        _t("id_change.confirm_collision", new_id=new_id, brand=hit[0], name=hit[1]),
+                        parent=self,
+                    ):
+                        return
+                data = change_profile_filament_id(
+                    self.db_data,
+                    old_id=profile.filament_id,
+                    brand=profile.brand,
+                    name=profile.name,
+                    new_id=new_id,
+                    allow_collision=bool(hit),
+                )
+            except ValueError as exc:
+                messagebox.showerror(APP_NAME, str(exc), parent=self)
+                return
+
+            self._apply_database(data, "local")
+
+            if not push_to_printer:
+                self.notify(_t("id_change.done_local", old=profile.filament_id, new=new_id), "ok")
+                messagebox.showinfo(
+                    APP_NAME,
+                    _t("id_change.done_local", old=profile.filament_id, new=new_id),
+                    parent=self,
+                )
+                return
+
+            from creality_nfc.printer_ssh import upload_database_to_printer
+
+            snapshot = data
+
+            def work(host: str, password: str, printer: str) -> None:
+                upload_database_to_printer(host, password, printer, snapshot)
+
+            def on_ok(_: None) -> None:
+                self._db_source = "printer"
+                self._update_db_label()
+                msg = _t("id_change.done_printer", old=profile.filament_id, new=new_id)
+                self.notify(msg, "ok")
+                messagebox.showinfo(APP_NAME, msg, parent=self)
+
+            self._run_ssh_job(_t("mw.job.push_db"), work, on_ok=on_ok)
+
+        ask_change_filament_id(
+            self,
+            profile,
+            default_push_to_printer=MATERIAL_DB_PRINTER_ONLY,
+            on_apply=on_apply,
+        )
 
     def pick_database(self) -> None:
         if MATERIAL_DB_PRINTER_ONLY:

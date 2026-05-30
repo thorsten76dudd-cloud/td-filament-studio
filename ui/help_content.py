@@ -402,6 +402,7 @@ Menü „Datei“
 -----------------------
 • Nur „Vom Drucker (SSH)“ — material_database.json vom K2 laden (Root-SSH, gleiches WLAN).
   Kein Cloud-, Datei- oder Slicer-Import, kein Merge, kein „DB speichern“.
+• „Material-ID ändern…“ — 5-stellige ID eines Profils überschreiben, optional per SSH auf den K2 schreiben.
 • Drucker SSH — IP und Passwort im Tab
 • Drucker-Dashboard — Status, DB vergleichen, material_options.json
 

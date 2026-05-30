@@ -67,6 +67,32 @@ def _identity_from_item(item: dict) -> tuple[str, str, str, str]:
         or meta.get("type")
         or ""
     ).strip()
+    if not fid or not name:
+        from creality_nfc.slicer_import import _scan_text_for_metadata
+
+        texts: list[str] = []
+        kv = item.get("kvParam") if isinstance(item.get("kvParam"), dict) else {}
+        if not kv and isinstance(item.get("engine_data"), dict):
+            kv = item["engine_data"]
+        if isinstance(kv, dict):
+            for key in ("filament_notes", "description", "notes", "name", "filament_name"):
+                raw = kv.get(key)
+                if isinstance(raw, str) and raw.strip():
+                    texts.append(raw)
+        for key in ("description", "filament_notes", "notes"):
+            raw = item.get(key)
+            if isinstance(raw, str) and raw.strip():
+                texts.append(raw)
+        for text in texts:
+            parsed = _scan_text_for_metadata(text)
+            if not parsed:
+                continue
+            fid = fid or str(parsed.get("id") or "").strip()
+            brand = brand or str(parsed.get("vendor") or "").strip()
+            name = name or str(parsed.get("name") or "").strip()
+            mtype = mtype or str(parsed.get("type") or "").strip()
+            if fid and name:
+                break
     return fid, brand, name, mtype
 
 
