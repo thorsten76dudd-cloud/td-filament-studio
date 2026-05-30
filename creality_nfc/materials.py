@@ -27,15 +27,76 @@ class FilamentProfile:
     printer: str
 
 
+def _identity_from_item(item: dict) -> tuple[str, str, str, str]:
+    """ID, Marke, Name, Typ — auch wenn Creality Felder außerhalb von base nutzt."""
+    base = item.get("base") if isinstance(item.get("base"), dict) else {}
+    meta = item.get("metadata") if isinstance(item.get("metadata"), dict) else {}
+    fid = str(
+        base.get("id")
+        or base.get("materialId")
+        or item.get("filament_id")
+        or item.get("materialId")
+        or item.get("filamentId")
+        or meta.get("id")
+        or meta.get("materialId")
+        or ""
+    ).strip()
+    name = str(
+        base.get("name")
+        or base.get("materialName")
+        or item.get("name")
+        or item.get("filamentName")
+        or item.get("materialName")
+        or meta.get("name")
+        or ""
+    ).strip()
+    brand = str(
+        base.get("brand")
+        or base.get("vendor")
+        or item.get("brand")
+        or item.get("vendor")
+        or meta.get("vendor")
+        or meta.get("brand")
+        or ""
+    ).strip()
+    mtype = str(
+        base.get("meterialType")
+        or base.get("materialType")
+        or item.get("materialType")
+        or item.get("meterialType")
+        or meta.get("type")
+        or ""
+    ).strip()
+    return fid, brand, name, mtype
+
+
+def profile_list_stats(data: dict) -> tuple[int, int, int]:
+    """(Einträge in JSON, davon anzeigbar, übersprungen ohne ID/Name)."""
+    items = data.get("result", {}).get("list", [])
+    if not isinstance(items, list):
+        return 0, 0, 0
+    raw = len(items)
+    loaded = 0
+    skipped = 0
+    for item in items:
+        if not isinstance(item, dict):
+            skipped += 1
+            continue
+        fid, _brand, name, _mtype = _identity_from_item(item)
+        if fid and name:
+            loaded += 1
+        else:
+            skipped += 1
+    return raw, loaded, skipped
+
+
 def load_database_from_data(data: dict) -> list[FilamentProfile]:
     items = data.get("result", {}).get("list", [])
     out: list[FilamentProfile] = []
     for item in items:
-        base = item.get("base", {})
-        fid = str(base.get("id", "")).strip()
-        brand = str(base.get("brand", "")).strip()
-        name = str(base.get("name", "")).strip()
-        mtype = str(base.get("meterialType", base.get("materialType", ""))).strip()
+        if not isinstance(item, dict):
+            continue
+        fid, brand, name, mtype = _identity_from_item(item)
         printer = str(item.get("printerIntName", "")).strip()
         if not fid or not name:
             continue

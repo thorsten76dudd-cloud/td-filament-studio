@@ -1949,20 +1949,36 @@ class TDFilamentStudioApp(AppTk):
         self._set_status(_t("mw.ssh.starting"), "info")
         self.update_idletasks()
         log_event("sync_from_printer: button")
+        from creality_nfc.materials import profile_list_stats
+
+        prev_raw = profile_list_stats(self.db_data)[0] if self.db_data else 0
 
         def work(host: str, password: str, printer: str):
             return download_database_from_printer(host, password, printer)
 
         def on_ok(data: dict) -> None:
             try:
+                raw_n, loadable_n, skipped_n = profile_list_stats(data)
+                if hasattr(self, "_db_list_search_var"):
+                    self._db_list_search_var.set("")
                 if MATERIAL_DB_PRINTER_ONLY:
                     self._apply_database(data, "printer")
                     cache = self.db_path.name if self.db_path else "data/"
                     msg = (
-                        _t("mw.sync.loaded_profiles", n=len(self.profiles))
+                        _t("mw.sync.workflow_hint")
+                        + "\n\n"
+                        + _t("mw.sync.loaded_profiles", n=len(self.profiles))
                         + "\n"
-                        + _t("mw.sync.cache_saved", cache=cache)
+                        + _t(
+                            "mw.sync.loaded_detail",
+                            raw=raw_n,
+                            shown=len(self.profiles),
+                            skipped=skipped_n,
+                        )
                     )
+                    if raw_n <= prev_raw and prev_raw > 0:
+                        msg += "\n\n" + _t("mw.sync.count_unchanged", prev=prev_raw, now=raw_n)
+                    msg += "\n" + _t("mw.sync.cache_saved", cache=cache)
                 elif self.db_data and self.db_data.get("result", {}).get("list"):
                     merged = merge_databases(self.db_data, data, prefer="cloud")
                     added, updated, total, skipped = merge_stats(self.db_data, data)
