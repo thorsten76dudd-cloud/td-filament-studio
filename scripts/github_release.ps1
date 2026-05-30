@@ -33,9 +33,9 @@ if (-not (Test-Path $Setup)) {
 $notes = @(
     "## TD Filament Studio $Version",
     "",
-    "### Fixes",
-    "* In-App-Update: Windows-Systemdialog nach Download (auch bei Tray), Explorer + Notfall-BAT.",
-    "* Installer startet per PowerShell nach App-Ende.",
+    "### Material-DB",
+    "* Mehr Creality-Profile nach „Vom Drucker (SSH)“ (erweiterte JSON-Felder).",
+    "* Hinweis: Creality-Print-Sync reicht nicht — SSH-Laden nötig; Warnung bei unveränderter Eintragszahl.",
     "",
     "Details: STABLE-v$Version.md im Repository."
 ) -join [Environment]::NewLine
