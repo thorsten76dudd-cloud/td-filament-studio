@@ -4,8 +4,8 @@
 # or -DeleteAllOldReleases to wipe everything except the current $Tag.
 
 param(
-    [string]$Version = "1.5.147",
-    [string]$Tag = "v1.5.147-stable",
+    [string]$Version = "1.5.148",
+    [string]$Tag = "v1.5.148-stable",
     [string]$Repo = "thorsten76dudd-cloud/td-filament-studio",
     [string]$RemoveTag = "",
     [switch]$DeleteAllOldReleases
@@ -38,7 +38,7 @@ $notes = @(
     "## TD Filament Studio $Version",
     "",
     "### Material-ID",
-    "* Material-DB: Lokal leeren und neu laden; optional Drucker-DB leeren.",
+    "* Meine Spulen: Spalte ID, alle Spalten lesbar (horizontal scrollen).",
     "",
     "### Sonstiges",
     "* In-App-Update: ein Setup-Fenster, Versions-Check beim Download.",

@@ -576,19 +576,31 @@ class SpoolManagerPanel(ttk.Frame):
         tree_wrap.rowconfigure(0, weight=1)
         tree_wrap.columnconfigure(0, weight=1)
 
-        self._tree_cols = ("cfs", "label", "brand", "material", "weight", "rest", "serial", "uid", "notes")
+        self._tree_cols = (
+            "cfs",
+            "label",
+            "brand",
+            "material",
+            "fid",
+            "weight",
+            "rest",
+            "serial",
+            "uid",
+            "notes",
+        )
         self._col_titles = {
-            "cfs": "CFS",
-            "label": "Bezeichnung",
-            "brand": "Marke",
-            "material": "Material",
-            "weight": "Gewicht",
-            "rest": "Rest g",
-            "serial": "Serie",
-            "uid": "Tag-UID",
-            "notes": "Bemerkung",
+            "cfs": _t("spools.col.slot"),
+            "label": _t("spools.col.label"),
+            "brand": _t("spools.col.brand"),
+            "material": _t("spools.col.material"),
+            "fid": _t("spools.col.filament_id"),
+            "weight": _t("spools.col.weight"),
+            "rest": _t("spools.col.remaining"),
+            "serial": _t("spools.col.serial"),
+            "uid": _t("spools.col.tag_uid"),
+            "notes": _t("spools.col.notes"),
         }
-        self._stretch_col = "label"
+        self._stretch_col = ""
         self.tree = ttk.Treeview(
             tree_wrap,
             columns=self._tree_cols,
@@ -600,13 +612,25 @@ class SpoolManagerPanel(ttk.Frame):
         self.tree.heading("#0", text=_t("spools.col.color"), anchor="center")
         self.tree.column("#0", width=52, stretch=False, minwidth=52, anchor="center")
         for c in self._tree_cols:
-            anchor = "center" if c in ("cfs", "weight", "rest", "serial") else "w"
+            anchor = "center" if c in ("cfs", "fid", "weight", "rest", "serial") else "w"
             self.tree.heading(c, text=self._col_titles[c], anchor=anchor)
+            default_w = {
+                "cfs": 44,
+                "label": 200,
+                "brand": 100,
+                "material": 180,
+                "fid": 56,
+                "weight": 72,
+                "rest": 64,
+                "serial": 64,
+                "uid": 120,
+                "notes": 100,
+            }.get(c, 80)
             self.tree.column(
                 c,
-                width=80,
-                minwidth=36,
-                stretch=(c == self._stretch_col),
+                width=default_w,
+                minwidth=default_w if c == "fid" else 40,
+                stretch=False,
                 anchor=anchor,
             )
         self._tree_body_font = tkfont.Font(font=F_BODY)
@@ -671,6 +695,8 @@ class SpoolManagerPanel(ttk.Frame):
             return sp.brand
         if col == "material":
             return sp.material_name
+        if col == "fid":
+            return sp.filament_id or ""
         if col == "weight":
             return sp.weight or ""
         if col == "rest":
@@ -697,23 +723,24 @@ class SpoolManagerPanel(ttk.Frame):
                 if cell:
                     samples.append(cell)
             caps = {
-                "cfs": 64,
-                "weight": 88,
+                "cfs": 56,
+                "fid": 64,
+                "weight": 80,
                 "rest": 72,
-                "serial": 80,
-                "uid": 260,
-                "label": 320,
+                "serial": 72,
+                "uid": 280,
+                "label": 420,
+                "brand": 160,
+                "material": 420,
+                "notes": 320,
             }
-            w = self._measure_col_width(samples, max_w=caps.get(col, 280))
-            stretch = col == self._stretch_col
-            anchor = "center" if col in ("cfs", "weight", "rest", "serial") else "w"
-            self.tree.column(col, width=w, minwidth=min(w, 44), stretch=stretch, anchor=anchor)
+            w = self._measure_col_width(samples, max_w=caps.get(col, 300))
+            anchor = "center" if col in ("cfs", "fid", "weight", "rest", "serial") else "w"
+            self.tree.column(col, width=w, minwidth=min(w, 48), stretch=False, anchor=anchor)
 
     def _on_tree_configure(self, event) -> None:
         if event.widget is not self.tree:
             return
-        # Nach Fenstergröße: Stretch-Spalte füllt Rest, keine Lücke in der Mitte
-        self.tree.column(self._stretch_col, stretch=True)
 
     def select_spool(self, spool_id: str) -> None:
         """Spule in der Liste markieren (z. B. nach Tag-Schreiben)."""
