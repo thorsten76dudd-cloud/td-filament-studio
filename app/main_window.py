@@ -4760,9 +4760,15 @@ class TDFilamentStudioApp(AppTk):
         progress_state = {"last_pct": -1}
 
         def work() -> tuple[Path | None, str]:
-            from creality_nfc.app_update import default_setup_download_path, download_setup
+            from creality_nfc.app_update import (
+                download_setup,
+                purge_old_setup_downloads,
+                setup_download_path_for_version,
+                validate_setup_exe,
+            )
 
-            dest = default_setup_download_path()
+            dest = setup_download_path_for_version(info.version)
+            purge_old_setup_downloads(keep=dest)
 
             def on_progress(received: int, total: int) -> None:
                 if total <= 0:
@@ -4779,6 +4785,7 @@ class TDFilamentStudioApp(AppTk):
 
             try:
                 download_setup(info.download_url or "", dest, on_progress=on_progress)
+                validate_setup_exe(dest, expected_version=info.version)
                 return dest, ""
             except Exception as exc:
                 log_exception("update-download", exc)
@@ -4807,9 +4814,7 @@ class TDFilamentStudioApp(AppTk):
             )
 
             open_updates_folder()
-            from creality_nfc.app_update import default_setup_download_path
-
-            staged = default_setup_download_path()
+            staged = path.resolve()
             helper = write_install_now_helper(path)
             if confirm_before_install:
                 confirm_body = (
@@ -4833,11 +4838,12 @@ class TDFilamentStudioApp(AppTk):
                     except Exception:
                         pass
             self.update_idletasks()
-            self.after(500, lambda p=staged: self._finish_in_app_install(p))
+            ver = info.version
+            self.after(500, lambda p=staged, v=ver: self._finish_in_app_install(p, v))
 
         self._run_bg_job("Update-Download", work, on_ok=on_ok)
 
-    def _finish_in_app_install(self, path: Path) -> None:
+    def _finish_in_app_install(self, path: Path, expected_version: str | None = None) -> None:
         """Setup starten und App beenden (nach kurzer Pause für Tray/Notify)."""
         from tkinter import messagebox
 
@@ -4855,7 +4861,7 @@ class TDFilamentStudioApp(AppTk):
             helper = write_install_now_helper(path)
             notify_install_starting(path, helper)
             self._set_status(_t("mw.update.installer_starting"), "ok")
-            install_downloaded_setup(path)
+            install_downloaded_setup(path, expected_version=expected_version)
         except Exception as exc:
             log_exception("update-install", exc)
             messagebox.showerror(

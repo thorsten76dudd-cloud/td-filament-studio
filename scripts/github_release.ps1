@@ -4,8 +4,8 @@
 # or -DeleteAllOldReleases to wipe everything except the current $Tag.
 
 param(
-    [string]$Version = "1.5.142",
-    [string]$Tag = "v1.5.142-stable",
+    [string]$Version = "1.5.143",
+    [string]$Tag = "v1.5.143-stable",
     [string]$Repo = "thorsten76dudd-cloud/td-filament-studio",
     [string]$RemoveTag = "",
     [switch]$DeleteAllOldReleases
@@ -22,20 +22,24 @@ if (-not (Get-Command gh -ErrorAction SilentlyContinue)) {
 gh auth status | Out-Null
 if ($LASTEXITCODE -ne 0) { Write-Error "Run: gh auth login" }
 
-if (-not (Test-Path $Setup)) {
-    Write-Host "Building installer ..."
-    Push-Location $Root
-    cmd /c build_setup.bat
-    Pop-Location
-    if (-not (Test-Path $Setup)) { Write-Error "Setup missing: $Setup" }
+Write-Host "Sync installer version + rebuild ..."
+Push-Location $Root
+python scripts\sync_installer_version.py
+if ($LASTEXITCODE -ne 0) { Pop-Location; Write-Error "sync_installer_version failed" }
+cmd /c build_setup.bat
+Pop-Location
+if (-not (Test-Path $Setup)) { Write-Error "Setup missing: $Setup" }
+$iss = Get-Content (Join-Path $Root "installer\setup.iss") -Raw
+if ($iss -notmatch ('#define MyAppVersion "' + [regex]::Escape($Version) + '"')) {
+    Write-Error "setup.iss MyAppVersion passt nicht zu $Version"
 }
 
 $notes = @(
     "## TD Filament Studio $Version",
     "",
-    "### Material-DB",
-    "* Mehr Creality-Profile nach „Vom Drucker (SSH)“ (erweiterte JSON-Felder).",
-    "* Hinweis: Creality-Print-Sync reicht nicht - SSH-Laden noetig; Warnung bei unveraenderter Eintragszahl.",
+    "### Update-Fix",
+    "* In-App-Update: nur ein Setup-Fenster; korrekte Version (kein altes 141-Setup bei 142/143).",
+    "* Release-Build erzwingt frische Setup-EXE mit passender Versionsnummer.",
     "",
     "Details: STABLE-v$Version.md im Repository."
 ) -join [Environment]::NewLine

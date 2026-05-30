@@ -4,7 +4,7 @@ from __future__ import annotations
 
 import ctypes
 import os
-import shutil
+import re
 import subprocess
 import sys
 import tempfile
@@ -199,15 +199,67 @@ def confirm_install_ok(title: str, message: str) -> bool:
         return True
 
 
-def default_setup_download_path() -> Path:
-    """Stabiler Ordner (nicht nur %TEMP%) — weniger SmartScreen-Probleme."""
-    base = Path(os.environ.get("LOCALAPPDATA", tempfile.gettempdir())) / "TD Filament Studio" / "Updates"
-    base.mkdir(parents=True, exist_ok=True)
+def default_setup_download_path(version: str | None = None) -> Path:
+    """Stabiler Ordner; pro Release-Version eigene Datei (kein altes Setup wiederverwenden)."""
+    if version:
+        return setup_download_path_for_version(version)
+    base = updates_folder()
     return base / _SETUP_NAME
 
 
-def validate_setup_exe(setup_path: Path) -> None:
-    """Prüfen, ob der Download eine echte Setup-EXE ist (kein HTML/Fehler)."""
+def setup_download_path_for_version(version: str) -> Path:
+    from creality_nfc.update_check import normalize_release_version
+
+    ver = normalize_release_version(version)
+    safe = re.sub(r"[^\d.]+", "", ver) or "unknown"
+    return updates_folder() / f"TD-Filament-Studio-Setup-{safe}.exe"
+
+
+def purge_old_setup_downloads(*, keep: Path | None = None) -> None:
+    """Alte Setup-EXE(s) im Updates-Ordner löschen (verhindert 141-Installer bei 142-Update)."""
+    keep_resolved = keep.resolve() if keep else None
+    for path in updates_folder().glob("TD-Filament-Studio-Setup*.exe"):
+        try:
+            if keep_resolved and path.resolve() == keep_resolved:
+                continue
+            path.unlink()
+            _update_log(f"purge old setup: {path}")
+        except OSError as exc:
+            _update_log(f"purge failed {path}: {exc}")
+
+
+def read_setup_product_version(setup_path: Path) -> str | None:
+    """Windows ProductVersion der Setup-EXE (Inno Setup), z. B. 1.5.143.0 → 1.5.143."""
+    if sys.platform != "win32":
+        return None
+    setup_path = setup_path.resolve()
+    ps = f"(Get-Item -LiteralPath '{setup_path}').VersionInfo.ProductVersion"
+    flags = getattr(subprocess, "CREATE_NO_WINDOW", 0)
+    try:
+        proc = subprocess.run(
+            ["powershell", "-NoProfile", "-Command", ps],
+            capture_output=True,
+            text=True,
+            encoding="utf-8",
+            errors="replace",
+            timeout=20,
+            creationflags=flags,
+        )
+    except (OSError, subprocess.SubprocessError):
+        return None
+    if proc.returncode != 0:
+        return None
+    raw = (proc.stdout or "").strip()
+    if not raw:
+        return None
+    parts = re.findall(r"\d+", raw)
+    if len(parts) >= 3:
+        return f"{parts[0]}.{parts[1]}.{parts[2]}"
+    return raw
+
+
+def validate_setup_exe(setup_path: Path, *, expected_version: str | None = None) -> None:
+    """Prüfen: echte Setup-EXE, optional Version = GitHub-Release."""
     setup_path = setup_path.resolve()
     if not setup_path.is_file():
         raise FileNotFoundError(setup_path)
@@ -219,17 +271,29 @@ def validate_setup_exe(setup_path: Path) -> None:
     with setup_path.open("rb") as fh:
         if fh.read(2) != b"MZ":
             raise ValueError("Keine gültige Windows-EXE — bitte Setup im Browser erneut laden.")
+    if not expected_version:
+        return
+    from creality_nfc.update_check import normalize_release_version
+
+    expected = normalize_release_version(expected_version)
+    found = read_setup_product_version(setup_path)
+    if not found:
+        _update_log(f"validate_setup_exe: keine PE-Version lesbar ({setup_path})")
+        return
+    found_norm = normalize_release_version(found)
+    if found_norm != expected:
+        raise ValueError(
+            f"Setup enthaelt Version {found_norm}, erwartet war {expected}.\n"
+            "Bitte Update erneut starten oder Setup von der GitHub-Release-Seite laden."
+        )
+    _update_log(f"validate_setup_exe: Version OK ({found_norm})")
 
 
 def stage_setup_for_install(setup_path: Path) -> Path:
-    """Setup immer nach %LOCALAPPDATA%\\TD Filament Studio\\Updates kopieren."""
-    dest = default_setup_download_path()
+    """Installationspfad (bereits unter Updates/ mit Versionsname)."""
     setup_path = setup_path.resolve()
-    dest.parent.mkdir(parents=True, exist_ok=True)
-    if setup_path != dest.resolve():
-        shutil.copy2(setup_path, dest)
-        _update_log(f"staged: {setup_path} -> {dest}")
-    return dest
+    setup_path.parent.mkdir(parents=True, exist_ok=True)
+    return setup_path
 
 
 def _shell_execute(file: str, params: str = "", *, show: int = _SW_SHOW_NORMAL) -> None:
@@ -343,27 +407,31 @@ def _launch_installer_after_exit(setup_path: Path) -> None:
         _update_log(f"Popen Runner: {runner}")
 
 
-def install_downloaded_setup(setup_path: Path) -> None:
-    """Installer starten und Prozess beenden (Inno /FORCECLOSEAPPLICATIONS schließt die App)."""
+def install_downloaded_setup(setup_path: Path, *, expected_version: str | None = None) -> None:
+    """Installer einmal starten; Fallback nur wenn der erste Start fehlschlägt."""
     staged = stage_setup_for_install(setup_path)
     unblock_setup_file(staged)
-    validate_setup_exe(staged)
+    validate_setup_exe(staged, expected_version=expected_version)
     write_install_now_helper(staged)
     size = staged.stat().st_size
     _update_log(f"install_downloaded_setup: {staged} ({size} bytes)")
     if sys.platform == "win32":
         prepare_shutdown_for_update()
-        _popen_installer_detached(staged)
+        launched = False
         try:
             _launch_installer(staged)
+            launched = True
         except OSError as exc:
-            _update_log(f"ShellExecute Installer: {exc}")
-        _launch_installer_after_exit(staged)
-        try:
-            _schedule_install_via_schtasks(staged)
-        except (OSError, subprocess.SubprocessError) as exc:
-            _update_log(f"schtasks: {exc}")
-        time.sleep(0.8)
+            _update_log(f"Installer ShellExecute/cmd: {exc}")
+        if not launched:
+            try:
+                _popen_installer_detached(staged)
+                launched = True
+            except OSError as exc:
+                _update_log(f"Installer Popen: {exc}")
+        if not launched:
+            _launch_installer_after_exit(staged)
+        time.sleep(0.5)
     else:
         subprocess.Popen([str(staged)], close_fds=True)
     os._exit(0)
