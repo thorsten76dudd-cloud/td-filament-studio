@@ -25,6 +25,11 @@ def load_database_raw(path: Path) -> dict:
     return json.loads(path.read_text(encoding="utf-8", errors="replace"))
 
 
+def empty_material_database() -> dict:
+    """Leere Creality material_database.json (result.list leer)."""
+    return {"code": 0, "msg": "ok", "result": {"list": [], "count": 0}}
+
+
 def profiles_from_db(data: dict) -> list[FilamentProfile]:
     from .materials import load_database_from_data
 

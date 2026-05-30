@@ -940,6 +940,16 @@ class TDFilamentStudioApp(AppTk):
                     _t("mw.tip.db_change_id"),
                 ),
                 (
+                    _t("mw.db.reload_fresh"),
+                    self.reload_material_db_fresh,
+                    _t("mw.tip.db_reload_fresh"),
+                ),
+                (
+                    _t("mw.db.clear_printer"),
+                    self.clear_printer_material_db,
+                    _t("mw.tip.db_clear_printer"),
+                ),
+                (
                     _t("mw.db.cfs_zip"),
                     self.import_cfs_zip,
                     "Backup-ZIP mit Datenbank und Einstellungen importieren.",
@@ -2065,6 +2075,64 @@ class TDFilamentStudioApp(AppTk):
                 messagebox.showerror(APP_NAME, str(exc), parent=self)
 
         self._run_ssh_job(_t("mw.job.from_printer"), work, on_ok=on_ok)
+
+    def reload_material_db_fresh(self) -> None:
+        """Lokale k2_pro.json löschen und material_database.json frisch vom K2 holen."""
+        from tkinter import messagebox
+
+        from creality_nfc.db_store import db_path_for_printer
+
+        self._focus_app_for_dialog()
+        printer = self.printer_var.get().strip() or "K2 Pro"
+        path = db_path_for_printer(DATA_DIR, printer)
+        if not messagebox.askyesno(
+            APP_NAME,
+            _t("mw.db.reload_fresh_confirm", path=path.name),
+            parent=self,
+        ):
+            return
+        try:
+            if path.is_file():
+                path.unlink()
+                log_event(f"reload_material_db_fresh: deleted {path}")
+        except OSError as exc:
+            self._app_messagebox("error", APP_NAME, _t("mw.db.reload_fresh_delete_failed", exc=exc))
+            return
+        from creality_nfc.db_store import empty_material_database
+
+        self.db_data = empty_material_database()
+        self.profiles = []
+        self.db_path = None
+        self._demo_mode = False
+        self._db_source = "local"
+        self._refresh_combos()
+        self._update_db_label()
+        self._refresh_profile_list()
+        self.notify(_t("mw.db.reload_fresh_started"), "info")
+        self.sync_from_printer()
+
+    def clear_printer_material_db(self) -> None:
+        """Alle Profile in material_database.json auf dem K2 löschen (Vorsicht)."""
+        from tkinter import messagebox
+
+        from creality_nfc.db_store import empty_material_database
+        from creality_nfc.printer_ssh import upload_database_to_printer
+
+        self._focus_app_for_dialog()
+        if not messagebox.askyesno(APP_NAME, _t("mw.db.clear_printer_warn1"), parent=self):
+            return
+        if not messagebox.askyesno(APP_NAME, _t("mw.db.clear_printer_warn2"), parent=self):
+            return
+        empty = empty_material_database()
+        self._apply_database(empty, "printer")
+
+        def work(host: str, password: str, printer: str) -> None:
+            upload_database_to_printer(host, password, printer, empty)
+
+        def on_ok(_: None) -> None:
+            self._app_messagebox("info", APP_NAME, _t("mw.db.clear_printer_done"))
+
+        self._run_ssh_job(_t("mw.job.clear_printer_db"), work, on_ok=on_ok)
 
     def _app_messagebox(self, kind: str, title: str, message: str) -> None:
         """Dialog sichtbar (auch aus Tray) + Kurzmeldung in der Statuszeile."""
