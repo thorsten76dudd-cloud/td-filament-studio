@@ -7,12 +7,14 @@ from unittest.mock import patch
 
 from creality_nfc.app_update import (
     _SETUP_NAME,
+    confirm_install_ok,
     default_setup_download_path,
     install_downloaded_setup,
     kill_all_app_processes,
     stage_setup_for_install,
     unblock_setup_file,
     validate_setup_exe,
+    write_install_now_helper,
 )
 
 
@@ -37,6 +39,21 @@ class AppUpdateTests(unittest.TestCase):
         self.assertIn("taskkill", args)
         self.assertIn("TD Filament Studio.exe", args)
         self.assertNotIn("/T", args)
+
+    @patch("creality_nfc.app_update.sys.platform", "win32")
+    @patch("creality_nfc.app_update.ctypes.windll")
+    def test_confirm_install_ok(self, mock_windll) -> None:
+        mock_windll.user32.MessageBoxW.return_value = 1
+        self.assertTrue(confirm_install_ok("T", "Body"))
+        mock_windll.user32.MessageBoxW.assert_called_once()
+
+    def test_write_install_helper(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            setup = Path(tmp) / "TD-Filament-Studio-Setup.exe"
+            setup.write_bytes(b"MZ" + b"\0" * 5_000_001)
+            bat = write_install_now_helper(setup)
+            self.assertTrue(bat.is_file())
+            self.assertIn("FORCECLOSEAPPLICATIONS", bat.read_text(encoding="utf-8"))
 
     def test_default_download_under_localappdata(self) -> None:
         p = default_setup_download_path()

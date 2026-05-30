@@ -837,6 +837,7 @@ STRINGS = {
     "mw.update.setup_ready": "Setup ready:\n{path}\n\n",
     "mw.update.ok_quit_hint": "OK = app quits, the installer starts in a few seconds.\n",
     "mw.update.manual_start_hint": "If nothing happens: start the file manually from the Updates folder.\n\n",
+    "mw.update.helper_bat": "Fallback: double-click\n{path}\n\n",
     "mw.update.cancel_keeps": "Cancel = keep the setup saved.",
     "mw.update.setup_saved": "Setup saved:\n{path}",
     "mw.update.installer_starting": "Installer starts in a few seconds \u2014 app will quit \u2026",

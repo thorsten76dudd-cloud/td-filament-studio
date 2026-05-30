@@ -4,8 +4,8 @@
 # or -DeleteAllOldReleases to wipe everything except the current $Tag.
 
 param(
-    [string]$Version = "1.5.135",
-    [string]$Tag = "v1.5.135-stable",
+    [string]$Version = "1.5.136",
+    [string]$Tag = "v1.5.136-stable",
     [string]$Repo = "thorsten76dudd-cloud/td-filament-studio",
     [string]$RemoveTag = "",
     [switch]$DeleteAllOldReleases
@@ -34,8 +34,8 @@ $notes = @(
     "## TD Filament Studio $Version",
     "",
     "### Fixes",
-    "* In-App-Update mit Tray: Fenster sichtbar, Waechter/Tray stoppen, Installer nach App-Ende.",
-    "* Setup-Installer sichtbar (v1.5.134), Verbrauchs-Dialog (v1.5.133).",
+    "* In-App-Update: Windows-Systemdialog nach Download (auch bei Tray), Explorer + Notfall-BAT.",
+    "* Installer startet per PowerShell nach App-Ende.",
     "",
     "Details: STABLE-v$Version.md im Repository."
 ) -join [Environment]::NewLine

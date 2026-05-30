@@ -20,6 +20,11 @@ _INNO_SETUP_ARGS = "/FORCECLOSEAPPLICATIONS"
 _CREATE_BREAKAWAY_FROM_JOB = 0x01000000
 _DETACHED_PROCESS = 0x00000008
 _SW_SHOW_NORMAL = 1
+_MB_OKCANCEL = 0x00000001
+_MB_ICONINFORMATION = 0x00000040
+_MB_SYSTEMMODAL = 0x00001000
+_MB_SETFOREGROUND = 0x00010000
+_IDOK = 1
 
 
 def _update_log(message: str) -> None:
@@ -121,6 +126,57 @@ def download_setup(
     unblock_setup_file(dest)
 
 
+def updates_folder() -> Path:
+    base = Path(os.environ.get("LOCALAPPDATA", tempfile.gettempdir())) / "TD Filament Studio" / "Updates"
+    base.mkdir(parents=True, exist_ok=True)
+    return base
+
+
+def open_updates_folder() -> None:
+    """Explorer öffnen — Nutzer findet Setup auch bei Tray/Hintergrund."""
+    if sys.platform != "win32":
+        return
+    try:
+        os.startfile(str(updates_folder()))
+        _update_log(f"Explorer: {updates_folder()}")
+    except OSError as exc:
+        _update_log(f"Explorer öffnen fehlgeschlagen: {exc}")
+
+
+def write_install_now_helper(setup_path: Path) -> Path:
+    """Dauerhafte BAT zum manuellen Start, falls In-App-Install hängt."""
+    setup_path = setup_path.resolve()
+    bat = setup_path.parent / "Setup-jetzt-installieren.bat"
+    bat.write_text(
+        "@echo off\r\n"
+        f'cd /d "{setup_path.parent}"\r\n'
+        f'start "" "{setup_path}" {_INNO_SETUP_ARGS}\r\n',
+        encoding="utf-8",
+    )
+    _update_log(f"Helper-BAT: {bat}")
+    return bat
+
+
+def confirm_install_ok(title: str, message: str) -> bool:
+    """
+    Windows-Systemdialog (sichtbar auch bei Tray / ausgeblendetem Fenster).
+    """
+    if sys.platform != "win32":
+        return True
+    try:
+        ret = ctypes.windll.user32.MessageBoxW(
+            0,
+            message,
+            title,
+            _MB_OKCANCEL | _MB_ICONINFORMATION | _MB_SYSTEMMODAL | _MB_SETFOREGROUND,
+        )
+        _update_log(f"MessageBox Antwort: {ret}")
+        return ret == _IDOK
+    except Exception as exc:
+        _update_log(f"MessageBox fehlgeschlagen: {exc}")
+        return True
+
+
 def default_setup_download_path() -> Path:
     """Stabiler Ordner (nicht nur %TEMP%) — weniger SmartScreen-Probleme."""
     base = Path(os.environ.get("LOCALAPPDATA", tempfile.gettempdir())) / "TD Filament Studio" / "Updates"
@@ -183,22 +239,31 @@ def _launch_installer_after_exit(setup_path: Path) -> None:
     """
     setup_path = setup_path.resolve()
     unblock_setup_file(setup_path)
-    bat = setup_path.parent / "_td_run_setup_after_exit.bat"
-    bat.write_text(
-        "@echo off\r\n"
-        "timeout /t 2 /nobreak >nul\r\n"
-        f'start "" "{setup_path}" {_INNO_SETUP_ARGS}\r\n'
-        'del "%~f0"\r\n',
+    write_install_now_helper(setup_path)
+    ps1 = setup_path.parent / "_td_run_setup_after_exit.ps1"
+    ps1.write_text(
+        "Start-Sleep -Seconds 3\n"
+        f"Start-Process -LiteralPath '{setup_path}' "
+        f"-ArgumentList '{_INNO_SETUP_ARGS}' -WindowStyle Normal\n",
         encoding="utf-8",
     )
     flags = _DETACHED_PROCESS | _CREATE_BREAKAWAY_FROM_JOB
     subprocess.Popen(
-        ["cmd.exe", "/c", str(bat)],
+        [
+            "powershell.exe",
+            "-NoProfile",
+            "-ExecutionPolicy",
+            "Bypass",
+            "-WindowStyle",
+            "Hidden",
+            "-File",
+            str(ps1),
+        ],
         close_fds=True,
         creationflags=flags,
         cwd=str(setup_path.parent),
     )
-    _update_log(f"Deferred-Installer-Batch: {bat}")
+    _update_log(f"Deferred-Installer-PowerShell: {ps1}")
 
 
 def install_downloaded_setup(setup_path: Path) -> None:
@@ -210,7 +275,7 @@ def install_downloaded_setup(setup_path: Path) -> None:
     if sys.platform == "win32":
         prepare_shutdown_for_update()
         _launch_installer_after_exit(staged)
-        time.sleep(0.4)
+        time.sleep(0.8)
         kill_all_app_processes()
     else:
         subprocess.Popen([str(staged)], close_fds=True)

@@ -840,6 +840,7 @@ STRINGS = {
     "mw.update.setup_ready": "Setup bereit:\n{path}\n\n",
     "mw.update.ok_quit_hint": "OK = App beendet sich, nach wenigen Sekunden startet der Installer.\n",
     "mw.update.manual_start_hint": "Falls nichts passiert: Datei manuell aus dem Ordner Updates starten.\n\n",
+    "mw.update.helper_bat": "Notfall: Doppelklick auf\n{path}\n\n",
     "mw.update.cancel_keeps": "Abbrechen = Setup bleibt gespeichert.",
     "mw.update.setup_saved": "Setup gespeichert:\n{path}",
     "mw.update.installer_starting": "Installer startet in wenigen Sekunden \u2014 App wird beendet \u2026",

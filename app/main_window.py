@@ -4660,29 +4660,38 @@ class TDFilamentStudioApp(AppTk):
                 ):
                     webbrowser.open(info.download_url or info.html_url)
                 return
-            self._focus_app_for_dialog()
+            self._ensure_window_visible()
             self._set_status(_t("mw.update.ready_install"), "ok")
-            if not messagebox.askokcancel(
-                _t("mw.update.install_title"),
+            from creality_nfc.app_update import (
+                confirm_install_ok,
+                install_downloaded_setup,
+                open_updates_folder,
+                write_install_now_helper,
+            )
+
+            open_updates_folder()
+            helper = write_install_now_helper(path)
+            confirm_body = (
                 _t("mw.update.setup_ready", path=path)
                 + _t("mw.update.ok_quit_hint")
                 + _t("mw.update.smartscreen_hint")
                 + _t("mw.update.manual_start_hint")
-                + _t("mw.update.cancel_keeps"),
-                parent=self,
-            ):
+                + _t("mw.update.helper_bat", path=helper)
+                + _t("mw.update.cancel_keeps")
+            )
+            if not confirm_install_ok(_t("mw.update.install_title"), confirm_body):
                 self.notify(_t("mw.update.setup_saved", path=path), "info")
                 return
             try:
-                from creality_nfc.app_update import install_downloaded_setup
+                from creality_nfc.creality_watch import unregister_main_app
 
-                self._ensure_window_visible()
                 self._stop_background_tray()
+                unregister_main_app()
+                from app.shutdown import shutdown_application
+
+                shutdown_application(self)
+                self.notify(_t("mw.update.installer_starting"), "ok")
                 self.update_idletasks()
-                self.notify(
-                    _t("mw.update.installer_starting"),
-                    "ok",
-                )
                 install_downloaded_setup(path)
             except Exception as exc:
                 log_exception("update-install", exc)
