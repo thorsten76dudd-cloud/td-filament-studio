@@ -236,34 +236,35 @@ def _launch_installer(setup_path: Path) -> None:
 def _launch_installer_after_exit(setup_path: Path) -> None:
     """
     Installer erst nach App-Ende starten (Tray/Hintergrund-EXE sonst blockiert).
+    CMD statt PowerShell — wird seltener von Antivirus/Richtlinien blockiert.
     """
     setup_path = setup_path.resolve()
     unblock_setup_file(setup_path)
     write_install_now_helper(setup_path)
-    ps1 = setup_path.parent / "_td_run_setup_after_exit.ps1"
-    ps1.write_text(
-        "Start-Sleep -Seconds 3\n"
-        f"Start-Process -LiteralPath '{setup_path}' "
-        f"-ArgumentList '{_INNO_SETUP_ARGS}' -WindowStyle Normal\n",
+    runner = setup_path.parent / "_td_install_after_exit.cmd"
+    runner.write_text(
+        "@echo off\r\n"
+        'cd /d "%~dp0"\r\n'
+        "ping 127.0.0.1 -n 4 >nul\r\n"
+        f'start "" "{setup_path}" {_INNO_SETUP_ARGS}\r\n',
         encoding="utf-8",
     )
+    _update_log(f"Deferred-CMD geschrieben: {runner}")
+    try:
+        _shell_execute("cmd.exe", f'/c start "" /min "{runner}"', show=_SW_SHOW_NORMAL)
+        _update_log(f"ShellExecute CMD-Runner: {runner}")
+        return
+    except OSError as exc:
+        _update_log(f"ShellExecute CMD-Runner fehlgeschlagen: {exc}")
     flags = _DETACHED_PROCESS | _CREATE_BREAKAWAY_FROM_JOB
+    npg = getattr(subprocess, "CREATE_NEW_PROCESS_GROUP", 0)
     subprocess.Popen(
-        [
-            "powershell.exe",
-            "-NoProfile",
-            "-ExecutionPolicy",
-            "Bypass",
-            "-WindowStyle",
-            "Hidden",
-            "-File",
-            str(ps1),
-        ],
+        ["cmd.exe", "/c", "start", "", "/min", str(runner)],
         close_fds=True,
-        creationflags=flags,
+        creationflags=flags | npg,
         cwd=str(setup_path.parent),
     )
-    _update_log(f"Deferred-Installer-PowerShell: {ps1}")
+    _update_log(f"Popen CMD-Runner: {runner}")
 
 
 def install_downloaded_setup(setup_path: Path) -> None:
@@ -273,9 +274,8 @@ def install_downloaded_setup(setup_path: Path) -> None:
     validate_setup_exe(staged)
     _update_log(f"install_downloaded_setup: {staged}")
     if sys.platform == "win32":
-        prepare_shutdown_for_update()
         _launch_installer_after_exit(staged)
-        time.sleep(0.8)
+        time.sleep(2.5)
         kill_all_app_processes()
     else:
         subprocess.Popen([str(staged)], close_fds=True)

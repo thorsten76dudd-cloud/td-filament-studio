@@ -4607,7 +4607,7 @@ class TDFilamentStudioApp(AppTk):
                     parent=self,
                 )
                 return
-            self._run_in_app_update(info)
+            self._run_in_app_update(info, confirm_before_install=allow_reinstall)
 
         rounded_button(btn_row, _t("mw.update.later"), on_later, variant="secondary", compact=True).pack(
             side="right", padx=(8, 0)
@@ -4631,7 +4631,7 @@ class TDFilamentStudioApp(AppTk):
             )
         dlg.protocol("WM_DELETE_WINDOW", on_later)
 
-    def _run_in_app_update(self, info: ReleaseInfo) -> None:
+    def _run_in_app_update(self, info: ReleaseInfo, *, confirm_before_install: bool = False) -> None:
         if not info.download_url:
             webbrowser.open(info.html_url)
             return
@@ -4693,45 +4693,59 @@ class TDFilamentStudioApp(AppTk):
             self._set_status(_t("mw.update.ready_install"), "ok")
             from creality_nfc.app_update import (
                 confirm_install_ok,
-                install_downloaded_setup,
                 open_updates_folder,
                 write_install_now_helper,
             )
 
             open_updates_folder()
             helper = write_install_now_helper(path)
-            confirm_body = (
-                _t("mw.update.setup_ready", path=path)
-                + _t("mw.update.ok_quit_hint")
-                + _t("mw.update.smartscreen_hint")
-                + _t("mw.update.manual_start_hint")
-                + _t("mw.update.helper_bat", path=helper)
-                + _t("mw.update.cancel_keeps")
-            )
-            if not confirm_install_ok(_t("mw.update.install_title"), confirm_body):
-                self.notify(_t("mw.update.setup_saved", path=path), "info")
-                return
-            try:
-                from creality_nfc.creality_watch import unregister_main_app
-
-                self._stop_background_tray()
-                unregister_main_app()
-                from app.shutdown import shutdown_application
-
-                shutdown_application(self)
-                self.notify(_t("mw.update.installer_starting"), "ok")
-                self.update_idletasks()
-                install_downloaded_setup(path)
-            except Exception as exc:
-                log_exception("update-install", exc)
-                messagebox.showerror(
-                    APP_NAME,
-                    _t("mw.update.installer_failed", exc=exc)
-                    + _t("mw.update.run_manual", path=path),
-                    parent=self,
+            if confirm_before_install:
+                confirm_body = (
+                    _t("mw.update.setup_ready", path=path)
+                    + _t("mw.update.ok_quit_hint")
+                    + _t("mw.update.smartscreen_hint")
+                    + _t("mw.update.manual_start_hint")
+                    + _t("mw.update.helper_bat", path=helper)
+                    + _t("mw.update.cancel_keeps")
                 )
+                if not confirm_install_ok(_t("mw.update.install_title"), confirm_body):
+                    self.notify(_t("mw.update.setup_saved", path=path), "info")
+                    return
+            else:
+                self.notify(_t("mw.update.auto_install_notify", path=path, helper=helper), "ok")
+                if sys.platform == "win32":
+                    try:
+                        import winsound
+
+                        winsound.MessageBeep(winsound.MB_ICONASTERISK)
+                    except Exception:
+                        pass
+            self.update_idletasks()
+            self.after(500, lambda p=path: self._finish_in_app_install(p))
 
         self._run_bg_job("Update-Download", work, on_ok=on_ok)
+
+    def _finish_in_app_install(self, path: Path) -> None:
+        """Setup starten und App beenden (nach kurzer Pause für Tray/Notify)."""
+        from tkinter import messagebox
+
+        from creality_nfc.app_update import install_downloaded_setup
+
+        try:
+            from creality_nfc.creality_watch import unregister_main_app
+
+            self._stop_background_tray()
+            unregister_main_app()
+            self._set_status(_t("mw.update.installer_starting"), "ok")
+            install_downloaded_setup(path)
+        except Exception as exc:
+            log_exception("update-install", exc)
+            messagebox.showerror(
+                APP_NAME,
+                _t("mw.update.installer_failed", exc=exc)
+                + _t("mw.update.run_manual", path=path),
+                parent=self,
+            )
 
     def _get_background_tray(self) -> BackgroundTray:
         if self._background_tray is None:

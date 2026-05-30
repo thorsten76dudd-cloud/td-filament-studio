@@ -845,6 +845,7 @@ STRINGS = {
     "mw.update.cancel_keeps": "Abbrechen = Setup bleibt gespeichert.",
     "mw.update.setup_saved": "Setup gespeichert:\n{path}",
     "mw.update.installer_starting": "Installer startet in wenigen Sekunden \u2014 App wird beendet \u2026",
+    "mw.update.auto_install_notify": "Download fertig. Setup startet in ca. 3 Sekunden \u2014 App wird beendet.\n\n{path}\n\nFalls nichts passiert: {helper}",
     "mw.update.installer_failed": "Installer konnte nicht gestartet werden:\n{exc}\n\n",
     "mw.update.already_current": "Sie haben bereits die neueste Version ({version}).\nGitHub-Release: {tag}",
     "mw.update.up_to_date_title": "Kein Update n\u00f6tig",
