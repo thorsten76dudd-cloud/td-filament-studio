@@ -329,6 +329,32 @@ def apply_theme(root: tk.Misc) -> None:
         foreground=[("selected", TEXT), ("!selected", TEXT)],
     )
 
+    # Material-DB-Liste: deutliche Auswahl (grün, gut sichtbar)
+    style.configure(
+        "Profile.Treeview",
+        background=CARD,
+        fieldbackground=CARD,
+        foreground=TEXT,
+        rowheight=34,
+        bordercolor=BORDER,
+        relief="flat",
+        font=F_BODY,
+    )
+    style.configure(
+        "Profile.Treeview.Heading",
+        font=F_SECTION,
+        background=BG_SUBTLE,
+        foreground=TEXT,
+        relief="flat",
+        borderwidth=1,
+        padding=(10, 8),
+    )
+    style.map(
+        "Profile.Treeview",
+        background=[("selected", ACCENT_DARK), ("!selected", CARD)],
+        foreground=[("selected", "#ffffff"), ("!selected", TEXT)],
+    )
+
     # Spulen-Liste: keine blaue System-Auswahl, klare Zeilen
     style.configure(
         "Spool.Treeview",

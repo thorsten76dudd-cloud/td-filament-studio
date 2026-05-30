@@ -991,7 +991,14 @@ class TDFilamentStudioApp(AppTk):
             text=_t("mw.ui.profile_list_empty"),
             style="Muted.TLabel",
         )
-        self._profile_list_title.pack(anchor="w", pady=(0, 6))
+        self._profile_list_title.pack(anchor="w", pady=(0, 4))
+        self._profile_tree_selection_var = tk.StringVar(value=_t("mw.db.no_row_selected"))
+        ttk.Label(
+            list_sec,
+            textvariable=self._profile_tree_selection_var,
+            style="Heading.TLabel",
+        ).pack(anchor="w", pady=(0, 6))
+        self._profile_tree_iid_map: dict[str, FilamentProfile] = {}
         search_db = ttk.Frame(list_sec)
         search_db.pack(fill="x", pady=(0, 6))
         self._db_list_search_var = tk.StringVar()
@@ -1011,6 +1018,8 @@ class TDFilamentStudioApp(AppTk):
             show="headings",
             height=10,
             yscrollcommand=tree_scroll.set,
+            style="Profile.Treeview",
+            selectmode="browse",
         )
         tree_scroll.config(command=self._profile_tree.yview)
         for col, title, width in (
@@ -1026,6 +1035,8 @@ class TDFilamentStudioApp(AppTk):
         self._profile_sort_col = "brand"
         self._profile_sort_asc = True
         self._profile_tree.bind("<Double-1>", self._on_profile_tree_double)
+        self._profile_tree.bind("<<TreeviewSelect>>", self._on_profile_tree_select)
+        self._profile_tree.bind("<ButtonRelease-1>", self._on_profile_tree_click)
 
         tree_btns = ttk.Frame(list_sec)
         tree_btns.pack(fill="x", pady=(8, 0))
@@ -1658,16 +1669,19 @@ class TDFilamentStudioApp(AppTk):
         sel = list(self._profile_tree.selection())
         q = self._db_list_search_var.get().strip().lower()
         self._profile_tree.delete(*self._profile_tree.get_children())
+        self._profile_tree_iid_map.clear()
         shown = 0
         rows = sorted(self.profiles, key=self._profile_sort_key, reverse=not self._profile_sort_asc)
-        for p in rows:
+        for idx, p in enumerate(rows):
             hay = f"{p.brand} {p.name} {p.filament_id} {p.material_type}".lower()
             if q and q not in hay:
                 continue
+            iid = f"p{idx}"
+            self._profile_tree_iid_map[iid] = p
             self._profile_tree.insert(
                 "",
                 tk.END,
-                iid=f"{p.filament_id}|{p.brand}|{p.name}",
+                iid=iid,
                 values=(p.filament_id, p.brand, p.name, p.material_type),
             )
             shown += 1
@@ -1684,16 +1698,39 @@ class TDFilamentStudioApp(AppTk):
         restore = [i for i in sel if self._profile_tree.exists(i)]
         if restore:
             self._profile_tree.selection_set(restore)
+            self._profile_tree.focus(restore[0])
+        else:
+            kids = self._profile_tree.get_children()
+            if len(kids) == 1:
+                self._profile_tree.selection_set(kids[0])
+                self._profile_tree.focus(kids[0])
+        self._update_profile_tree_selection_label()
         try:
             self._profile_tree.yview_moveto(yview[0])
         except tk.TclError:
             pass
+
+    def _update_profile_tree_selection_label(self) -> None:
+        if not hasattr(self, "_profile_tree_selection_var"):
+            return
+        p = self._profile_from_tree_selection()
+        if p:
+            self._profile_tree_selection_var.set(
+                _t("mw.db.row_selected", brand=p.brand, name=p.name, fid=p.filament_id)
+            )
+        elif self.profiles:
+            self._profile_tree_selection_var.set(_t("mw.db.no_row_selected"))
+        else:
+            self._profile_tree_selection_var.set(_t("mw.db.list_empty_hint"))
 
     def _profile_from_tree_selection(self) -> FilamentProfile | None:
         sel = self._profile_tree.selection()
         if not sel:
             return None
         iid = sel[0]
+        mapped = getattr(self, "_profile_tree_iid_map", {}).get(str(iid))
+        if mapped:
+            return mapped
         parts = str(iid).split("|", 2)
         if len(parts) != 3:
             return None
@@ -1702,6 +1739,20 @@ class TDFilamentStudioApp(AppTk):
             if p.filament_id == fid and p.brand == brand and p.name == name:
                 return p
         return None
+
+    def _on_profile_tree_select(self, _event=None) -> None:
+        self._update_profile_tree_selection_label()
+
+    def _on_profile_tree_click(self, event=None) -> None:
+        if event is not None:
+            region = self._profile_tree.identify_region(event.x, event.y)
+            if region == "heading":
+                return
+            iid = self._profile_tree.identify_row(event.y)
+            if iid:
+                self._profile_tree.selection_set(iid)
+                self._profile_tree.focus(iid)
+        self._update_profile_tree_selection_label()
 
     def _select_profile_in_ui(self, profile: FilamentProfile) -> None:
         self.brand_var.set(profile.brand)
@@ -2046,26 +2097,16 @@ class TDFilamentStudioApp(AppTk):
                 self._app_messagebox("warning", APP_NAME, _t("id_change.err.no_db"))
                 return
 
-            profile = self._profile_from_tree_selection()
-            if not profile:
-                profile = self._selected_profile()
-            if not profile and self.profiles:
-                from ui.profile_pick_dialog import ask_filament_profile
-
-                profile = ask_filament_profile(
-                    self,
-                    self.profiles,
-                    title=_t("id_change.title"),
-                )
-            if not profile:
-                self._app_messagebox("warning", APP_NAME, _t("id_change.err.no_selection"))
+            if not self.profiles:
+                self._app_messagebox("warning", APP_NAME, _t("id_change.err.no_profiles"))
                 return
+            initial = self._profile_from_tree_selection() or self._selected_profile()
         except Exception as exc:
             log_exception("change_filament_id", exc)
             self._app_messagebox("error", APP_NAME, str(exc))
             return
 
-        def on_apply(new_id: str, push_to_printer: bool) -> None:
+        def on_apply(profile: FilamentProfile, new_id: str, push_to_printer: bool) -> None:
             try:
                 hit = id_collision(
                     self.db_data,
@@ -2122,7 +2163,8 @@ class TDFilamentStudioApp(AppTk):
         try:
             ask_change_filament_id(
                 self,
-                profile,
+                self.profiles,
+                initial=initial,
                 default_push_to_printer=MATERIAL_DB_PRINTER_ONLY,
                 on_apply=on_apply,
             )
