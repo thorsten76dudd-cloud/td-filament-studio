@@ -8,8 +8,20 @@ from tkinter import messagebox, ttk
 
 from creality_nfc.i18n import t as _t
 from creality_nfc.materials import FilamentProfile
-from ui.dialog_theme import prepare_toplevel, theme_dialog
+from ui.dialog_theme import dialog_root, prepare_toplevel, theme_dialog
 from ui.rounded_widgets import rounded_button
+
+
+def _raise_dialog(dlg: tk.Toplevel) -> None:
+    dlg.update_idletasks()
+    try:
+        dlg.deiconify()
+        dlg.lift()
+        dlg.attributes("-topmost", True)
+        dlg.after(120, lambda: dlg.attributes("-topmost", False))
+        dlg.focus_force()
+    except tk.TclError:
+        pass
 
 
 def ask_change_filament_id(
@@ -20,12 +32,12 @@ def ask_change_filament_id(
     on_apply: Callable[[str, bool], None],
 ) -> None:
     """Modal: neue ID eingeben; on_apply(new_id, push_to_printer) bei Bestätigen."""
-    dlg = tk.Toplevel(parent)
+    root = dialog_root(parent)
+    dlg = tk.Toplevel(root)
     dlg.title(_t("id_change.title"))
-    prepare_toplevel(dlg, parent, width=520, height=340, geometry_key="change_filament_id")
+    prepare_toplevel(dlg, root, width=520, height=380, geometry_key="change_filament_id")
     theme_dialog(dlg)
-    dlg.transient(parent.winfo_toplevel())
-    dlg.grab_set()
+    dlg.transient(root)
 
     body = ttk.Frame(dlg, padding=12)
     body.pack(fill="both", expand=True)
@@ -91,3 +103,6 @@ def ask_change_filament_id(
 
     dlg.bind("<Return>", lambda _e: apply())
     dlg.bind("<Escape>", lambda _e: cancel())
+    dlg.protocol("WM_DELETE_WINDOW", cancel)
+    _raise_dialog(dlg)
+    root.wait_window(dlg)

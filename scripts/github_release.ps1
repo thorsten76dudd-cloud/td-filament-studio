@@ -4,8 +4,8 @@
 # or -DeleteAllOldReleases to wipe everything except the current $Tag.
 
 param(
-    [string]$Version = "1.5.144",
-    [string]$Tag = "v1.5.144-stable",
+    [string]$Version = "1.5.145",
+    [string]$Tag = "v1.5.145-stable",
     [string]$Repo = "thorsten76dudd-cloud/td-filament-studio",
     [string]$RemoveTag = "",
     [switch]$DeleteAllOldReleases
@@ -37,9 +37,11 @@ if ($iss -notmatch ('#define MyAppVersion "' + [regex]::Escape($Version) + '"'))
 $notes = @(
     "## TD Filament Studio $Version",
     "",
-    "### Update-Fix",
-    "* In-App-Update: nur ein Setup-Fenster; korrekte Version (kein altes 141-Setup bei 142/143).",
-    "* Release-Build erzwingt frische Setup-EXE mit passender Versionsnummer.",
+    "### Material-ID",
+    "* Material-ID aendern: Dialog sichtbar (Tray-Fix), Profil waehlen falls keine Zeile markiert.",
+    "",
+    "### Sonstiges",
+    "* In-App-Update: ein Setup-Fenster, Versions-Check beim Download.",
     "",
     "Details: STABLE-v$Version.md im Repository."
 ) -join [Environment]::NewLine

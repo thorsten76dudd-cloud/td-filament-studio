@@ -816,7 +816,7 @@ STRINGS = {
     "id_change.apply": "Apply",
     "id_change.cancel": "Cancel",
     "id_change.err.no_db": "No material database loaded.\nRun “From printer (SSH)” first.",
-    "id_change.err.no_selection": "Please select a profile in the list.",
+    "id_change.err.no_selection": "No profile selected.\nClick a row in the material DB list (highlighted) or pick one in the dialog.",
     "id_change.err.empty": "Please enter a new ID.",
     "id_change.confirm_collision": "ID {new_id} is already used by “{brand} — {name}”.\nSet it for the selected profile anyway? (Two profiles with the same ID — Creality often uses the first.)",
     "id_change.done_local": "ID changed: {old} → {new}\nSaved locally only (k2_pro.json).",

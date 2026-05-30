@@ -819,7 +819,7 @@ STRINGS = {
     "id_change.apply": "Übernehmen",
     "id_change.cancel": "Abbrechen",
     "id_change.err.no_db": "Keine Material-Datenbank geladen.\nZuerst „Vom Drucker (SSH)“.",
-    "id_change.err.no_selection": "Bitte ein Profil in der Liste auswählen.",
+    "id_change.err.no_selection": "Kein Profil gewählt.\nIn der Material-DB-Liste eine Zeile anklicken (blau markiert) oder im Dialog ein Profil wählen.",
     "id_change.err.empty": "Bitte eine neue ID eingeben.",
     "id_change.confirm_collision": "ID {new_id} ist bereits von „{brand} — {name}“ belegt.\nTrotzdem für das gewählte Profil setzen? (Zwei Profile mit gleicher ID — Creality nutzt oft das erste.)",
     "id_change.done_local": "ID geändert: {old} → {new}\nNur lokal gespeichert (k2_pro.json).",

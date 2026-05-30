@@ -2015,6 +2015,22 @@ class TDFilamentStudioApp(AppTk):
 
         self._run_ssh_job(_t("mw.job.from_printer"), work, on_ok=on_ok)
 
+    def _app_messagebox(self, kind: str, title: str, message: str) -> None:
+        """Dialog sichtbar (auch aus Tray) + Kurzmeldung in der Statuszeile."""
+        from tkinter import messagebox
+
+        self._focus_app_for_dialog()
+        self.update_idletasks()
+        if kind == "info":
+            messagebox.showinfo(title, message, parent=self)
+            self.notify(message.split("\n", 1)[0], "ok")
+        elif kind == "warning":
+            messagebox.showwarning(title, message, parent=self)
+            self.notify(message.split("\n", 1)[0], "warn")
+        else:
+            messagebox.showerror(title, message, parent=self)
+            self.notify(message.split("\n", 1)[0], "error")
+
     def change_filament_id(self) -> None:
         """Material-ID eines Profils ändern; optional material_database.json auf K2 schreiben."""
         from tkinter import messagebox
@@ -2022,20 +2038,31 @@ class TDFilamentStudioApp(AppTk):
         from creality_nfc.db_id_change import change_profile_filament_id, id_collision
         from ui.change_filament_id_dialog import ask_change_filament_id
 
-        if self._demo_mode or not self.db_data:
-            messagebox.showwarning(
-                APP_NAME,
-                _t("id_change.err.no_db"),
-                parent=self,
-            )
-            return
-        profile = self._profile_from_tree_selection()
-        if not profile:
-            messagebox.showwarning(
-                APP_NAME,
-                _t("id_change.err.no_selection"),
-                parent=self,
-            )
+        self._focus_app_for_dialog()
+        log_event("change_filament_id: button")
+
+        try:
+            if self._demo_mode or not self.db_data:
+                self._app_messagebox("warning", APP_NAME, _t("id_change.err.no_db"))
+                return
+
+            profile = self._profile_from_tree_selection()
+            if not profile:
+                profile = self._selected_profile()
+            if not profile and self.profiles:
+                from ui.profile_pick_dialog import ask_filament_profile
+
+                profile = ask_filament_profile(
+                    self,
+                    self.profiles,
+                    title=_t("id_change.title"),
+                )
+            if not profile:
+                self._app_messagebox("warning", APP_NAME, _t("id_change.err.no_selection"))
+                return
+        except Exception as exc:
+            log_exception("change_filament_id", exc)
+            self._app_messagebox("error", APP_NAME, str(exc))
             return
 
         def on_apply(new_id: str, push_to_printer: bool) -> None:
@@ -2092,12 +2119,16 @@ class TDFilamentStudioApp(AppTk):
 
             self._run_ssh_job(_t("mw.job.push_db"), work, on_ok=on_ok)
 
-        ask_change_filament_id(
-            self,
-            profile,
-            default_push_to_printer=MATERIAL_DB_PRINTER_ONLY,
-            on_apply=on_apply,
-        )
+        try:
+            ask_change_filament_id(
+                self,
+                profile,
+                default_push_to_printer=MATERIAL_DB_PRINTER_ONLY,
+                on_apply=on_apply,
+            )
+        except Exception as exc:
+            log_exception("change_filament_id/dialog", exc)
+            self._app_messagebox("error", APP_NAME, str(exc))
 
     def pick_database(self) -> None:
         if MATERIAL_DB_PRINTER_ONLY:
