@@ -108,8 +108,12 @@ class PrinterDashboardPanel(ttk.LabelFrame):
 
     def _run_bg(self, label: str, work, on_ok=None) -> None:
         if self._busy:
-            notify(self, _t("printer.dashboard.notify_busy"), "warn")
-            return
+            app_busy = getattr(self.app, "_bg_job_running", False)
+            if not app_busy or self.app._bg_job_is_stale():
+                self._busy = False
+            else:
+                notify(self, _t("printer.dashboard.notify_busy"), "warn")
+                return
         self._busy = True
         self._log(f"{label}…")
         self.status_var.set(label + "…")
@@ -122,7 +126,9 @@ class PrinterDashboardPanel(ttk.LabelFrame):
                 result = work()
             except Exception as exc:
                 err = exc
-            self.app.after(0, lambda: self._finish_bg(label, err, result, on_ok))
+            self.app.schedule_on_main_thread(
+                lambda: self._finish_bg(label, err, result, on_ok)
+            )
 
         threading.Thread(target=runner, daemon=True).start()
 

@@ -4,8 +4,8 @@
 # or -DeleteAllOldReleases to wipe everything except the current $Tag.
 
 param(
-    [string]$Version = "1.5.139",
-    [string]$Tag = "v1.5.139-stable",
+    [string]$Version = "1.5.141",
+    [string]$Tag = "v1.5.141-stable",
     [string]$Repo = "thorsten76dudd-cloud/td-filament-studio",
     [string]$RemoveTag = "",
     [switch]$DeleteAllOldReleases

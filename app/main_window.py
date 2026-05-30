@@ -3,8 +3,10 @@
 from __future__ import annotations
 
 import os
+import queue
 import sys
 import threading
+import time
 import tkinter as tk
 
 from ui.tk_root import AppTk
@@ -225,6 +227,9 @@ class TDFilamentStudioApp(AppTk):
         self._current_profile: tuple[str, str, str] = ("", "", "")
         self._batch_waiting = False
         self._bg_job_running = False
+        self._bg_job_since = 0.0
+        self._bg_job_label = ""
+        self._bg_job_queue: queue.Queue = queue.Queue()
         self._last_tag_export: dict | None = None
         self._suppress_auto_read_until = 0.0
         self._chip_dup_step = ""
@@ -263,6 +268,7 @@ class TDFilamentStudioApp(AppTk):
         from creality_nfc.creality_watch import register_main_app
 
         register_main_app()
+        self.after(250, self._drain_bg_job_queue)
 
     # ── UI construction ─────────────────────────────────────────────
 
@@ -1729,15 +1735,77 @@ class TDFilamentStudioApp(AppTk):
             return
         self._apply_profile_tree_selection()
 
-    def _run_bg_job(self, label: str, work, *, on_ok=None) -> None:
+    _BG_JOB_STALE_SEC = 120.0
+
+    def _bg_job_is_stale(self) -> bool:
+        if not self._bg_job_running:
+            return False
+        if not self._bg_job_since:
+            return True
+        return (time.monotonic() - self._bg_job_since) > self._BG_JOB_STALE_SEC
+
+    def _reset_bg_job(self, reason: str) -> None:
+        log_event(f"bg job reset ({reason}): {self._bg_job_label or '?'}")
+        self._bg_job_running = False
+        self._bg_job_since = 0.0
+        self._bg_job_label = ""
+
+    def _drain_bg_job_queue(self) -> None:
+        """Hintergrund-Threads → Hauptthread (Tkinter ist nicht thread-sicher)."""
+        while True:
+            try:
+                item = self._bg_job_queue.get_nowait()
+            except queue.Empty:
+                break
+            kind = item[0]
+            if kind == "finish":
+                _, label, err, result, on_ok = item
+                self._finish_bg_job(label, err, result, on_ok)
+            elif kind == "callback":
+                try:
+                    item[1]()
+                except Exception as exc:
+                    log_exception("bg-callback", exc)
+        try:
+            self.after(250, self._drain_bg_job_queue)
+        except tk.TclError:
+            pass
+
+    def schedule_on_main_thread(self, fn) -> None:
+        self._bg_job_queue.put(("callback", fn))
+
+    def _try_acquire_bg_job(self, label: str, *, force: bool = False) -> bool:
+        if not self._bg_job_running:
+            return True
+        if self._bg_job_is_stale():
+            self._reset_bg_job("stale")
+            return True
+        if force:
+            self._reset_bg_job("force")
+            return True
+        prev = self._bg_job_label or "?"
+        self.notify(_t("notify.task_running"), "warn")
+        if messagebox.askyesno(
+            APP_NAME,
+            _t("mw.bg.blocked_prompt", prev=prev, label=label)
+            + "\n\n"
+            + _t("notify.task_running_hint"),
+            parent=self,
+        ):
+            self._reset_bg_job("user_abort")
+            return True
+        return False
+
+    def _run_bg_job(self, label: str, work, *, on_ok=None, force: bool = False) -> None:
         """Netzwerk/SSH im Hintergrund — UI bleibt reaktionsfähig."""
-        if self._bg_job_running:
-            from creality_nfc.i18n import t as _t
-            self.notify(_t("notify.task_running"), "warn")
+        if not self._try_acquire_bg_job(label, force=force):
             return
         self._bg_job_running = True
+        self._bg_job_since = time.monotonic()
+        self._bg_job_label = label
         self._set_status(f"{label}…", "info")
         self.notify(_t("mw.notify.task_duration", label=label), "info")
+        self.update_idletasks()
 
         def runner() -> None:
             err: Exception | None = None
@@ -1746,12 +1814,14 @@ class TDFilamentStudioApp(AppTk):
                 result = work()
             except Exception as exc:
                 err = exc
-            self.after(0, lambda: self._finish_bg_job(label, err, result, on_ok))
+                log_exception(label, exc)
+            finally:
+                self._bg_job_queue.put(("finish", label, err, result, on_ok))
 
         threading.Thread(target=runner, daemon=True).start()
 
     def _finish_bg_job(self, label: str, err: Exception | None, result, on_ok) -> None:
-        self._bg_job_running = False
+        self._reset_bg_job("done")
         if err:
             self._set_status(_t("mw.status.task_failed", label=label), "error")
             self.notify(str(err), "error")
@@ -1842,50 +1912,73 @@ class TDFilamentStudioApp(AppTk):
             self.notify(_t("mw.notify.printer_settings_not_saved", exc=exc), "warn")
         return host, password
 
-    def _run_ssh_job(self, label: str, work, *, on_ok=None) -> None:
+    def _run_ssh_job(self, label: str, work, *, on_ok=None, force: bool = False) -> None:
+        import concurrent.futures
+
+        from creality_nfc.printer_ssh import SSH_JOB_TIMEOUT_SEC
+
         printer = self.printer_var.get().strip()
         creds = self._ssh_credentials(printer)
         if not creds:
             return
         host, password = creds
+        log_event(f"{label}: start {host}")
 
         def work_wrap():
-            if not printer_reachable(host, 22):
+            if not printer_reachable(host, 22, timeout=4.0):
                 raise RuntimeError(
                     _t("mw.ssh.port_unreachable", host=host)
                     + "\n"
                     + _t("mw.ssh.check_hint")
                 )
-            return work(host, password, printer)
+            with concurrent.futures.ThreadPoolExecutor(max_workers=1) as pool:
+                fut = pool.submit(work, host, password, printer)
+                try:
+                    return fut.result(timeout=SSH_JOB_TIMEOUT_SEC)
+                except concurrent.futures.TimeoutError as exc:
+                    raise RuntimeError(
+                        _t("mw.ssh.timeout", host=host, sec=int(SSH_JOB_TIMEOUT_SEC))
+                    ) from exc
 
-        self._run_bg_job(f"{label} → {host}", work_wrap, on_ok=on_ok)
+        self._run_bg_job(f"{label} → {host}", work_wrap, on_ok=on_ok, force=force)
 
     def sync_from_printer(self) -> None:
+        self._ensure_window_visible()
+        if self._bg_job_running and self._bg_job_is_stale():
+            self._reset_bg_job("stale_before_sync")
+        self._set_status(_t("mw.ssh.starting"), "info")
+        self.update_idletasks()
+        log_event("sync_from_printer: button")
+
         def work(host: str, password: str, printer: str):
             return download_database_from_printer(host, password, printer)
 
         def on_ok(data: dict) -> None:
-            if MATERIAL_DB_PRINTER_ONLY:
-                self._apply_database(data, "printer")
-                cache = self.db_path.name if self.db_path else "data/"
-                msg = (
-                    _t("mw.sync.loaded_profiles", n=len(self.profiles))
-                    + "\n"
-                    + _t("mw.sync.cache_saved", cache=cache)
-                )
-            elif self.db_data and self.db_data.get("result", {}).get("list"):
-                merged = merge_databases(self.db_data, data, prefer="cloud")
-                added, updated, total, skipped = merge_stats(self.db_data, data)
-                self._apply_database(merged, "printer")
-                msg = _t("mw.sync.merged_summary", total=total, added=added, updated=updated)
-                if skipped:
-                    msg += "\n" + _t("mw.db.protected_skipped", n=skipped)
-            else:
-                self._apply_database(data, "printer")
-                msg = _t("mw.sync.loaded_profiles", n=len(self.profiles))
-            self._set_status(_t("mw.sync.printer_db_ok"), "ok")
-            self.notify(msg, "ok")
-            messagebox.showinfo(APP_NAME, msg)
+            try:
+                if MATERIAL_DB_PRINTER_ONLY:
+                    self._apply_database(data, "printer")
+                    cache = self.db_path.name if self.db_path else "data/"
+                    msg = (
+                        _t("mw.sync.loaded_profiles", n=len(self.profiles))
+                        + "\n"
+                        + _t("mw.sync.cache_saved", cache=cache)
+                    )
+                elif self.db_data and self.db_data.get("result", {}).get("list"):
+                    merged = merge_databases(self.db_data, data, prefer="cloud")
+                    added, updated, total, skipped = merge_stats(self.db_data, data)
+                    self._apply_database(merged, "printer")
+                    msg = _t("mw.sync.merged_summary", total=total, added=added, updated=updated)
+                    if skipped:
+                        msg += "\n" + _t("mw.db.protected_skipped", n=skipped)
+                else:
+                    self._apply_database(data, "printer")
+                    msg = _t("mw.sync.loaded_profiles", n=len(self.profiles))
+                self._set_status(_t("mw.sync.printer_db_ok"), "ok")
+                self.notify(msg, "ok")
+                messagebox.showinfo(APP_NAME, msg, parent=self)
+            except Exception as exc:
+                log_exception("sync_from_printer/on_ok", exc)
+                messagebox.showerror(APP_NAME, str(exc), parent=self)
 
         self._run_ssh_job(_t("mw.job.from_printer"), work, on_ok=on_ok)
 

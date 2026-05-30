@@ -4,9 +4,12 @@ from __future__ import annotations
 
 import json
 import re
+import time
 from contextlib import contextmanager
 from pathlib import Path
 from typing import Any, Iterator
+
+SSH_JOB_TIMEOUT_SEC = 90.0
 
 BOX_DIR_CANDIDATES = (
     "/mnt/UDISK/creality/userdata/box",
@@ -58,6 +61,15 @@ def remote_options_path(printer_label: str) -> str:
     return f"{BOX_DIR_CANDIDATES[0]}/{REMOTE_OPTIONS_NAME}"
 
 
+def _ssh_log(message: str) -> None:
+    try:
+        from creality_nfc.app_log import log_event
+
+        log_event(f"SSH {message}")
+    except Exception:
+        pass
+
+
 @contextmanager
 def ssh_client(
     host: str,
@@ -71,17 +83,27 @@ def ssh_client(
         raise RuntimeError("Paket 'paramiko' fehlt. Bitte: pip install paramiko") from exc
 
     host = normalize_host(host)
+    _ssh_log(f"connect {username}@{host}:{port}")
+    t0 = time.monotonic()
     client = paramiko.SSHClient()
     client.set_missing_host_key_policy(paramiko.AutoAddPolicy())
-    client.connect(
-        host,
-        port=port,
-        username=username,
-        password=password,
-        timeout=15,
-        allow_agent=False,
-        look_for_keys=False,
-    )
+    try:
+        client.connect(
+            host,
+            port=port,
+            username=username,
+            password=password,
+            timeout=15,
+            allow_agent=False,
+            look_for_keys=False,
+        )
+    except Exception as exc:
+        _ssh_log(f"connect failed ({time.monotonic() - t0:.1f}s): {exc}")
+        raise RuntimeError(
+            f"SSH-Anmeldung fehlgeschlagen ({host}):\n{exc}\n\n"
+            "Prüfen: IP, Passwort (Standard K2: creality_2024), Root/SSH am Drucker aktiv."
+        ) from exc
+    _ssh_log(f"connected ({time.monotonic() - t0:.1f}s)")
     try:
         yield client
     finally:
@@ -181,10 +203,13 @@ def download_database_from_printer(
 ) -> dict:
     del printer_label
     host = normalize_host(host)
+    _ssh_log(f"download_database {host}")
     with ssh_client(host, password, username, port) as client:
         box = resolve_box_dir(client)
+        _ssh_log(f"box_dir={box}")
         path = f"{box}/{REMOTE_DB_NAME}"
         raw = _read_remote_file(client, path)
+        _ssh_log(f"read {path} ({len(raw)} bytes)")
     if not raw:
         raise RuntimeError(f"Leere Datei: {path}")
     data = json.loads(raw.decode("utf-8", errors="replace"))
