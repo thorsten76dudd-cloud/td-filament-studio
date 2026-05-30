@@ -400,11 +400,30 @@ Menü „Datei“
 • DB öffnen / speichern unter…""",
             """Tab: Material-Datenbank
 -----------------------
-• Nur „Vom Drucker (SSH)“ — material_database.json vom K2 laden (Root-SSH, gleiches WLAN).
-  Kein Cloud-, Datei- oder Slicer-Import, kein Merge, kein „DB speichern“.
-• „Material-ID ändern…“ — 5-stellige ID eines Profils überschreiben, optional per SSH auf den K2 schreiben.
-• Drucker SSH — IP und Passwort im Tab
-• Drucker-Dashboard — Status, DB vergleichen, material_options.json
+Nur vom Drucker (kein Cloud-/Datei-Import in dieser Version). Lokale Kopie: data/k2_pro.json.
+
+Buttons
+• „Vom Drucker (SSH)“ — material_database.json vom K2 laden (Root aktivieren, gleiches WLAN).
+  Creality-Print-Sync allein reicht nicht — danach immer noch „Vom Drucker (SSH)“.
+• „Material-ID ändern…“ — Profil im Dropdown wählen, neue 5-stellige ID, optional auf K2 schreiben.
+  Wichtig bei doppelter ID (z. B. CR-PETG und „Thorsten“ beide 06001): eigene ID vergeben.
+• „Lokal leeren & neu laden“ — löscht nur k2_pro.json, lädt danach frisch per SSH (K2 unverändert).
+• „Drucker-DB leeren…“ — alle Profile auf dem K2 löschen (zwei Warnungen); danach Creality Print syncen.
+• CFS-RFID ZIP importieren — Backup mit alter Datenbank.
+
+Profilliste
+• Zeile anklicken → grüne Markierung, darüber „Ausgewählt: Marke — Name (ID …)“.
+• Suche leeren, sonst fehlen Einträge. Doppelklick = Profil für RFID-Tab.
+• „Für RFID übernehmen“ / „Profil bearbeiten (Ansicht)“.
+
+Creality Print — eigene Filamente
+• Anlegen unter „Benutzerdefinierte Filamente“; auf den K2 syncen in Creality Print.
+• Erscheinen in TD Studio erst nach „Vom Drucker (SSH)“.
+• Notizen mit JSON {"id","vendor","type","name"} sind in Creality oft unzuverlässig —
+  besser „Material-ID ändern…“ in TD Studio nutzen.
+
+Tab „Drucker“ / SSH
+• IP, Passwort (K2 oft creality_2024), Dashboard: DB vergleichen, Neustart.
 
 Menü „Datei“
 • Kein „DB öffnen“ / „DB speichern unter“ für die Material-DB.""",
@@ -413,6 +432,9 @@ Menü „Datei“
             """Tab: Meine Spulen
 -----------------
 Lokales Inventar (data/spools.json): Liste links, Bearbeitung rechts.
+• „Aus Material-DB…“ — Profil wählen (Bezeichnung immer „Marke — Material“, Drucker z. B. K2 Pro statt F008)
+• Liste: CFS 1A–1D oben (Slot-Feld oder Bemerkung CFS-S1…), danach alphabetisch
+• Farbe: „Farbe…“ (Windows-Farbtabelle) oder „Presets“ — nicht nur Hex eintippen
 • Doppelklick oder „→ RFID-Tab“ — Spule für Tag-Schreiben übernehmen (wichtig:
   Filament-ID in der Spule hilft; danach „Tag schreiben“)
 • CFS-Slot (1A–1D) — nur für Druck/Abzug, nicht Pflicht zum Tag-Beschreiben am PC
@@ -422,13 +444,20 @@ Lokales Inventar (data/spools.json): Liste links, Bearbeitung rechts.
 • Warnung — Rest unter Schwelle (Einstellungen) wird hervorgehoben""",
             """Tab: Meine Spulen
 -----------------
-Lokales Inventar (data/spools.json): Liste links, Bearbeitung rechts (scrollbar).
-• „Aus Material-DB…“ — Profil übernehmen (Bezeichnung „Marke — Material“, Drucker K2 Pro statt F008)
-• Liste: CFS 1A–1D oben (auch aus Bemerkung CFS-S1… erkannt), Rest alphabetisch
-• Farbe: „Farbe…“ oder „Presets“ — nicht nur Hex-Code
-• „Neu / Leeren“ und „Speichern“ — nur Spulen, nicht die Drucker-Material-DB
-• Doppelklick oder „→ RFID-Tab“ — Spule für Tag-Schreiben
-• CFS-Slot (1A–1D), RFID-Chips, Restgewicht, Verbrauch abziehen, Verlauf""",
+Lokales Inventar (data/spools.json): Liste links (scrollbar), Bearbeitung rechts.
+
+Liste (alle Spalten lesbar)
+• Spalten: Farbe, CFS, Bezeichnung, Marke, Material, ID, Gewicht, Rest g, Serie, Tag-UID, Bemerkung.
+• Unten horizontal scrollen, wenn der Bildschirm nicht breit genug ist.
+• Spalte ID = 5-stellige Filament-ID (nach „Material-ID ändern…“ ggf. hier und im Formular anpassen).
+• CFS 1A–1D oben sortiert; grüne Zeile = Auswahl.
+
+Bearbeitung
+• „Aus Material-DB…“ — Profil wählen (Bezeichnung „Marke — Material“).
+• Filament-ID (5 Ziffern) im Formular — muss zum RFID-Tag und zur Drucker-DB passen.
+• Farbe: „Farbe…“ oder „Presets“.
+• Doppelklick oder „→ RFID-Tab“ — Tag-Schreiben vorbereiten.
+• CFS-Slot, mehrere Tag-UIDs, Restgewicht, Verbrauch abziehen, Verlauf, Duplizieren.""",
         )
         .replace(
             """Statusleiste (unten)
@@ -445,6 +474,28 @@ Lokales Inventar (data/spools.json): Liste links, Bearbeitung rechts (scrollbar)
         .replace(
             "• DB-Merge — bei Konflikt lokal oder Cloud behalten (geschützte Profile ausgenommen)",
             "• Material-DB nur vom Drucker (kein Cloud-Merge in dieser Version)",
+        )
+        .replace(
+            """Updates (GitHub)
+----------------
+Navigation → „Nach Updates suchen“ oder Einstellungen → „Beim Start auf Updates prüfen“.
+
+Die App fragt das neueste Release auf GitHub ab (Repo in creality_nfc/config.py:
+GITHUB_RELEASES_REPO). Gibt es eine neuere Version als installiert, erscheint ein Dialog —
+„Im Browser öffnen“ lädt die Release-Seite oder den direkten Download (Setup-EXE, falls
+als Release-Asset hochgeladen).
+
+Auf GitHub pro Version ein Release anlegen, Tag z. B. v1.5.52-stable, Asset:
+installer_output/TD-Filament-Studio-Setup.exe (oder dist/TD Filament Studio.exe).""",
+            """Updates (GitHub)
+----------------
+Navigation → „Nach Updates suchen“ (nur bei neuerer Version) oder „Setup erneut laden (Reparatur)“.
+
+• Download & Installation: ein Setup-Fenster; Version wird geprüft (kein altes Setup bei neuer Nummer).
+• Setup liegt auch unter %LOCALAPPDATA%\\TD Filament Studio\\Updates\\
+• Einstellungen → „Beim Start auf Updates prüfen“
+
+Releases: github.com/thorsten76dudd-cloud/td-filament-studio (Tag z. B. v1.5.148-stable).""",
         )
     )
 

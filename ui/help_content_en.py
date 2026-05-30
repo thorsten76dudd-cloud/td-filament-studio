@@ -397,16 +397,87 @@ File menu
 \u2022 Open DB / Save DB as\u2026""",
         """Tab: Material database
 ----------------------
-\u2022 \"From printer (SSH)\" only \u2014 load material_database.json from the K2 (root SSH, same WiFi).
-  No cloud, file or slicer import, no merge, no \"Save DB\".
-\u2022 Printer SSH \u2014 IP and password inside the tab
-\u2022 Printer dashboard \u2014 status, compare DB, material_options.json
+Printer only (no cloud/file import in this version). Local copy: data/k2_pro.json.
+
+Buttons
+\u2022 \"From printer (SSH)\" \u2014 load material_database.json from the K2 (enable root, same WiFi).
+  Creality Print sync alone is not enough \u2014 still run \"From printer (SSH)\" afterwards.
+\u2022 \"Change material ID\u2026\" \u2014 pick profile in the dropdown, new 5-digit ID, optionally write to the K2.
+  Important when IDs collide (e.g. CR-PETG and custom profile both 06001): assign a unique ID.
+\u2022 \"Clear local & reload\" \u2014 deletes only k2_pro.json, then fresh SSH load (printer unchanged).
+\u2022 \"Clear printer DB\u2026\" \u2014 deletes all profiles on the K2 (two warnings); then sync from Creality Print.
+\u2022 Import CFS-RFID ZIP \u2014 backup with an older database.
+
+Profile list
+\u2022 Click a row \u2192 green highlight, label above \"Selected: brand \u2014 name (ID \u2026)\".
+\u2022 Clear search or entries may be hidden. Double-click = use profile on RFID tab.
+\u2022 \"Use for RFID\" / \"Edit profile (view)\".
+
+Creality Print \u2014 custom filaments
+\u2022 Create under \"Custom filaments\"; sync to the K2 in Creality Print.
+\u2022 They appear in TD Studio only after \"From printer (SSH)\".
+\u2022 JSON notes in Creality are often unreliable \u2014 prefer \"Change material ID\u2026\" in TD Studio.
+
+\"Printer\" tab / SSH
+\u2022 IP, password (K2 often creality_2024), dashboard: compare DB, reboot.
 
 File menu
 \u2022 No \"Open DB\" / \"Save DB as\" for the material DB.""",
     ),
     (
+        """Tab: My spools
+--------------
+Local inventory (data/spools.json): list on the left, edit on the right.
+\u2022 \"From material DB\u2026\" \u2014 pick a profile (label always \"Brand \u2014 Material\", printer e.g. K2 Pro instead of F008)
+\u2022 List: CFS 1A\u20131D on top (slot field or note CFS-S1\u2026), then alphabetically
+\u2022 Color: \"Color\u2026\" (Windows color picker) or \"Presets\" \u2014 not only typing hex
+\u2022 Double click or \"\u2192 RFID tab\" \u2014 use the spool for tag writing (important:
+  the filament ID in the spool helps; then \"Write tag\")
+\u2022 CFS slot (1A\u20131D) \u2014 only used for print/deduction, not required to write tags from PC
+\u2022 RFID chips: main UID + extra chips; \"Remove chip\" / \"Disconnect all\"
+\u2022 Remaining weight, deduct consumption, history \u2014 grams are logged
+\u2022 Duplicate \u2014 copy a spool (new tag possible)
+\u2022 Warning \u2014 remaining below threshold (settings) is highlighted""",
+        """Tab: My spools
+---------------
+Local inventory (data/spools.json): scrollable list left, edit right.
+
+List (all columns readable)
+\u2022 Columns: color, CFS, label, brand, material, ID, weight, rest g, serial, tag UID, notes.
+\u2022 Scroll horizontally at the bottom if the window is narrow.
+\u2022 ID column = 5-digit filament ID (update here and in the form after \"Change material ID\u2026\").
+\u2022 CFS 1A\u20131D sorted on top; green row = selection.
+
+Editing
+\u2022 \"From material DB\u2026\" \u2014 pick a profile.
+\u2022 Filament ID (5 digits) in the form \u2014 must match RFID tag and printer DB.
+\u2022 Color: \"Color\u2026\" or presets.
+\u2022 Double-click or \"\u2192 RFID tab\" \u2014 prepare tag write.
+\u2022 CFS slot, multiple tag UIDs, remaining weight, deduct usage, log, duplicate.""",
+    ),
+    (
         "\u2022 DB merge \u2014 on conflict keep local or cloud (protected profiles excluded)",
         "\u2022 Material DB from the printer only (no cloud merge in this version)",
+    ),
+    (
+        """Updates (GitHub)
+----------------
+Navigation \u2192 \"Check for updates\" or Settings \u2192 \"Check for updates on startup\".
+
+The app queries the latest GitHub release (repo in creality_nfc/config.py:
+GITHUB_RELEASES_REPO). If a newer version is available, a dialog appears \u2014
+\"Open in browser\" opens the release page or direct download (setup EXE when uploaded).
+
+Create a GitHub release per version, tag e.g. v1.5.52-stable, asset:
+installer_output/TD-Filament-Studio-Setup.exe (or dist/TD Filament Studio.exe).""",
+        """Updates (GitHub)
+----------------
+Navigation \u2192 \"Check for updates\" (only when newer) or \"Re-download setup (repair)\".
+
+\u2022 Download & install: single setup window; version is verified on download.
+\u2022 Setup also in %LOCALAPPDATA%\\TD Filament Studio\\Updates\\
+\u2022 Settings \u2192 \"Check for updates on startup\"
+
+Releases: github.com/thorsten76dudd-cloud/td-filament-studio (tag e.g. v1.5.148-stable).""",
     ),
 ]
