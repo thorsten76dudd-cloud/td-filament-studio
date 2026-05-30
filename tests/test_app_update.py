@@ -61,12 +61,20 @@ class AppUpdateTests(unittest.TestCase):
         self.assertIn("Updates", str(p))
 
     @patch("creality_nfc.app_update.os._exit")
-    @patch("creality_nfc.app_update.kill_all_app_processes")
+    @patch("creality_nfc.app_update._schedule_install_via_schtasks")
     @patch("creality_nfc.app_update._launch_installer_after_exit")
+    @patch("creality_nfc.app_update._launch_installer")
+    @patch("creality_nfc.app_update._popen_installer_detached")
     @patch("creality_nfc.app_update.unblock_setup_file")
     @patch("creality_nfc.app_update.sys.platform", "win32")
     def test_install_launches_and_exits(
-        self, _mock_unblock, mock_deferred, _mock_kill, mock_exit
+        self,
+        _mock_unblock,
+        mock_popen,
+        _mock_shell,
+        mock_deferred,
+        _mock_schtasks,
+        mock_exit,
     ) -> None:
         with tempfile.TemporaryDirectory() as tmp:
             setup = Path(tmp) / "TD-Filament-Studio-Setup.exe"
@@ -76,6 +84,7 @@ class AppUpdateTests(unittest.TestCase):
                 return_value=setup,
             ):
                 install_downloaded_setup(setup)
+            mock_popen.assert_called_once()
             mock_deferred.assert_called_once()
             mock_exit.assert_called_once_with(0)
 

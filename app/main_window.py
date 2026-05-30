@@ -4698,6 +4698,9 @@ class TDFilamentStudioApp(AppTk):
             )
 
             open_updates_folder()
+            from creality_nfc.app_update import default_setup_download_path
+
+            staged = default_setup_download_path()
             helper = write_install_now_helper(path)
             if confirm_before_install:
                 confirm_body = (
@@ -4721,7 +4724,7 @@ class TDFilamentStudioApp(AppTk):
                     except Exception:
                         pass
             self.update_idletasks()
-            self.after(500, lambda p=path: self._finish_in_app_install(p))
+            self.after(500, lambda p=staged: self._finish_in_app_install(p))
 
         self._run_bg_job("Update-Download", work, on_ok=on_ok)
 
@@ -4729,13 +4732,19 @@ class TDFilamentStudioApp(AppTk):
         """Setup starten und App beenden (nach kurzer Pause für Tray/Notify)."""
         from tkinter import messagebox
 
-        from creality_nfc.app_update import install_downloaded_setup
+        from creality_nfc.app_update import (
+            install_downloaded_setup,
+            notify_install_starting,
+            write_install_now_helper,
+        )
 
         try:
             from creality_nfc.creality_watch import unregister_main_app
 
             self._stop_background_tray()
             unregister_main_app()
+            helper = write_install_now_helper(path)
+            notify_install_starting(path, helper)
             self._set_status(_t("mw.update.installer_starting"), "ok")
             install_downloaded_setup(path)
         except Exception as exc:

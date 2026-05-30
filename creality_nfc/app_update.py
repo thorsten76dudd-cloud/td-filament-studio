@@ -143,18 +143,40 @@ def open_updates_folder() -> None:
         _update_log(f"Explorer öffnen fehlgeschlagen: {exc}")
 
 
-def write_install_now_helper(setup_path: Path) -> Path:
-    """Dauerhafte BAT zum manuellen Start, falls In-App-Install hängt."""
-    setup_path = setup_path.resolve()
-    bat = setup_path.parent / "Setup-jetzt-installieren.bat"
+def write_install_now_helper(setup_path: Path | None = None) -> Path:
+    """BAT im festen Updates-Ordner (nicht %TEMP%)."""
+    staged = stage_setup_for_install(setup_path or default_setup_download_path())
+    folder = updates_folder()
+    bat = folder / "Setup-jetzt-installieren.bat"
     bat.write_text(
         "@echo off\r\n"
-        f'cd /d "{setup_path.parent}"\r\n'
-        f'start "" "{setup_path}" {_INNO_SETUP_ARGS}\r\n',
+        f'cd /d "{folder}"\r\n'
+        f'start "" "{staged}" {_INNO_SETUP_ARGS}\r\n',
         encoding="utf-8",
     )
-    _update_log(f"Helper-BAT: {bat}")
+    _update_log(f"Helper-BAT: {bat} -> {staged}")
     return bat
+
+
+def notify_install_starting(setup_path: Path, helper: Path) -> None:
+    """Sichtbarer Systemdialog unmittelbar vor Installer-Start."""
+    if sys.platform != "win32":
+        return
+    body = (
+        f"Setup wird jetzt gestartet.\n\n{setup_path}\n\n"
+        f"Die App schließt sich gleich.\n\n"
+        f"Falls kein Installer erscheint:\n{helper}"
+    )
+    try:
+        ctypes.windll.user32.MessageBoxW(
+            0,
+            body,
+            "TD Filament Studio — Update",
+            _MB_ICONINFORMATION | _MB_SYSTEMMODAL | _MB_SETFOREGROUND | 0x00000000,
+        )
+        _update_log("notify_install_starting: OK")
+    except Exception as exc:
+        _update_log(f"notify_install_starting: {exc}")
 
 
 def confirm_install_ok(title: str, message: str) -> bool:
@@ -200,11 +222,13 @@ def validate_setup_exe(setup_path: Path) -> None:
 
 
 def stage_setup_for_install(setup_path: Path) -> Path:
-    """Setup in Updates-Ordner legen (für Installer)."""
+    """Setup immer nach %LOCALAPPDATA%\\TD Filament Studio\\Updates kopieren."""
     dest = default_setup_download_path()
     setup_path = setup_path.resolve()
+    dest.parent.mkdir(parents=True, exist_ok=True)
     if setup_path != dest.resolve():
         shutil.copy2(setup_path, dest)
+        _update_log(f"staged: {setup_path} -> {dest}")
     return dest
 
 
@@ -233,50 +257,113 @@ def _launch_installer(setup_path: Path) -> None:
     _update_log(f"cmd start Installer: {setup_path}")
 
 
-def _launch_installer_after_exit(setup_path: Path) -> None:
-    """
-    Installer erst nach App-Ende starten (Tray/Hintergrund-EXE sonst blockiert).
-    CMD statt PowerShell — wird seltener von Antivirus/Richtlinien blockiert.
-    """
+def _write_persistent_runner(setup_path: Path) -> Path:
+    """Verzögerter Start aus festem Updates-Ordner (überlebt App-Ende)."""
+    folder = updates_folder()
     setup_path = setup_path.resolve()
-    unblock_setup_file(setup_path)
-    write_install_now_helper(setup_path)
-    runner = setup_path.parent / "_td_install_after_exit.cmd"
+    runner = folder / "_td_install_after_exit.cmd"
     runner.write_text(
         "@echo off\r\n"
-        'cd /d "%~dp0"\r\n'
-        "ping 127.0.0.1 -n 4 >nul\r\n"
+        f'cd /d "{folder}"\r\n'
+        "ping 127.0.0.1 -n 11 >nul\r\n"
         f'start "" "{setup_path}" {_INNO_SETUP_ARGS}\r\n',
         encoding="utf-8",
     )
-    _update_log(f"Deferred-CMD geschrieben: {runner}")
-    try:
-        _shell_execute("cmd.exe", f'/c start "" /min "{runner}"', show=_SW_SHOW_NORMAL)
-        _update_log(f"ShellExecute CMD-Runner: {runner}")
-        return
-    except OSError as exc:
-        _update_log(f"ShellExecute CMD-Runner fehlgeschlagen: {exc}")
+    _update_log(f"Runner-CMD: {runner}")
+    return runner
+
+
+def _popen_installer_detached(setup_path: Path) -> None:
+    """Setup.exe als eigener Prozess (nicht Job der App)."""
+    setup_path = setup_path.resolve()
     flags = _DETACHED_PROCESS | _CREATE_BREAKAWAY_FROM_JOB
     npg = getattr(subprocess, "CREATE_NEW_PROCESS_GROUP", 0)
     subprocess.Popen(
-        ["cmd.exe", "/c", "start", "", "/min", str(runner)],
+        [str(setup_path), *_INNO_SETUP_ARGS.split()],
+        cwd=str(setup_path.parent),
         close_fds=True,
         creationflags=flags | npg,
-        cwd=str(setup_path.parent),
     )
-    _update_log(f"Popen CMD-Runner: {runner}")
+    _update_log(f"Popen Installer: {setup_path}")
+
+
+def _schedule_install_via_schtasks(setup_path: Path) -> None:
+    """Windows-Aufgabe — unabhängig vom App-Prozessbaum."""
+    setup_path = setup_path.resolve()
+    task = "TDFilamentStudioInAppUpdate"
+    tr = f'"{setup_path}" {_INNO_SETUP_ARGS}'
+    flags = getattr(subprocess, "CREATE_NO_WINDOW", 0)
+    subprocess.run(
+        ["schtasks", "/Delete", "/TN", task, "/F"],
+        capture_output=True,
+        creationflags=flags,
+    )
+    create = subprocess.run(
+        ["schtasks", "/Create", "/TN", task, "/TR", tr, "/SC", "ONCE", "/ST", "00:01", "/F"],
+        capture_output=True,
+        text=True,
+        encoding="utf-8",
+        errors="replace",
+        creationflags=flags,
+    )
+    _update_log(f"schtasks create rc={create.returncode}: {create.stderr or create.stdout}")
+    run = subprocess.run(
+        ["schtasks", "/Run", "/TN", task],
+        capture_output=True,
+        text=True,
+        encoding="utf-8",
+        errors="replace",
+        creationflags=flags,
+    )
+    _update_log(f"schtasks run rc={run.returncode}: {run.stderr or run.stdout}")
+    subprocess.run(
+        ["schtasks", "/Delete", "/TN", task, "/F"],
+        capture_output=True,
+        creationflags=flags,
+    )
+
+
+def _launch_installer_after_exit(setup_path: Path) -> None:
+    """Verzögerter CMD-Start aus Updates-Ordner."""
+    setup_path = setup_path.resolve()
+    runner = _write_persistent_runner(setup_path)
+    try:
+        _shell_execute(str(runner), "", show=_SW_SHOW_NORMAL)
+        _update_log(f"ShellExecute Runner: {runner}")
+    except OSError as exc:
+        _update_log(f"ShellExecute Runner fehlgeschlagen: {exc}")
+        flags = _DETACHED_PROCESS | _CREATE_BREAKAWAY_FROM_JOB
+        npg = getattr(subprocess, "CREATE_NEW_PROCESS_GROUP", 0)
+        subprocess.Popen(
+            [str(runner)],
+            cwd=str(runner.parent),
+            close_fds=True,
+            creationflags=flags | npg,
+        )
+        _update_log(f"Popen Runner: {runner}")
 
 
 def install_downloaded_setup(setup_path: Path) -> None:
-    """Installer starten und Prozess sofort beenden (kein Datei-Lock, kein Zurück zur GUI)."""
+    """Installer starten und Prozess beenden (Inno /FORCECLOSEAPPLICATIONS schließt die App)."""
     staged = stage_setup_for_install(setup_path)
     unblock_setup_file(staged)
     validate_setup_exe(staged)
-    _update_log(f"install_downloaded_setup: {staged}")
+    write_install_now_helper(staged)
+    size = staged.stat().st_size
+    _update_log(f"install_downloaded_setup: {staged} ({size} bytes)")
     if sys.platform == "win32":
+        prepare_shutdown_for_update()
+        _popen_installer_detached(staged)
+        try:
+            _launch_installer(staged)
+        except OSError as exc:
+            _update_log(f"ShellExecute Installer: {exc}")
         _launch_installer_after_exit(staged)
-        time.sleep(2.5)
-        kill_all_app_processes()
+        try:
+            _schedule_install_via_schtasks(staged)
+        except (OSError, subprocess.SubprocessError) as exc:
+            _update_log(f"schtasks: {exc}")
+        time.sleep(0.8)
     else:
         subprocess.Popen([str(staged)], close_fds=True)
     os._exit(0)
