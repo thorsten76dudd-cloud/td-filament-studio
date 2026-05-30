@@ -35,7 +35,7 @@ $notes = @(
     "",
     "### Material-DB",
     "* Mehr Creality-Profile nach „Vom Drucker (SSH)“ (erweiterte JSON-Felder).",
-    "* Hinweis: Creality-Print-Sync reicht nicht — SSH-Laden nötig; Warnung bei unveränderter Eintragszahl.",
+    "* Hinweis: Creality-Print-Sync reicht nicht - SSH-Laden noetig; Warnung bei unveraenderter Eintragszahl.",
     "",
     "Details: STABLE-v$Version.md im Repository."
 ) -join [Environment]::NewLine
