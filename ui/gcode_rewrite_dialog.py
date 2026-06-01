@@ -2,10 +2,14 @@
 
 from __future__ import annotations
 
+import tempfile
+import threading
 import tkinter as tk
 from collections.abc import Callable
 from pathlib import Path
 from tkinter import filedialog, messagebox, ttk
+
+from printer_connect import load_settings
 
 from creality_nfc.cfs_layout import cfs_slot_label
 from creality_nfc.gcode_rewrite import (
@@ -16,8 +20,10 @@ from creality_nfc.gcode_rewrite import (
     parse_gcode_for_rewrite,
 )
 from creality_nfc.i18n import t as _t
+from creality_nfc.printer_ssh import default_password, normalize_host, upload_gcode_to_printer
 from creality_nfc.spool_inventory import Spool, SpoolInventory
 from ui.dialog_theme import dialog_root, prepare_toplevel, theme_dialog
+from ui.messaging import notify
 from ui.rounded_widgets import rounded_button
 
 
@@ -50,11 +56,15 @@ class GcodeRewriteDialog:
         *,
         initial_path: Path | None = None,
         on_saved: Callable[[Path], None] | None = None,
+        on_uploaded: Callable[[str, Path], None] | None = None,
     ) -> None:
         self._inventory = inventory
         self._on_saved = on_saved
+        self._on_uploaded = on_uploaded
         self._plan: GcodeRewritePlan | None = None
+        self._last_saved: Path | None = None
         self._path_var = tk.StringVar(value=str(initial_path) if initial_path else "")
+        self._upload_status = tk.StringVar(value="")
 
         root = dialog_root(parent)
         self._dlg = tk.Toplevel(root)
@@ -73,6 +83,8 @@ class GcodeRewriteDialog:
         self._dlg.columnconfigure(0, weight=1)
         self._dlg.rowconfigure(0, weight=1)
         self._dlg.rowconfigure(1, weight=0)
+        self._dlg.rowconfigure(2, weight=0)
+        self._dlg.rowconfigure(3, weight=0)
 
         body = ttk.Frame(self._dlg, padding=12)
         body.grid(row=0, column=0, sticky="nsew")
@@ -157,11 +169,22 @@ class GcodeRewriteDialog:
         sy.grid(row=0, column=1, sticky="ns")
         sx.grid(row=1, column=0, sticky="ew")
 
-        btn_row = ttk.Frame(self._dlg, padding=(12, 8, 12, 12))
-        btn_row.grid(row=1, column=0, sticky="ew")
+        self._upload_status_lbl = ttk.Label(
+            self._dlg, textvariable=self._upload_status, style="Muted.TLabel", wraplength=900
+        )
+        self._upload_status_lbl.grid(row=2, column=0, sticky="ew", padx=12, pady=(0, 4))
+
+        btn_row = ttk.Frame(self._dlg, padding=(12, 4, 12, 12))
+        btn_row.grid(row=3, column=0, sticky="ew")
         rounded_button(
-            btn_row, text=_t("gcode_rw.btn.save_as"), command=self._save_as, variant="accent"
+            btn_row, text=_t("gcode_rw.btn.save_upload"), command=self._save_and_upload, variant="accent"
         ).pack(side="right")
+        rounded_button(btn_row, text=_t("gcode_rw.btn.save_as"), command=self._save_as).pack(
+            side="right", padx=(0, 8)
+        )
+        rounded_button(btn_row, text=_t("gcode_rw.btn.upload"), command=self._upload).pack(
+            side="right", padx=(0, 8)
+        )
         rounded_button(btn_row, text=_t("gcode_rw.cancel"), command=self._dlg.destroy).pack(
             side="right", padx=(0, 8)
         )
@@ -234,35 +257,157 @@ class GcodeRewriteDialog:
                 ),
             )
 
+    def _printer_credentials(self) -> tuple[str, str] | None:
+        saved = load_settings()
+        host = normalize_host(str(saved.get("host") or "").strip())
+        if not host:
+            messagebox.showwarning(
+                _t("gcode_rw.title"),
+                _t("gcode_rw.err.no_printer"),
+                parent=self._dlg,
+            )
+            return None
+        password = str(saved.get("password") or "").strip() or default_password()
+        return host, password
+
+    def _write_plan_to(self, dest: Path) -> Path:
+        if not self._plan or not self._plan.mappings:
+            raise ValueError(_t("gcode_rw.err.analyze_first"))
+        return apply_rewrite_plan(self._plan, dest)
+
+    def _resolved_upload_path(self) -> Path | None:
+        if self._last_saved and self._last_saved.is_file():
+            return self._last_saved
+        raw = self._path_var.get().strip()
+        if not raw:
+            return None
+        p = Path(raw)
+        if not p.is_file():
+            return None
+        if self._plan and p.resolve() == self._plan.source_path.resolve():
+            tmp = Path(tempfile.gettempdir()) / default_output_path(self._plan.source_path).name
+            return self._write_plan_to(tmp)
+        return p
+
+    def _pick_save_path(self) -> Path | None:
+        if not self._plan:
+            return None
+        dest = filedialog.asksaveasfilename(
+            parent=self._dlg,
+            title=_t("gcode_rw.save_title"),
+            initialfile=default_output_path(self._plan.source_path).name,
+            defaultextension=".gcode",
+            filetypes=[("G-Code", "*.gcode")],
+        )
+        if not dest:
+            return None
+        return Path(dest)
+
+    def _after_saved(self, out: Path, *, close: bool) -> None:
+        self._last_saved = out
+        self._path_var.set(str(out))
+        if self._on_saved:
+            self._on_saved(out)
+        messagebox.showinfo(
+            _t("gcode_rw.title"),
+            _t("gcode_rw.done", path=str(out)),
+            parent=self._dlg,
+        )
+        if close:
+            self._dlg.destroy()
+
     def _save_as(self) -> None:
         if not self._plan or not self._plan.mappings:
             messagebox.showwarning(
                 _t("gcode_rw.title"), _t("gcode_rw.err.analyze_first"), parent=self._dlg
             )
             return
-        src = self._plan.source_path
-        dest = filedialog.asksaveasfilename(
-            parent=self._dlg,
-            title=_t("gcode_rw.save_title"),
-            initialfile=default_output_path(src).name,
-            defaultextension=".gcode",
-            filetypes=[("G-Code", "*.gcode")],
-        )
+        dest = self._pick_save_path()
         if not dest:
             return
         try:
-            out = apply_rewrite_plan(self._plan, Path(dest))
+            out = self._write_plan_to(dest)
         except (OSError, ValueError) as e:
             messagebox.showerror(_t("gcode_rw.title"), str(e), parent=self._dlg)
             return
-        messagebox.showinfo(
-            _t("gcode_rw.title"),
-            _t("gcode_rw.done", path=str(out)),
-            parent=self._dlg,
-        )
+        self._after_saved(out, close=False)
+
+    def _save_and_upload(self) -> None:
+        if not self._plan or not self._plan.mappings:
+            messagebox.showwarning(
+                _t("gcode_rw.title"), _t("gcode_rw.err.analyze_first"), parent=self._dlg
+            )
+            return
+        creds = self._printer_credentials()
+        if not creds:
+            return
+        dest = self._pick_save_path()
+        if not dest:
+            return
+        try:
+            out = self._write_plan_to(dest)
+        except (OSError, ValueError) as e:
+            messagebox.showerror(_t("gcode_rw.title"), str(e), parent=self._dlg)
+            return
+        self._last_saved = out
+        self._path_var.set(str(out))
         if self._on_saved:
             self._on_saved(out)
-        self._dlg.destroy()
+        self._start_upload(out, creds, close_after=True)
+
+    def _upload(self) -> None:
+        creds = self._printer_credentials()
+        if not creds:
+            return
+        try:
+            path = self._resolved_upload_path()
+        except (OSError, ValueError) as e:
+            messagebox.showerror(_t("gcode_rw.title"), str(e), parent=self._dlg)
+            return
+        if path is None:
+            messagebox.showwarning(
+                _t("gcode_rw.title"),
+                _t("gcode_rw.err.analyze_first"),
+                parent=self._dlg,
+            )
+            return
+        if self._plan and path.resolve() == self._plan.source_path.resolve():
+            messagebox.showwarning(
+                _t("gcode_rw.title"),
+                _t("gcode_rw.err.upload_original"),
+                parent=self._dlg,
+            )
+            return
+        self._start_upload(path, creds, close_after=False)
+
+    def _start_upload(
+        self, local: Path, creds: tuple[str, str], *, close_after: bool
+    ) -> None:
+        host, password = creds
+        self._upload_status.set(_t("gcode_rw.uploading", name=local.name))
+
+        def work() -> None:
+            try:
+                remote = upload_gcode_to_printer(host, password, local)
+                self._dlg.after(
+                    0, lambda: self._after_upload(remote, local, close_after=close_after)
+                )
+            except Exception as exc:
+                self._dlg.after(0, lambda: self._upload_failed(str(exc)))
+
+        threading.Thread(target=work, daemon=True).start()
+
+    def _upload_failed(self, msg: str) -> None:
+        self._upload_status.set("")
+        notify(self._dlg, msg, "error")
+
+    def _after_upload(self, remote: str, local: Path, *, close_after: bool) -> None:
+        self._upload_status.set(_t("gcode_rw.upload_done", name=local.name))
+        notify(self._dlg, _t("gcode_rw.uploaded", remote=remote), "ok")
+        if self._on_uploaded:
+            self._on_uploaded(remote, local)
+        if close_after:
+            self._dlg.destroy()
 
 
 def open_gcode_rewrite_dialog(
@@ -270,5 +415,8 @@ def open_gcode_rewrite_dialog(
     inventory: SpoolInventory,
     *,
     initial_path: Path | None = None,
+    on_uploaded: Callable[[str, Path], None] | None = None,
 ) -> None:
-    GcodeRewriteDialog(parent, inventory, initial_path=initial_path)
+    GcodeRewriteDialog(
+        parent, inventory, initial_path=initial_path, on_uploaded=on_uploaded
+    )

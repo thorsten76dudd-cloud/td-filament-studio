@@ -3328,7 +3328,14 @@ class TDFilamentStudioApp(AppTk):
     def rewrite_gcode_for_spools(self) -> None:
         from ui.gcode_rewrite_dialog import open_gcode_rewrite_dialog
 
-        open_gcode_rewrite_dialog(self, self.inventory)
+        def _on_uploaded(remote: str, local_path) -> None:
+            panel = getattr(self, "_printer_device_panel", None)
+            if panel is not None and hasattr(panel, "_after_gcode_upload"):
+                panel._after_gcode_upload(remote, str(local_path))
+
+        open_gcode_rewrite_dialog(
+            self, self.inventory, on_uploaded=_on_uploaded
+        )
 
     def show_print_history(self) -> None:
         from creality_nfc.print_history import repair_history_slots_from_inventory
