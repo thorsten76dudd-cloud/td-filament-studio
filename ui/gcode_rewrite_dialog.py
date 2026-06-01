@@ -59,31 +59,54 @@ class GcodeRewriteDialog:
         root = dialog_root(parent)
         self._dlg = tk.Toplevel(root)
         self._dlg.title(_t("gcode_rw.title"))
-        prepare_toplevel(self._dlg, root, width=820, height=520, geometry_key="gcode_rewrite")
+        prepare_toplevel(
+            self._dlg,
+            root,
+            width=960,
+            height=640,
+            geometry_key="gcode_rewrite",
+            min_width=760,
+            min_height=520,
+        )
         theme_dialog(self._dlg)
         self._dlg.transient(root)
+        self._dlg.columnconfigure(0, weight=1)
+        self._dlg.rowconfigure(0, weight=1)
+        self._dlg.rowconfigure(1, weight=0)
 
         body = ttk.Frame(self._dlg, padding=12)
-        body.pack(fill="both", expand=True)
+        body.grid(row=0, column=0, sticky="nsew")
+        body.columnconfigure(0, weight=1)
+        body.rowconfigure(3, weight=1)
 
-        ttk.Label(
+        intro = ttk.Label(
             body,
             text=_t("gcode_rw.intro"),
             style="Muted.TLabel",
-            wraplength=780,
-        ).pack(anchor="w", pady=(0, 10))
+            wraplength=900,
+        )
+        intro.grid(row=0, column=0, sticky="ew", pady=(0, 10))
 
         row = ttk.Frame(body)
-        row.pack(fill="x", pady=(0, 8))
-        ttk.Label(row, text=_t("gcode_rw.field.file"), width=12, anchor="w").pack(side="left")
-        ttk.Entry(row, textvariable=self._path_var).pack(side="left", fill="x", expand=True, padx=4)
-        rounded_button(row, text=_t("gcode_rw.btn.browse"), command=self._browse).pack(side="left")
-        rounded_button(row, text=_t("gcode_rw.btn.analyze"), command=self._analyze).pack(
-            side="left", padx=(6, 0)
+        row.grid(row=1, column=0, sticky="ew", pady=(0, 8))
+        row.columnconfigure(1, weight=1)
+        ttk.Label(row, text=_t("gcode_rw.field.file"), width=12, anchor="w").grid(
+            row=0, column=0, sticky="w"
         )
+        ttk.Entry(row, textvariable=self._path_var).grid(
+            row=0, column=1, sticky="ew", padx=4
+        )
+        btn_file = ttk.Frame(row)
+        btn_file.grid(row=0, column=2, sticky="e")
+        rounded_button(btn_file, text=_t("gcode_rw.btn.browse"), command=self._browse).pack(
+            side="left"
+        )
+        rounded_button(
+            btn_file, text=_t("gcode_rw.btn.analyze"), command=self._analyze
+        ).pack(side="left", padx=(6, 0))
 
-        self._summary = ttk.Label(body, text="", style="Muted.TLabel", wraplength=780)
-        self._summary.pack(anchor="w", pady=(0, 6))
+        self._summary = ttk.Label(body, text="", style="Muted.TLabel", wraplength=900)
+        self._summary.grid(row=2, column=0, sticky="ew", pady=(0, 6))
 
         cols = (
             "ch",
@@ -94,9 +117,12 @@ class GcodeRewriteDialog:
             "spool",
             "newid",
         )
-        tree_frame = ttk.Frame(body)
-        tree_frame.pack(fill="both", expand=True)
-        self._tree = ttk.Treeview(tree_frame, columns=cols, show="headings", height=10)
+        tree_wrap = ttk.Frame(body)
+        tree_wrap.grid(row=3, column=0, sticky="nsew")
+        tree_wrap.columnconfigure(0, weight=1)
+        tree_wrap.rowconfigure(0, weight=1)
+
+        self._tree = ttk.Treeview(tree_wrap, columns=cols, show="headings", height=8)
         headings = {
             "ch": _t("gcode_rw.col.channel"),
             "gcolor": _t("gcode_rw.col.gcode_color"),
@@ -106,20 +132,36 @@ class GcodeRewriteDialog:
             "spool": _t("gcode_rw.col.spool"),
             "newid": _t("gcode_rw.col.new_id"),
         }
+        widths = {
+            "ch": 52,
+            "gcolor": 88,
+            "gid": 72,
+            "gprof": 200,
+            "grams": 56,
+            "spool": 280,
+            "newid": 72,
+        }
         for c in cols:
             self._tree.heading(c, text=headings[c])
-            self._tree.column(c, width=100 if c != "gprof" else 180, stretch=True)
-        self._tree.column("spool", width=200)
-        scroll = ttk.Scrollbar(tree_frame, orient="vertical", command=self._tree.yview)
-        self._tree.configure(yscrollcommand=scroll.set)
-        self._tree.pack(side="left", fill="both", expand=True)
-        scroll.pack(side="right", fill="y")
+            stretch = c in ("gprof", "spool")
+            self._tree.column(
+                c,
+                width=widths[c],
+                minwidth=widths[c] - 20 if not stretch else widths[c],
+                stretch=stretch,
+            )
+        sy = ttk.Scrollbar(tree_wrap, orient="vertical", command=self._tree.yview)
+        sx = ttk.Scrollbar(tree_wrap, orient="horizontal", command=self._tree.xview)
+        self._tree.configure(yscrollcommand=sy.set, xscrollcommand=sx.set)
+        self._tree.grid(row=0, column=0, sticky="nsew")
+        sy.grid(row=0, column=1, sticky="ns")
+        sx.grid(row=1, column=0, sticky="ew")
 
-        btn_row = ttk.Frame(body)
-        btn_row.pack(fill="x", pady=(10, 0))
-        rounded_button(btn_row, text=_t("gcode_rw.btn.save_as"), command=self._save_as).pack(
-            side="right"
-        )
+        btn_row = ttk.Frame(self._dlg, padding=(12, 8, 12, 12))
+        btn_row.grid(row=1, column=0, sticky="ew")
+        rounded_button(
+            btn_row, text=_t("gcode_rw.btn.save_as"), command=self._save_as, variant="accent"
+        ).pack(side="right")
         rounded_button(btn_row, text=_t("gcode_rw.cancel"), command=self._dlg.destroy).pack(
             side="right", padx=(0, 8)
         )
@@ -185,7 +227,7 @@ class GcodeRewriteDialog:
                     f"T{m.channel}",
                     color,
                     m.gcode_id or "—",
-                    (m.gcode_profile or "—")[:40],
+                    m.gcode_profile or "—",
                     f"{m.weight_g:.1f}" if m.weight_g > 0.01 else "—",
                     _spool_summary(m.spool),
                     m.new_id or "—",
