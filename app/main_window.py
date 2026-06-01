@@ -300,6 +300,9 @@ class TDFilamentStudioApp(AppTk):
         m_file.add_command(label=_t("menu.file.restore_zip"), command=self.restore_data)
         m_file.add_command(label=_t("menu.file.cfs_zip_import"), command=self.import_cfs_zip)
         m_file.add_command(label=_t("menu.file.export_tag"), command=self.export_tag_data)
+        m_file.add_command(
+            label=_t("menu.file.gcode_rewrite"), command=self.rewrite_gcode_for_spools
+        )
         m_file.add_command(label=_t("menu.file.history"), command=self.show_print_history)
         m_file.add_command(label=_t("menu.file.format_tag"), command=self.format_tag_quick)
         m_file.add_command(label=_t("menu.file.duplicate_chip"), command=self.duplicate_chip_start)
@@ -3321,6 +3324,11 @@ class TDFilamentStudioApp(AppTk):
             self._apply_deductions_to_spools(deductions, note=note)
 
         self.after(400, _ask)
+
+    def rewrite_gcode_for_spools(self) -> None:
+        from ui.gcode_rewrite_dialog import open_gcode_rewrite_dialog
+
+        open_gcode_rewrite_dialog(self, self.inventory)
 
     def show_print_history(self) -> None:
         from creality_nfc.print_history import repair_history_slots_from_inventory

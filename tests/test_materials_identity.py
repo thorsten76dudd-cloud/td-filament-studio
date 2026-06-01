@@ -26,6 +26,22 @@ class MaterialsIdentityTests(unittest.TestCase):
         self.assertEqual(len(profiles), 1)
         self.assertEqual(profiles[0].name, "Mein PETG")
 
+    def test_notes_in_kvparam(self) -> None:
+        item = {
+            "base": {"brand": "Thorsten", "meterialType": "PETG"},
+            "kvParam": {
+                "filament_notes": (
+                    '{"id":"06099","vendor":"Thorsten","type":"PETG","name":"Thorsten PETG TD1000"}'
+                ),
+            },
+        }
+        fid, brand, name, mtype = _identity_from_item(item)
+        self.assertEqual(fid, "06099")
+        self.assertEqual(name, "Thorsten PETG TD1000")
+        self.assertEqual(mtype, "PETG")
+        profiles = load_database_from_data({"result": {"list": [item]}})
+        self.assertEqual(len(profiles), 1)
+
 
 if __name__ == "__main__":
     unittest.main()
